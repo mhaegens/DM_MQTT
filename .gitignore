@@ -1,0 +1,13 @@
+# Cloudflare Tunnel secrets — never commit
+cloudflared/*.json
+cloudflared/config.yml
+
+# Mosquitto runtime data
+mosquitto/data/
+mosquitto/log/
+
+# Node-RED persistent data
+nodered/
+
+# macOS
+.DS_Store

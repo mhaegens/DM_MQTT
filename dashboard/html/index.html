@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=720">
+<title>SAP DM MQTT Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF; --hi-mid:#C5DCFF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --warn:#E76500; --warn-lt:#FEF0E5; --warn-bd:#F8C07E;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --teal:#045B7A; --teal-lt:#E0F2F8;
+  --pur:#6A28C8; --pur-lt:#F2EAFF;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --sh:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.05);
+  --sh-md:0 4px 20px rgba(0,0,0,.1);
+  --r:12px; --rsm:8px;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+  --screen:720px;
+  --ts:80px; --ts-sm:64px;
+  --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
+  display:flex;flex-direction:column;align-items:center;padding:24px 14px 48px;gap:16px}
+.page-meta{font-family:var(--mono);font-size:11px;color:#8090A8;letter-spacing:.12em;text-transform:uppercase}
+.device{background:#FFF;border-radius:24px;padding:14px;
+  box-shadow:0 2px 0 #B8BFCC,0 20px 56px rgba(20,40,80,.22);border:1px solid #C8CDD8}
+.dlabel{font-family:var(--mono);font-size:9px;color:#A0ABBC;text-align:center;
+  letter-spacing:.18em;text-transform:uppercase;margin-bottom:9px}
+.screen{width:var(--screen);height:var(--screen);background:var(--bg);
+  border-radius:10px;overflow:hidden;display:flex;flex-direction:column;border:1px solid var(--bd)}
+
+/* SHELL */
+.shell{background:var(--base);border-bottom:2px solid var(--hi);height:64px;padding:0 20px;
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:20}
+.shell-l{display:flex;align-items:center;gap:12px}
+.sap-badge{width:44px;height:44px;background:var(--hi);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sap-badge svg{width:32px;height:22px}
+.shell-title{font-size:var(--f-sm);font-weight:600;color:var(--tx);line-height:1.2}
+.shell-sub{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.05em}
+.shell-r{display:flex;align-items:center;gap:8px}
+.os{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:var(--f-xxs);
+  font-weight:500;padding:5px 12px;border-radius:24px;letter-spacing:.06em;text-transform:uppercase}
+.os.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.os.hi{background:var(--hi-lt);color:var(--hi);border:1px solid var(--hi-mid)}
+.osd{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pdot 2s ease-in-out infinite}
+@keyframes pdot{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* BREADCRUMB */
+.bc{background:var(--base2);border-bottom:1px solid var(--bd);height:44px;padding:0 16px;
+  display:flex;align-items:center;gap:8px;flex-shrink:0}
+.bc-btn{display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;
+  color:var(--hi);font:inherit;font-size:var(--f-xs);font-weight:500;height:44px;padding:0 4px}
+.bc-btn svg{width:12px;height:12px}
+.bc-sep{color:var(--tx3);font-size:var(--f-xs)}
+.bc-cur{font-size:var(--f-xs);color:var(--tx2)}
+
+/* VIEWS */
+.view{flex:1;overflow:hidden;display:none;flex-direction:column;min-height:0}
+.view.active{display:flex}
+.vbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 14px 8px;display:flex;flex-direction:column;gap:12px}
+
+/* TAB BAR */
+.tabbar{background:var(--base);border-top:1px solid var(--bd);display:grid;grid-template-columns:repeat(5,1fr);height:72px;flex-shrink:0}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  cursor:pointer;border:none;background:none;color:var(--tx3);font:inherit;transition:color .15s;position:relative}
+.tab svg{width:24px;height:24px;stroke-width:1.8}
+.tab span{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.04em;text-transform:uppercase}
+.tab.active{color:var(--hi)}
+.tab.active::before{content:'';position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--hi);border-radius:0 0 3px 3px}
+
+/* BUTTONS */
+.btn{min-height:var(--ts);padding:0 20px;border-radius:var(--rsm);font:inherit;
+  font-size:var(--f-sm);font-weight:600;cursor:pointer;border:1.5px solid;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .12s;line-height:1}
+.btn svg{width:18px;height:18px;flex-shrink:0}
+.btn.primary{background:var(--hi);border-color:var(--hi-dk);color:#fff}
+.btn.primary:hover{background:var(--hi-dk)}
+.btn.ghost{background:var(--base);border-color:var(--bd-str);color:var(--tx2)}
+.btn.ghost:hover{border-color:var(--hi);color:var(--hi);background:var(--hi-lt)}
+.btn.danger{background:var(--err-lt);border-color:var(--err-bd);color:var(--err)}
+.btn.success{background:var(--ok-lt);border-color:var(--ok-bd);color:var(--ok)}
+.btn.warn-btn{background:var(--warn-lt);border-color:var(--warn-bd);color:var(--warn)}
+.btn.full{width:100%}
+.btn.sm{min-height:var(--ts-sm);font-size:var(--f-xs)}
+.btn.stop-btn{background:var(--err-lt);border-color:var(--err-bd);color:var(--err)}
+.pf{animation:pflash .28s ease-out}
+@keyframes pflash{0%{box-shadow:0 0 0 6px rgba(0,112,242,.3);border-color:var(--hi)}100%{box-shadow:none}}
+
+/* HOME KPI */
+.kgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi{background:var(--base);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;box-shadow:var(--sh);position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;border-radius:var(--r) var(--r) 0 0}
+.kpi.hi::before{background:var(--hi)}.kpi.ok::before{background:var(--ok)}
+.kpi.warn::before{background:var(--warn)}.kpi.teal::before{background:var(--teal)}
+.kpi-lbl{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase;margin-bottom:6px}
+.kpi-val{font-family:var(--mono);font-size:var(--f-lg);font-weight:500;line-height:1}
+.kpi-val.hi{color:var(--hi)}.kpi-val.ok{color:var(--ok)}.kpi-val.warn{color:var(--warn)}.kpi-val.teal{color:var(--teal)}
+.kpi-meta{font-size:var(--f-xxs);color:var(--tx3);margin-top:5px}
+.crow{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--sh)}
+.ck{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase;margin-bottom:4px}
+.cv{font-family:var(--mono);font-size:var(--f-xs);color:var(--tx);font-weight:500}
+.badge{font-family:var(--mono);font-size:var(--f-xxs);font-weight:500;padding:5px 12px;border-radius:var(--rsm);letter-spacing:.05em;text-transform:uppercase}
+.badge.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.badge.hi{background:var(--hi-lt);color:var(--hi);border:1px solid var(--hi-mid)}
+.badge.warn{background:var(--warn-lt);color:var(--warn);border:1px solid var(--warn-bd)}
+
+/* MACHINE CARDS */
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mc{background:var(--base);border:1.5px solid var(--bd);border-radius:14px;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transition:border-color .2s}
+.mc.running{border-color:var(--ok-bd);box-shadow:0 0 0 3px var(--ok-lt),var(--sh)}
+.mc.stopped{border-color:var(--err-bd);box-shadow:0 0 0 2px var(--err-lt),var(--sh)}
+.mc-hdr{padding:12px 14px 10px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--bd)}
+.mc-name{font-size:var(--f-md);font-weight:600;color:var(--tx)}
+.mc-type{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+.sdot{width:14px;height:14px;border-radius:50%;flex-shrink:0;margin-top:3px;transition:background .3s}
+.sdot.green{background:var(--ok);box-shadow:0 0 0 4px var(--ok-lt),0 0 10px rgba(16,126,62,.3);animation:sdp 2s ease-in-out infinite}
+.sdot.red{background:var(--err);box-shadow:0 0 0 3px var(--err-lt)}
+@keyframes sdp{0%,100%{box-shadow:0 0 0 4px var(--ok-lt),0 0 10px rgba(16,126,62,.3)}50%{box-shadow:0 0 0 5px var(--ok-lt),0 0 4px rgba(16,126,62,.15)}}
+.mc-body{flex:1;display:flex;flex-direction:column;gap:6px;padding:8px 10px}
+.mc-acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 10px 10px;border-top:1px solid var(--bd)}
+.mc-acts .btn{min-height:60px;font-size:var(--f-xs)}
+.mtile{background:var(--base2);border:1px solid var(--bd);border-radius:var(--rsm);padding:8px 10px;cursor:pointer;transition:all .12s;position:relative;display:flex;flex-direction:column;gap:2px;min-height:56px}
+.mtile:hover,.mtile:active{border-color:var(--hi);background:var(--hi-lt)}
+.mtile::after{content:'';position:absolute;top:6px;right:7px;width:6px;height:6px;border-right:2px solid var(--tx3);border-top:2px solid var(--tx3);transform:rotate(45deg);border-radius:1px}
+.mt-lbl{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.09em;color:var(--tx3);text-transform:uppercase}
+.mt-val{font-family:var(--mono);font-size:var(--f-md);font-weight:500;line-height:1.15}
+.mt-val.ok{color:var(--ok)}.mt-val.warn{color:var(--warn)}.mt-val.err{color:var(--err)}
+.mt-val.hi{color:var(--hi)}.mt-val.teal{color:var(--teal)}.mt-val.pur{color:var(--pur)}
+.mt-unit{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3)}
+.stile{background:var(--base2);border:1px solid var(--bd);border-radius:var(--rsm);padding:8px 10px 6px;cursor:pointer;transition:all .12s;position:relative}
+.stile:hover,.stile:active{border-color:var(--hi);background:var(--hi-lt)}
+.stile::after{content:'';position:absolute;top:6px;right:7px;width:6px;height:6px;border-right:2px solid var(--tx3);border-top:2px solid var(--tx3);transform:rotate(45deg);border-radius:1px}
+.st-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
+.st-lbl{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.09em;color:var(--tx3);text-transform:uppercase}
+.st-val{font-family:var(--mono);font-size:var(--f-md);font-weight:500}
+.arctile{background:var(--base2);border:1px solid var(--bd);border-radius:var(--rsm);padding:6px 8px;cursor:pointer;transition:all .12s;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px}
+.arctile:hover,.arctile:active{border-color:var(--hi);background:var(--hi-lt)}
+.arctile::after{content:'';position:absolute;top:6px;right:7px;width:6px;height:6px;border-right:2px solid var(--tx3);border-top:2px solid var(--tx3);transform:rotate(45deg);border-radius:1px}
+.arc-lbl{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.08em;color:var(--tx3);text-transform:uppercase}
+.arc-val{font-family:var(--mono);font-size:var(--f-xs);font-weight:500;margin-top:-2px}
+
+/* ═══════════════════════════════════════════════════
+   TANKS VIEW — FULL HEIGHT FILL LEVEL AS HERO
+═══════════════════════════════════════════════════ */
+.tanks-screen{display:flex;flex-direction:column;flex:1;min-height:0;padding:10px 12px 4px;gap:8px}
+
+.tanks-row{display:flex;gap:10px;flex:1;min-height:0}
+
+.tank-col{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;position:relative}
+
+.tank-name{font-family:var(--mono);font-size:var(--f-xxs);font-weight:500;letter-spacing:.12em;
+  color:var(--tx2);text-transform:uppercase;text-align:center;flex-shrink:0}
+
+/* TANK BODY — takes all remaining height */
+.tank-body{flex:1;background:#ECF0F8;border:2px solid var(--bd-str);
+  border-radius:12px 12px 8px 8px;overflow:hidden;position:relative;
+  cursor:ns-resize;box-shadow:inset 0 2px 8px rgba(30,50,100,.09),var(--sh);
+  min-height:0}
+.tank-body:hover{border-color:var(--hi)}
+.tank-body::after{content:'';position:absolute;top:0;left:5px;right:5px;bottom:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.3) 0%,transparent 35%);
+  pointer-events:none;border-radius:inherit;z-index:4}
+.tticks{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5}
+.tick{position:absolute;left:0;right:0;height:1px;background:rgba(100,120,160,.18)}
+.tick-l{position:absolute;right:5px;font-family:var(--mono);font-size:13px;color:rgba(80,100,140,.45);transform:translateY(-50%)}
+.tsvg{position:absolute;bottom:0;left:0;right:0;width:100%;z-index:2}
+
+/* Percentage overlay on the tank */
+.tank-pct-overlay{position:absolute;bottom:10px;left:0;right:0;text-align:center;
+  font-family:var(--mono);font-size:var(--f-lg);font-weight:500;
+  color:rgba(255,255,255,.95);z-index:6;
+  text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
+.tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
+
+/* METRIC INDICATOR STRIP below each tank */
+.tank-indicator-strip{display:flex;gap:5px;flex-shrink:0}
+
+.tank-metric-btn{flex:1;background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:6px 8px;cursor:pointer;display:flex;flex-direction:column;gap:2px;
+  transition:all .12s;position:relative;box-shadow:var(--sh);min-height:52px;
+  align-items:flex-start}
+.tank-metric-btn:hover,.tank-metric-btn:active{border-color:var(--hi);background:var(--hi-lt)}
+.tank-metric-btn::after{content:'';position:absolute;top:5px;right:6px;
+  width:5px;height:5px;border-right:1.5px solid var(--tx3);border-top:1.5px solid var(--tx3);
+  transform:rotate(45deg);border-radius:1px}
+.tmb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-bottom:2px}
+.tmb-lbl{font-family:var(--mono);font-size:12px;letter-spacing:.07em;color:var(--tx3);text-transform:uppercase;line-height:1}
+.tmb-val{font-family:var(--mono);font-size:var(--f-xs);font-weight:500;line-height:1.2}
+.tmb-unit{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+
+/* Status colors */
+.dot-ok{background:var(--ok)}.dot-warn{background:var(--warn)}.dot-err{background:var(--err)}.dot-hi{background:var(--hi)}.dot-teal{background:var(--teal)}.dot-pur{background:var(--pur)}
+.col-ok{color:var(--ok)}.col-warn{color:var(--warn)}.col-err{color:var(--err)}.col-hi{color:var(--hi)}.col-teal{color:var(--teal)}.col-pur{color:var(--pur)}
+
+/* DEBUG */
+.dbg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dbgc{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);padding:12px 16px;box-shadow:var(--sh)}
+.dbgk{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase;margin-bottom:4px}
+.dbgv{font-family:var(--mono);font-size:var(--f-xs);font-weight:500;color:var(--tx)}
+.logpanel{flex:1;background:#080F1C;border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:2px;overflow:hidden;font-family:var(--mono);font-size:var(--f-xs);box-shadow:var(--sh-md);min-height:260px}
+.ll{display:flex;gap:10px;line-height:1.7;white-space:nowrap;overflow:hidden}
+.lts{color:#334E68;flex-shrink:0;width:56px}.lm{color:#5A7A9A}
+.lm.new{color:#E8EDF5}.lm.ok{color:#4CC87A}.lm.err{color:#FF6666}.lm.pub{color:#5BB2FF}
+
+/* NFC */
+.nfc-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+.nring-wrap{position:relative;width:150px;height:150px;flex-shrink:0}
+.nring-o{position:absolute;inset:0;border-radius:50%;border:2px solid var(--bd-str);background:radial-gradient(circle,var(--hi-lt) 0%,#FFF 70%);box-shadow:0 0 0 8px var(--hi-lt),var(--sh-md)}
+.nring-s{position:absolute;inset:14px;border-radius:50%;border:2px dashed var(--hi-mid);animation:spin 5s linear infinite}
+.nring-i{position:absolute;inset:28px;border-radius:50%;border:1.5px solid var(--hi-mid);background:var(--base);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh)}
+.nring-i svg{width:48px;height:48px;animation:nfcp 2.5s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes nfcp{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.nptitle{font-size:var(--f-md);font-weight:600;color:var(--tx);text-align:center}
+.npsub{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.04em;line-height:1.6;text-align:center}
+.opcard{background:var(--base);border:2px solid var(--ok-bd);border-radius:var(--r);padding:14px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 0 0 4px var(--ok-lt),var(--sh);width:100%}
+.opav{width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--hi) 0%,#5BB2FF 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(0,112,242,.25)}
+.opav svg{width:28px;height:28px}
+.opname{font-size:var(--f-sm);font-weight:600;color:var(--tx)}
+.opmeta{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.07em;margin-top:3px}
+
+/* DETAIL */
+.detail-body{flex:1;overflow-y:auto;padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px}
+.detail-hdr-card{background:var(--base);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;box-shadow:var(--sh);display:flex;align-items:center;justify-content:space-between}
+.dhc-l{display:flex;flex-direction:column;gap:4px}
+.dhc-metric{font-size:var(--f-md);font-weight:600;color:var(--tx)}
+.dhc-entity{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.07em}
+.dhc-topic{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3);margin-top:2px}
+.dhc-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.dhc-bigval{font-family:var(--mono);font-size:var(--f-xl);font-weight:500;line-height:1}
+.dhc-unit{font-family:var(--mono);font-size:var(--f-xs);color:var(--tx2)}
+.viz-card{background:var(--base);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px}
+
+/* StepInput */
+.step-inp{display:flex;align-items:stretch;border:1.5px solid var(--bd-str);border-radius:var(--rsm);overflow:hidden;background:var(--base)}
+.step-inp:focus-within{border-color:var(--hi);box-shadow:0 0 0 3px var(--hi-mid)}
+.si-btn{width:var(--ts);border:none;background:var(--base2);color:var(--tx2);font-size:28px;font-weight:300;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .1s}
+.si-btn:hover,.si-btn:active{background:var(--hi-lt);color:var(--hi)}
+.si-input{flex:1;border:none;text-align:center;font-family:var(--mono);font-size:var(--f-lg);font-weight:500;color:var(--tx);background:var(--base);outline:none;min-width:0;padding:0;height:var(--ts)}
+
+/* Slider */
+.sap-slider{width:100%;height:6px;border-radius:3px;cursor:pointer;-webkit-appearance:none;appearance:none;background:var(--base3);outline:none;display:block}
+.sap-slider::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:var(--hi);border:3px solid var(--base);box-shadow:0 2px 6px rgba(0,112,242,.4);cursor:pointer}
+.slider-row{display:flex;justify-content:space-between;margin-top:5px}
+.sl-lbl{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3)}
+
+/* Form sections */
+.form-card{background:var(--base);border:1px solid var(--bd);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.fs{padding:14px 18px;border-bottom:1px solid var(--bd)}
+.fs:last-child{border-bottom:none}
+.fs-title{font-size:var(--f-xs);font-weight:600;color:var(--tx);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.fs-title svg{width:18px;height:18px;color:var(--hi);flex-shrink:0}
+
+/* Random generator */
+.rand-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:flex-end}
+.rf{display:flex;flex-direction:column;gap:5px}
+.rf label{font-family:var(--mono);font-size:var(--f-xxs);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
+.rf input,.rf select{width:100%;border:1.5px solid var(--bd-str);border-radius:var(--rsm);padding:10px 12px;font-family:var(--mono);font-size:var(--f-xs);color:var(--tx);background:var(--base);outline:none;height:var(--ts-sm);-webkit-appearance:none}
+.rf input:focus,.rf select:focus{border-color:var(--hi);background:var(--hi-lt)}
+
+/* Live generator status */
+.gen-status{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--ok-lt);border:1px solid var(--ok-bd);border-radius:var(--rsm);margin-top:8px}
+.gen-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pdot 1s ease-in-out infinite;flex-shrink:0}
+.gen-status-txt{font-family:var(--mono);font-size:var(--f-xxs);color:var(--ok);flex:1}
+
+/* pH */
+.ph-band{width:100%;height:30px;border-radius:6px;background:linear-gradient(90deg,#FF2200 0%,#FF7700 10%,#FFCC00 20%,#DDFF00 30%,#88FF00 40%,#00CC44 50%,#00AACC 60%,#0055EE 70%,#3300CC 80%,#7700CC 90%,#CC00AA 100%);position:relative;margin-bottom:18px;box-shadow:inset 0 1px 3px rgba(0,0,0,.18)}
+.ph-ptr{position:absolute;top:-6px;width:3px;height:42px;background:var(--tx);border-radius:2px;transform:translateX(-50%);transition:left .3s}
+.ph-ptr::after{content:'';position:absolute;top:-2px;left:-7px;border:7px solid transparent;border-bottom-color:var(--tx)}
+.ph-scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3)}
+
+.vf{animation:vflash .4s ease-out}
+@keyframes vflash{0%{transform:scale(1.05);color:var(--hi)}100%{transform:scale(1)}}
+
+/* Splash / bubbles */
+@keyframes splash-out{0%{transform:scale(.2);opacity:.6}100%{transform:scale(2.5);opacity:0}}
+.splash{pointer-events:none;position:absolute;border-radius:50%;z-index:6}
+@keyframes rise{0%{transform:translateY(0) scale(1);opacity:.35}80%{opacity:.12}100%{transform:translateY(-120px) scale(.4);opacity:0}}
+
+/* ═══ VIRTUAL BADGE SYSTEM ═══ */
+.nfc-mode-toggle{display:flex;gap:0;border:1.5px solid var(--bd-str);border-radius:var(--rsm);overflow:hidden;flex-shrink:0}
+.nfc-mode-btn{flex:1;height:56px;border:none;background:var(--base2);font:inherit;font-size:var(--f-xs);
+  font-weight:600;color:var(--tx2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .15s}
+.nfc-mode-btn svg{width:20px;height:20px;flex-shrink:0}
+.nfc-mode-btn.active{background:var(--hi);color:#fff}
+.nfc-mode-btn:first-child{border-right:1.5px solid var(--bd-str)}
+.nfc-mode-btn.active:first-child{border-right-color:var(--hi-dk)}
+
+/* CAROUSEL */
+.carousel-outer{flex:1;position:relative;overflow:hidden;min-height:0}
+.carousel-track{display:flex;align-items:center;height:100%;transition:transform .38s cubic-bezier(.4,0,.2,1);will-change:transform}
+
+/* BADGE CARD */
+.bc-card{width:390px;height:232px;flex-shrink:0;border-radius:18px;position:relative;overflow:hidden;cursor:pointer;
+  transition:transform .3s cubic-bezier(.4,0,.2,1),box-shadow .3s,opacity .3s;user-select:none}
+.bc-card.c-active{transform:scale(1) translateY(0);box-shadow:0 20px 60px rgba(0,0,0,.32),0 4px 12px rgba(0,0,0,.2)}
+.bc-card.c-prev,.bc-card.c-next{transform:scale(0.84) translateY(14px);box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.bc-card.c-far{transform:scale(0.72) translateY(22px);opacity:.55;box-shadow:0 4px 10px rgba(0,0,0,.1)}
+
+.bc-card.r-operator  {background:linear-gradient(135deg,#0F2647 0%,#1A3A6B 55%,#102040 100%)}
+.bc-card.r-lead      {background:linear-gradient(135deg,#0A3D2B 0%,#155F3C 55%,#0A3020 100%)}
+.bc-card.r-engineer  {background:linear-gradient(135deg,#3D1F00 0%,#6B3800 55%,#341A00 100%)}
+.bc-card.r-supervisor{background:linear-gradient(135deg,#1A0A3D 0%,#2E1566 55%,#140830 100%)}
+.bc-card.r-quality   {background:linear-gradient(135deg,#2A0000 0%,#5A0000 55%,#220000 100%)}
+
+/* Security diag pattern */
+.bc-card::before{content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(-45deg,transparent 0,transparent 8px,rgba(255,255,255,.022) 8px,rgba(255,255,255,.022) 9px);
+  pointer-events:none;z-index:1}
+
+/* Holographic top strip */
+.bc-holo{position:absolute;top:0;left:0;right:0;height:4px;z-index:3;border-radius:18px 18px 0 0;
+  background:linear-gradient(90deg,#FF0080,#FF8C00,#FFE600,#00FF88,#00C8FF,#8000FF,#FF0080);
+  background-size:200% 100%;animation:holoshift 3s linear infinite}
+@keyframes holoshift{from{background-position:0% 0}to{background-position:200% 0}}
+
+.bc-inner{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;padding:18px 20px 14px}
+.bc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.bc-logo{display:flex;align-items:center;gap:8px}
+.bc-logo-sq{width:28px;height:28px;background:rgba(255,255,255,.14);border-radius:5px;
+  border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center}
+.bc-logo-sq svg{width:20px;height:14px}
+.bc-plant-name{font-size:11px;font-weight:600;color:rgba(255,255,255,.9);letter-spacing:.06em;line-height:1}
+.bc-plant-sub{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.45);letter-spacing:.1em;text-transform:uppercase}
+.bc-emp-id{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.38);letter-spacing:.12em}
+.bc-main{display:flex;align-items:center;gap:16px;flex:1}
+.bc-avatar{width:68px;height:68px;border-radius:11px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.18);overflow:hidden}
+.bc-avatar svg{width:42px;height:42px}
+.bc-info{flex:1;min-width:0}
+.bc-name{font-size:19px;font-weight:700;color:#FFF;line-height:1.1;margin-bottom:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bc-role-chip{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;
+  font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;margin-bottom:7px;
+  border:1px solid rgba(255,255,255,.22);color:rgba(255,255,255,.88)}
+.bc-certs{display:flex;flex-wrap:wrap;gap:4px}
+.bc-cert{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:4px;
+  padding:2px 6px;font-family:var(--mono);font-size:8px;color:rgba(255,255,255,.65);
+  letter-spacing:.05em;text-transform:uppercase}
+.bc-foot{display:flex;align-items:center;justify-content:space-between;
+  margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.1)}
+.bc-uid{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.42);letter-spacing:.12em}
+.bc-dept{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,.42);letter-spacing:.05em}
+.bc-nfc-ico{width:22px;height:22px;opacity:.38}
+
+/* Dots */
+.bc-dots{display:flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;padding:2px 0}
+.bc-dot{width:7px;height:7px;border-radius:50%;background:var(--bd-str);cursor:pointer;transition:all .2s}
+.bc-dot.active{width:22px;border-radius:4px;background:var(--hi)}
+
+/* Arrow row */
+.bc-arr-row{display:flex;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
+.bc-arr{width:52px;height:52px;border-radius:50%;background:var(--base);border:1.5px solid var(--bd-str);
+  color:var(--tx2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.bc-arr:hover{border-color:var(--hi);color:var(--hi);background:var(--hi-lt)}
+.bc-arr svg{width:20px;height:20px}
+.bc-arr-label{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3);letter-spacing:.08em;text-align:center;min-width:100px}
+
+/* Scanned result */
+.scanned-result{background:var(--base);border:2px solid var(--ok-bd);border-radius:var(--r);
+  padding:12px 16px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 0 0 4px var(--ok-lt),var(--sh);animation:slideup .35s cubic-bezier(.4,0,.2,1)}
+@keyframes slideup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.scanned-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.scanned-av svg{width:26px;height:26px}
+.scanned-name{font-size:var(--f-sm);font-weight:600;color:var(--tx)}
+.scanned-meta{font-family:var(--mono);font-size:11px;color:var(--tx2);letter-spacing:.06em;margin-top:2px}
+
+/* Physical mode */
+.physical-mode{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+
+/* Confirm pulse */
+.cpulse{animation:cpulseani .5s ease-out}
+@keyframes cpulseani{0%{box-shadow:0 0 0 0 rgba(0,112,242,.55)}60%{box-shadow:0 0 0 18px rgba(0,112,242,0)}100%{box-shadow:none}}
+
+.enav{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.ebtn{background:#FFF;border:1px solid #C8CCDA;color:#556B8A;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s}
+.ebtn.a{background:var(--hi);border-color:var(--hi-dk);color:#fff}
+</style>
+</head>
+<body>
+
+<div class="page-meta">SAP DM MQTT Simulator · ESP32-P4 · 720×720 IPS · 4-inch physical scale</div>
+
+<div class="enav">
+  <button class="ebtn a" onclick="extNav('home',this)">Home</button>
+  <button class="ebtn" onclick="extNav('machines',this)">Machines</button>
+  <button class="ebtn" onclick="extNav('tanks',this)">Tanks</button>
+  <button class="ebtn" onclick="extNav('debug',this)">Debug</button>
+  <button class="ebtn" onclick="extNav('nfc',this)">NFC</button>
+</div>
+
+<div class="device">
+<div class="dlabel">Waveshare ESP32-P4 Smart 86 Box · 720×720 IPS · LVGL 9 · 4″ physical</div>
+
+<div class="screen" id="thescreen">
+
+  <!-- SHELL -->
+  <div class="shell">
+    <div class="shell-l">
+      <div class="sap-badge">
+        <svg viewBox="0 0 64 44" fill="none">
+          <text x="0" y="38" font-family="'IBM Plex Sans',sans-serif" font-weight="600" font-size="38" fill="white" letter-spacing="2">SAP</text>
+        </svg>
+      </div>
+      <div>
+        <div class="shell-title" id="stitle">Shop Floor Simulator</div>
+        <div class="shell-sub" id="ssub">SAP Digital Manufacturing · Plant BE01</div>
+      </div>
+    </div>
+    <div class="shell-r">
+      <div class="os ok"><span class="osd"></span>MQTT</div>
+      <div class="os hi"><span class="osd"></span>WiFi</div>
+    </div>
+  </div>
+
+  <!-- BREADCRUMB -->
+  <div class="bc" id="bc" style="display:none">
+    <button class="bc-btn" onclick="goBack()">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 L4 6 L8 10"/></svg>
+      <span id="bc-back-lbl">Back</span>
+    </button>
+    <span class="bc-sep">/</span>
+    <span class="bc-cur" id="bc-cur">Detail</span>
+  </div>
+
+  <!-- ── HOME ── -->
+  <div class="view active" id="view-home">
+    <div class="vbody">
+      <div class="kgrid">
+        <div class="kpi ok"><div class="kpi-lbl">Running</div><div class="kpi-val ok">3 / 4</div><div class="kpi-meta">CNC-02 stopped</div></div>
+        <div class="kpi hi"><div class="kpi-lbl">Pulses Today</div><div class="kpi-val hi">1,284</div><div class="kpi-meta">+42 last 5 min</div></div>
+        <div class="kpi warn"><div class="kpi-lbl">MQTT Msgs</div><div class="kpi-val warn">387</div><div class="kpi-meta">since boot</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">WiFi RSSI</div><div class="kpi-val teal">-61</div><div class="kpi-meta">dBm · Ch 6</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="crow"><div><div class="ck">MQTT Broker</div><div class="cv">10.8.0.1 : 1883</div></div><div class="badge ok">Connected</div></div>
+        <div class="crow"><div><div class="ck">Device IP</div><div class="cv">192.168.43.112</div></div><div class="badge hi">DHCP</div></div>
+        <div class="crow"><div><div class="ck">Operator</div><div class="cv" id="home-operator-name">M. Haegens</div></div><div class="badge ok">Active</div></div>
+      </div>
+    </div>
+    <div class="tabbar">
+      <button class="tab active" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12L12 3l9 9"/><path d="M5 10v11h5v-5h4v5h5V10"/></svg><span>Home</span></button>
+      <button class="tab" onclick="switchTab('machines')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg><span>Machines</span></button>
+      <button class="tab" onclick="switchTab('tanks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 14h12"/></svg><span>Tanks</span></button>
+      <button class="tab" onclick="switchTab('debug')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="4 8 4 4 20 4 20 8"/><rect x="2" y="8" width="20" height="12" rx="2"/></svg><span>Debug</span></button>
+      <button class="tab" onclick="switchTab('nfc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg><span>NFC</span></button>
+    </div>
+  </div>
+
+  <!-- ── MACHINES ── -->
+  <div class="view" id="view-machines">
+    <div class="vbody"><div class="mgrid" id="mgrid"></div></div>
+    <div class="tabbar">
+      <button class="tab" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12L12 3l9 9"/><path d="M5 10v11h5v-5h4v5h5V10"/></svg><span>Home</span></button>
+      <button class="tab active" onclick="switchTab('machines')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg><span>Machines</span></button>
+      <button class="tab" onclick="switchTab('tanks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 14h12"/></svg><span>Tanks</span></button>
+      <button class="tab" onclick="switchTab('debug')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="4 8 4 4 20 4 20 8"/><rect x="2" y="8" width="20" height="12" rx="2"/></svg><span>Debug</span></button>
+      <button class="tab" onclick="switchTab('nfc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg><span>NFC</span></button>
+    </div>
+  </div>
+
+  <!-- ── TANKS ── -->
+  <div class="view" id="view-tanks">
+    <div class="tanks-screen" id="tanks-screen"></div>
+    <div class="tabbar">
+      <button class="tab" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12L12 3l9 9"/><path d="M5 10v11h5v-5h4v5h5V10"/></svg><span>Home</span></button>
+      <button class="tab" onclick="switchTab('machines')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg><span>Machines</span></button>
+      <button class="tab active" onclick="switchTab('tanks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 14h12"/></svg><span>Tanks</span></button>
+      <button class="tab" onclick="switchTab('debug')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="4 8 4 4 20 4 20 8"/><rect x="2" y="8" width="20" height="12" rx="2"/></svg><span>Debug</span></button>
+      <button class="tab" onclick="switchTab('nfc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg><span>NFC</span></button>
+    </div>
+  </div>
+
+  <!-- ── DEBUG ── -->
+  <div class="view" id="view-debug">
+    <div class="vbody">
+      <div class="dbg-grid">
+        <div class="dbgc"><div class="dbgk">Broker</div><div class="dbgv">10.8.0.1:1883</div></div>
+        <div class="dbgc"><div class="dbgk">MQTT State</div><div class="dbgv" style="color:var(--ok)">Connected</div></div>
+        <div class="dbgc"><div class="dbgk">Device IP</div><div class="dbgv">192.168.43.112</div></div>
+        <div class="dbgc"><div class="dbgk">RSSI</div><div class="dbgv" style="color:var(--hi)">-61 dBm</div></div>
+      </div>
+      <div class="logpanel" id="logpanel">
+        <div class="ll"><span class="lts">00043s</span><span class="lm pub">PUB factory/machines/cnc01/rpm → 4850</span></div>
+        <div class="ll"><span class="lts">00041s</span><span class="lm pub">PUB factory/machines/fill01/flow_rate → 12.4</span></div>
+        <div class="ll"><span class="lts">00039s</span><span class="lm pub">PUB factory/machines/cnc01/spindle_load → 62</span></div>
+        <div class="ll"><span class="lts">00037s</span><span class="lm pub">PUB factory/tanks/raw/level → 68.0</span></div>
+        <div class="ll"><span class="lts">00031s</span><span class="lm ok">NFC badge read · UID A3F7C2 → M.Haegens</span></div>
+        <div class="ll"><span class="lts">00028s</span><span class="lm pub">PUB factory/machines/cnc02/status → STOPPED</span></div>
+        <div class="ll"><span class="lts">00014s</span><span class="lm ok">MQTT reconnected · rc=0</span></div>
+      </div>
+      <button class="btn primary full sm" onclick="addLog()">Simulate MQTT Publish</button>
+    </div>
+    <div class="tabbar">
+      <button class="tab" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12L12 3l9 9"/><path d="M5 10v11h5v-5h4v5h5V10"/></svg><span>Home</span></button>
+      <button class="tab" onclick="switchTab('machines')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg><span>Machines</span></button>
+      <button class="tab" onclick="switchTab('tanks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 14h12"/></svg><span>Tanks</span></button>
+      <button class="tab active" onclick="switchTab('debug')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="4 8 4 4 20 4 20 8"/><rect x="2" y="8" width="20" height="12" rx="2"/></svg><span>Debug</span></button>
+      <button class="tab" onclick="switchTab('nfc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg><span>NFC</span></button>
+    </div>
+  </div>
+
+  <!-- ── NFC ── -->
+  <div class="view" id="view-nfc">
+    <div class="vbody" style="gap:8px">
+
+      <!-- MODE TOGGLE -->
+      <div class="nfc-mode-toggle">
+        <button class="nfc-mode-btn" id="nfc-btn-physical" onclick="nfcSetMode('physical')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/>
+          </svg>
+          Physical Badge
+        </button>
+        <button class="nfc-mode-btn active" id="nfc-btn-virtual" onclick="nfcSetMode('virtual')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <rect x="3" y="5" width="18" height="14" rx="3"/>
+            <circle cx="8.5" cy="11" r="2"/><path d="M14 9h3M14 12h2"/>
+          </svg>
+          Virtual Badge
+        </button>
+      </div>
+
+      <!-- PHYSICAL MODE -->
+      <div class="physical-mode" id="nfc-physical" style="display:none">
+        <div class="nring-wrap" id="nfc-ring">
+          <div class="nring-o"></div><div class="nring-s"></div>
+          <div class="nring-i">
+            <svg viewBox="0 0 48 48" fill="none" stroke="var(--hi)" stroke-width="2.5" stroke-linecap="round">
+              <circle cx="24" cy="24" r="6"/><path d="M14 34a14 14 0 0020 0"/><path d="M8 40a22 22 0 0032 0"/>
+            </svg>
+          </div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:var(--f-md);font-weight:600;color:var(--tx);margin-bottom:6px">Tap Badge to Identify Operator</div>
+          <div style="font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);line-height:1.6;letter-spacing:.04em">MIFARE Classic · Hold badge within 5 cm of device</div>
+        </div>
+        <div id="phys-scanned-result"></div>
+        <button class="btn primary full sm" onclick="simPhysicalScan()">Simulate Physical Scan</button>
+      </div>
+
+      <!-- VIRTUAL MODE -->
+      <div id="nfc-virtual" style="display:flex;flex-direction:column;gap:7px;flex:1;min-height:0">
+
+        <!-- CAROUSEL -->
+        <div class="carousel-outer" id="carousel-outer">
+          <div class="carousel-track" id="carousel-track"></div>
+        </div>
+
+        <!-- DOTS -->
+        <div class="bc-dots" id="bc-dots"></div>
+
+        <!-- ARROW NAV -->
+        <div class="bc-arr-row">
+          <button class="bc-arr" onclick="bcPrev()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div class="bc-arr-label" id="bc-arr-label">1 of 5</div>
+          <button class="bc-arr" onclick="bcNext()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        <!-- SCANNED RESULT + CONFIRM -->
+        <div id="virt-scanned-result"></div>
+        <button class="btn primary full" id="bc-confirm-btn" onclick="bcConfirm()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg>
+          Activate Badge
+        </button>
+      </div>
+
+    </div>
+    <div class="tabbar">
+      <button class="tab" onclick="switchTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12L12 3l9 9"/><path d="M5 10v11h5v-5h4v5h5V10"/></svg><span>Home</span></button>
+      <button class="tab" onclick="switchTab('machines')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg><span>Machines</span></button>
+      <button class="tab" onclick="switchTab('tanks')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="3" width="12" height="18" rx="3"/><path d="M6 14h12"/></svg><span>Tanks</span></button>
+      <button class="tab" onclick="switchTab('debug')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="4 8 4 4 20 4 20 8"/><rect x="2" y="8" width="20" height="12" rx="2"/></svg><span>Debug</span></button>
+      <button class="tab active" onclick="switchTab('nfc')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg><span>NFC</span></button>
+    </div>
+  </div>
+
+  <!-- ── DETAIL ── -->
+  <div class="view" id="view-detail">
+    <div class="detail-body" id="detail-body"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+/* ══════════════ METRIC DEFS ══════════════ */
+const M = {
+  rpm:        {label:'Spindle RPM',   unit:'RPM',   min:0,  max:8000,step:50, viz:'spark',  input:'step',  color:'#0070F2', randMin:2000,randMax:7000},
+  spindleLoad:{label:'Spindle Load',  unit:'%',     min:0,  max:100, step:1,  viz:'arc',    input:'slide', thr:[[40,'#107E3E'],[70,'#E76500'],[100,'#BB0000']],randMin:20,randMax:95},
+  toolWear:   {label:'Tool Wear',     unit:'%',     min:0,  max:100, step:1,  viz:'arc',    input:'slide', thr:[[40,'#107E3E'],[70,'#E76500'],[100,'#BB0000']],randMin:10,randMax:90},
+  feedRate:   {label:'Feed Rate',     unit:'mm/m',  min:0,  max:600, step:10, viz:'bullet', input:'step',  color:'#0070F2', randMin:100,randMax:500},
+  machTemp:   {label:'Temperature',   unit:'°C',    min:15, max:80,  step:0.5,viz:'thermo', input:'step',  color:'#E76500', randMin:25,randMax:65},
+  flowRate:   {label:'Flow Rate',     unit:'L/min', min:0,  max:25,  step:0.1,viz:'spark',  input:'step',  color:'#0070F2', randMin:5,randMax:20},
+  fillPres:   {label:'Pressure',      unit:'bar',   min:0,  max:5,   step:0.1,viz:'arc',    input:'slide', color:'#045B7A', randMin:0.5,randMax:4},
+  lineSpeed:  {label:'Line Speed',    unit:'u/min', min:0,  max:80,  step:1,  viz:'spark',  input:'step',  color:'#E76500', randMin:20,randMax:70},
+  oee:        {label:'OEE',           unit:'%',     min:0,  max:100, step:1,  viz:'arc',    input:'slide', thr:[[60,'#BB0000'],[80,'#E76500'],[100,'#107E3E']],randMin:50,randMax:99},
+  level:      {label:'Tank Level',    unit:'%',     min:0,  max:100, step:1,  viz:'tank',   input:'slide', color:'#0070F2', randMin:10,randMax:90},
+  tankTemp:   {label:'Temperature',   unit:'°C',    min:5,  max:70,  step:0.5,viz:'thermo', input:'step',  color:'#E76500', randMin:15,randMax:55},
+  pressure:   {label:'Pressure',      unit:'bar',   min:0,  max:5,   step:0.1,viz:'arc',    input:'slide', color:'#045B7A', randMin:0.2,randMax:4},
+  flowIn:     {label:'Flow In',       unit:'L/min', min:0,  max:20,  step:0.1,viz:'spark',  input:'step',  color:'#107E3E', randMin:1,randMax:15},
+  flowOut:    {label:'Flow Out',      unit:'L/min', min:0,  max:20,  step:0.1,viz:'spark',  input:'step',  color:'#E76500', randMin:0.5,randMax:10},
+  ph:         {label:'pH Level',      unit:'pH',    min:0,  max:14,  step:0.1,viz:'ph',     input:'slide', color:'#6A28C8', randMin:3,randMax:11},
+};
+function mdef(k){return {...M[k], _k:k};}
+
+/* ══════════════ DATA MODEL ══════════════ */
+const MACH = [
+  {id:'cnc01',name:'CNC-01',type:'CNC Machining',topic:'factory/machines/cnc01',running:true,pulses:347,
+   m:{rpm:{v:4850,h:[]},spindleLoad:{v:62},toolWear:{v:34},feedRate:{v:380},machTemp:{v:41.2}}},
+  {id:'cnc02',name:'CNC-02',type:'CNC Machining',topic:'factory/machines/cnc02',running:false,pulses:112,
+   m:{rpm:{v:0,h:[]},spindleLoad:{v:0},toolWear:{v:78},feedRate:{v:0},machTemp:{v:28.5}}},
+  {id:'fill01',name:'FILL-01',type:'Filling Line',topic:'factory/machines/fill01',running:true,pulses:521,
+   m:{flowRate:{v:12.4,h:[]},fillPres:{v:2.1},machTemp:{v:36.8}}},
+  {id:'pack01',name:'PACK-01',type:'Packaging',topic:'factory/machines/pack01',running:true,pulses:304,
+   m:{lineSpeed:{v:48,h:[]},oee:{v:91},machTemp:{v:24.1}}},
+];
+const TANKS = {
+  raw:  {id:'raw',  name:'Raw Material', topic:'factory/tanks/raw',
+         m:{level:{v:68,h:[]}, tankTemp:{v:22.4}, flowIn:{v:4.2}}},
+  prod: {id:'prod', name:'Production',   topic:'factory/tanks/prod',
+         m:{level:{v:28,h:[]}, tankTemp:{v:38.1}, pressure:{v:1.4}}},
+  waste:{id:'waste',name:'Waste',        topic:'factory/tanks/waste',
+         m:{level:{v:11,h:[]}, tankTemp:{v:18.6}, ph:{v:5.2}, flowOut:{v:1.1}}},
+};
+const TS = {
+  raw:  {pct:68, phase:0,   slosh:0, drag:false},
+  prod: {pct:28, phase:1.5, slosh:0, drag:false},
+  waste:{pct:11, phase:3.0, slosh:0, drag:false},
+};
+
+// Prefill histories
+MACH.forEach(mc=>Object.entries(mc.m).forEach(([k,met])=>{
+  if(!('h' in met)) return;
+  for(let i=0;i<32;i++) met.h.push(mc.running ? met.v*(0.85+Math.random()*.3) : Math.random()*10);
+}));
+Object.values(TANKS).forEach(t=>{
+  for(let i=0;i<32;i++) t.m.level.h.push(t.m.level.v*(0.9+Math.random()*.2));
+});
+
+/* ══════════════ HELPERS ══════════════ */
+function tcolor(def,v){
+  if(def.thr){for(const [lim,c] of def.thr) if(v<=lim) return c; return '#BB0000';}
+  return def.color||'#0070F2';
+}
+function tcls(hex){
+  return {['#107E3E']:'ok',['#E76500']:'warn',['#BB0000']:'err',['#0070F2']:'hi',['#045B7A']:'teal',['#6A28C8']:'pur'}[hex]||'hi';
+}
+function fmt(v,k){const d=M[k];if(!d) return String(v); return d.step<1 ? (+v).toFixed(1) : Math.round(v).toLocaleString();}
+
+/* ══════════════ NAV ══════════════ */
+let curView='home', detCtx=null;
+
+function switchTab(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('bc').style.display='none';
+  stopGenInterval(); // stop any running generator when navigating away
+  curView=v;
+  if(v==='tanks') buildTanks();
+  if(v==='machines') buildMachines();
+}
+function extNav(v,btn){
+  document.querySelectorAll('.ebtn').forEach(b=>{b.style.background='#FFF';b.style.color='#556B8A';b.classList.remove('a');});
+  btn.classList.add('a');btn.style.background='var(--hi)';btn.style.color='#fff';
+  switchTab(v);
+}
+function openDetail(etype,eid,mkey){
+  stopGenInterval();
+  const def=mdef(mkey);
+  detCtx={etype,eid,mkey};
+  let name;
+  if(etype==='machine'){const mc=MACH.find(x=>x.id===eid);name=mc.name;}
+  else name=TANKS[eid].name;
+  document.getElementById('bc').style.display='flex';
+  document.getElementById('bc-back-lbl').textContent=name;
+  document.getElementById('bc-cur').textContent=def.label;
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-detail').classList.add('active');
+  curView='detail';
+  renderDetail();
+}
+function goBack(){
+  stopGenInterval();
+  if(!detCtx) return;
+  document.getElementById('bc').style.display='none';
+  switchTab(detCtx.etype==='machine'?'machines':'tanks');
+}
+
+/* ══════════════ VALUE OPS ══════════════ */
+function getVal(){
+  const c=detCtx;
+  return c.etype==='machine' ? MACH.find(x=>x.id===c.eid).m[c.mkey].v : TANKS[c.eid].m[c.mkey].v;
+}
+function setVal(v){
+  const c=detCtx, def=mdef(c.mkey);
+  const f=Math.max(def.min, Math.min(def.max, Math.round(v/def.step)*def.step));
+  if(c.etype==='machine'){
+    const mc=MACH.find(x=>x.id===c.eid); mc.m[c.mkey].v=f;
+    if(mc.m[c.mkey].h){mc.m[c.mkey].h.push(f); if(mc.m[c.mkey].h.length>40) mc.m[c.mkey].h.shift();}
+  } else {
+    TANKS[c.eid].m[c.mkey].v=f;
+    if(TANKS[c.eid].m[c.mkey].h){TANKS[c.eid].m[c.mkey].h.push(f); if(TANKS[c.eid].m[c.mkey].h.length>40) TANKS[c.eid].m[c.mkey].h.shift();}
+    if(c.mkey==='level') TS[c.eid].pct=f;
+  }
+  return f;
+}
+
+/* ══════════════ TANK BUILD ══════════════ */
+let activeDrag=null, lastDY=0, lastDP=0, wasDrag=false;
+
+function buildTanks(){
+  const scr=document.getElementById('tanks-screen');
+  scr.innerHTML='';
+
+  const row=document.createElement('div');
+  row.className='tanks-row';
+
+  Object.values(TANKS).forEach(tank=>{
+    const col=document.createElement('div');
+    col.className='tank-col';
+
+    // Name
+    const name=document.createElement('div');
+    name.className='tank-name';
+    name.textContent=tank.name.toUpperCase();
+    col.appendChild(name);
+
+    // Tank body
+    const body=document.createElement('div');
+    body.className='tank-body';
+    body.id='tb-'+tank.id;
+    body.innerHTML=`
+      <div class="tticks">
+        <div class="tick" style="bottom:75%"><span class="tick-l">75</span></div>
+        <div class="tick" style="bottom:50%"><span class="tick-l">50</span></div>
+        <div class="tick" style="bottom:25%"><span class="tick-l">25</span></div>
+      </div>
+      <svg class="tsvg" id="tsvg-${tank.id}" preserveAspectRatio="none"></svg>
+      <div class="tank-pct-overlay" id="tpct-${tank.id}">${Math.round(TS[tank.id].pct)}%</div>`;
+    col.appendChild(body);
+
+    // Metric indicator strip — one button per non-level metric
+    const strip=document.createElement('div');
+    strip.className='tank-indicator-strip';
+
+    Object.entries(tank.m).forEach(([k,met])=>{
+      if(k==='level') return;
+      const def=mdef(k);
+      const c=tcolor(def,met.v);
+      const cls=tcls(c);
+      const btn=document.createElement('div');
+      btn.className='tank-metric-btn';
+      btn.id=`tmb-${tank.id}-${k}`;
+      btn.innerHTML=`<div class="tmb-dot dot-${cls}"></div>
+        <div class="tmb-lbl">${def.label}</div>
+        <div class="tmb-val col-${cls}" id="tmv-${tank.id}-${k}">${fmt(met.v,k)}</div>
+        <div class="tmb-unit">${def.unit}</div>`;
+      btn.addEventListener('click',()=>openDetail('tank',tank.id,k));
+      strip.appendChild(btn);
+    });
+    col.appendChild(strip);
+    row.appendChild(col);
+
+    // Drag / tap on tank body
+    body.addEventListener('click',()=>{ if(!wasDrag) openDetail('tank',tank.id,'level'); wasDrag=false; });
+    body.addEventListener('mousedown',e=>{ wasDrag=false; activeDrag=tank.id; lastDY=e.clientY; lastDP=TS[tank.id].pct; TS[tank.id].drag=true; e.preventDefault(); });
+    body.addEventListener('touchstart',e=>{ wasDrag=false; activeDrag=tank.id; lastDY=e.touches[0].clientY; lastDP=TS[tank.id].pct; TS[tank.id].drag=true; e.preventDefault(); },{passive:false});
+  });
+
+  scr.appendChild(row);
+}
+
+document.addEventListener('mousemove',e=>{
+  if(!activeDrag) return; wasDrag=true; moveDrag(activeDrag,e.clientY);
+});
+document.addEventListener('touchmove',e=>{
+  if(!activeDrag) return; wasDrag=true; moveDrag(activeDrag,e.touches[0].clientY); e.preventDefault();
+},{passive:false});
+document.addEventListener('mouseup',()=>{ if(activeDrag){TS[activeDrag].drag=false; activeDrag=null;} });
+document.addEventListener('touchend',()=>{ if(activeDrag){TS[activeDrag].drag=false; activeDrag=null;} });
+
+function moveDrag(id,cy){
+  const body=document.getElementById('tb-'+id); if(!body) return;
+  const dy=cy-lastDY, dp=-(dy/body.clientHeight)*100;
+  const t=TS[id];
+  t.slosh=-dp*.09; t.pct=Math.max(0,Math.min(100,lastDP+dp));
+  lastDP=t.pct; lastDY=cy;
+  TANKS[id].m.level.v=Math.round(t.pct);
+  if(TANKS[id].m.level.h){ TANKS[id].m.level.h.push(Math.round(t.pct)); if(TANKS[id].m.level.h.length>40) TANKS[id].m.level.h.shift(); }
+  doSplash(id,cy);
+}
+function doSplash(id,cy){
+  const body=document.getElementById('tb-'+id); if(!body) return;
+  const rect=body.getBoundingClientRect(), sy=cy-rect.top;
+  const el=document.createElement('div'); el.className='splash';
+  const c=tcol(TS[id].pct);
+  el.style.cssText=`left:${body.clientWidth/2-12}px;top:${sy-12}px;width:24px;height:24px;border:2px solid ${c.fill};animation:splash-out .4s ease-out forwards`;
+  body.appendChild(el); setTimeout(()=>el.remove(),400);
+}
+function tcol(p){
+  if(p<15) return {fill:'#BB0000',dark:'#8A0000'};
+  if(p<40) return {fill:'#E76500',dark:'#B84D00'};
+  if(p<75) return {fill:'#0070F2',dark:'#0050BE'};
+  return {fill:'#0092D1',dark:'#006A9A'};
+}
+function renderTank(id){
+  const t=TS[id], svg=document.getElementById('tsvg-'+id), body=document.getElementById('tb-'+id);
+  if(!svg||!body) return;
+  const W=body.clientWidth||130, H=body.clientHeight||300;
+  const lH=Math.max(0,(t.pct/100)*H), c=tcol(t.pct);
+  const amp=t.drag?5:2.5, so=t.slosh*14;
+  const pts=[];
+  for(let x=0;x<=W+3;x+=4){
+    const y=Math.sin((x/W)*Math.PI*4+t.phase)*amp+Math.sin((x/W)*Math.PI*6+t.phase*.7)*amp*.4+so;
+    pts.push([x,y]);
+  }
+  let wp=`M -2 ${lH} L -2 ${pts[0][1]} `; pts.forEach(([x,y])=>wp+=`L ${x} ${y} `); wp+=`L ${W+2} ${lH} Z`;
+  let bb=''; const nb=Math.floor(t.pct/30)+1;
+  for(let i=0;i<nb;i++){
+    const bx=8+(i*43)%(W-16), by=lH*.2+(i*53)%(lH*.6||8), br=1+(i*2)%2.5, dl=(i*.65)%2.5;
+    bb+=`<circle cx="${bx}" cy="${by}" r="${br}" fill="rgba(255,255,255,.4)" opacity="0" style="animation:rise ${1.8+dl}s ease-in ${dl}s infinite"/>`;
+  }
+  svg.style.height=lH+'px'; svg.setAttribute('viewBox',`0 0 ${W} ${lH}`); svg.setAttribute('width',W); svg.setAttribute('height',lH);
+  svg.innerHTML=`<defs><linearGradient id="lg${id}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${c.fill}" stop-opacity=".8"/><stop offset="100%" stop-color="${c.dark}"/></linearGradient></defs>
+    <rect x="0" y="0" width="${W}" height="${lH}" fill="url(#lg${id})"/>
+    <path d="${wp}" fill="${c.fill}" opacity=".6"/>
+    <path d="${wp}" fill="rgba(255,255,255,.16)" transform="translate(0,-3)"/>
+    <rect x="4" y="6" width="${W*.09}" height="${lH-12}" rx="2" fill="rgba(255,255,255,.12)"/>${bb}`;
+  const pe=document.getElementById('tpct-'+id);
+  if(pe){
+    pe.textContent=Math.round(t.pct)+'%';
+    pe.className='tank-pct-overlay'+(t.pct<25?' dark':'');
+  }
+}
+
+(function loop(){
+  const dt=.016;
+  for(const id in TS){const t=TS[id]; t.phase+=dt*(1.2+Math.abs(t.slosh)*.3); if(!t.drag) t.slosh*=.92;}
+  for(const id in TS) if(curView==='tanks'||curView==='detail') renderTank(id);
+  requestAnimationFrame(loop);
+})();
+
+/* ══════════════ MACHINES ══════════════ */
+function buildMachines(){
+  const g=document.getElementById('mgrid');
+  g.innerHTML=MACH.map(mc=>{
+    const run=mc.running, dk=run?'green':'red';
+    let body='';
+    const sparkK=Object.keys(mc.m).find(k=>mc.m[k].h!==undefined);
+    if(sparkK){
+      const d=mdef(sparkK), met=mc.m[sparkK], cls=tcls(tcolor(d,met.v))||'hi';
+      body+=`<div class="stile" onclick="openDetail('machine','${mc.id}','${sparkK}')">
+        <div class="st-row"><span class="st-lbl">${d.label}</span><span class="st-val mt-val ${cls}" id="sv-${mc.id}-${sparkK}">${fmt(met.v,sparkK)}</span></div>
+        <svg id="sp-${mc.id}-${sparkK}" width="100%" height="36" style="display:block"></svg>
+      </div>`;
+    }
+    const arcKeys=Object.keys(mc.m).filter(k=>M[k]&&M[k].viz==='arc');
+    if(arcKeys.length){
+      body+=`<div style="display:grid;grid-template-columns:repeat(${Math.min(arcKeys.length,3)},1fr);gap:6px">`;
+      arcKeys.forEach(k=>{const d=mdef(k),met=mc.m[k],c=tcolor(d,met.v),cls=tcls(c);
+        body+=`<div class="arctile" onclick="openDetail('machine','${mc.id}','${k}')">
+          <span class="arc-lbl">${d.label}</span>
+          <svg id="arc-${mc.id}-${k}" width="72" height="46"></svg>
+          <span class="arc-val mt-val ${cls}" id="av-${mc.id}-${k}">${fmt(met.v,k)}</span>
+        </div>`;
+      });
+      body+=`</div>`;
+    }
+    const tileKeys=Object.keys(mc.m).filter(k=>M[k]&&M[k].viz!=='spark'&&M[k].viz!=='arc');
+    if(tileKeys.length){
+      body+=`<div style="display:grid;grid-template-columns:repeat(${Math.min(tileKeys.length,3)},1fr);gap:6px">`;
+      tileKeys.forEach(k=>{const d=mdef(k),met=mc.m[k],cls=tcls(tcolor(d,met.v))||'hi';
+        body+=`<div class="mtile" onclick="openDetail('machine','${mc.id}','${k}')">
+          <span class="mt-lbl">${d.label}</span>
+          <span class="mt-val ${cls}" id="tv-${mc.id}-${k}">${fmt(met.v,k)}</span>
+          <span class="mt-unit">${d.unit}</span>
+        </div>`;
+      });
+      body+=`</div>`;
+    }
+    const ss=run?`<button class="btn danger" onclick="toggleMC('${mc.id}')">Stop</button>`:`<button class="btn success" onclick="toggleMC('${mc.id}')">Start</button>`;
+    return`<div class="mc ${run?'running':'stopped'}" id="mc-${mc.id}">
+      <div class="mc-hdr"><div><div class="mc-name">${mc.name}</div><div class="mc-type">${mc.type}</div></div><div class="sdot ${dk}" id="sd-${mc.id}"></div></div>
+      <div class="mc-body">${body}</div>
+      <div class="mc-acts">${ss}<button class="btn ghost" onclick="doPulse('${mc.id}')">Pulse</button></div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>MACH.forEach(mc=>{
+    Object.entries(mc.m).forEach(([k,met])=>{
+      if(met.h) drawSparkMini(`sp-${mc.id}-${k}`,met.h,M[k].color||'#0070F2');
+      if(M[k]&&M[k].viz==='arc') drawArcMini(`arc-${mc.id}-${k}`,met.v,M[k],tcolor(mdef(k),met.v));
+    });
+  }),60);
+}
+function toggleMC(id){const mc=MACH.find(x=>x.id===id);mc.running=!mc.running;if(!mc.running&&mc.m.rpm)mc.m.rpm.v=0;buildMachines();}
+function doPulse(id){const mc=MACH.find(x=>x.id===id);mc.pulses++;const c=document.getElementById('mc-'+id);if(c){c.classList.add('pf');setTimeout(()=>c.classList.remove('pf'),280);}}
+
+/* ══════════════ LIVE DATA ══════════════ */
+setInterval(()=>{
+  MACH.forEach(mc=>{
+    if(!mc.running) return;
+    if(mc.m.rpm){mc.m.rpm.v=Math.max(0,Math.min(8000,mc.m.rpm.v+(Math.random()-.48)*120));mc.m.rpm.h.push(mc.m.rpm.v);if(mc.m.rpm.h.length>40)mc.m.rpm.h.shift();}
+    if(mc.m.spindleLoad)mc.m.spindleLoad.v=Math.max(0,Math.min(100,mc.m.spindleLoad.v+(Math.random()-.5)*3));
+    if(mc.m.flowRate){mc.m.flowRate.v=Math.max(0,Math.min(25,mc.m.flowRate.v+(Math.random()-.5)*.3));mc.m.flowRate.h.push(mc.m.flowRate.v);if(mc.m.flowRate.h.length>40)mc.m.flowRate.h.shift();}
+    if(mc.m.lineSpeed){mc.m.lineSpeed.v=Math.max(0,Math.min(80,mc.m.lineSpeed.v+(Math.random()-.5)*1.5));mc.m.lineSpeed.h.push(mc.m.lineSpeed.v);if(mc.m.lineSpeed.h.length>40)mc.m.lineSpeed.h.shift();}
+    if(mc.m.machTemp)mc.m.machTemp.v=Math.max(15,Math.min(80,mc.m.machTemp.v+(Math.random()-.5)*.2));
+  });
+  if(curView==='machines') MACH.forEach(mc=>{
+    Object.entries(mc.m).forEach(([k,met])=>{
+      const se=document.getElementById(`sv-${mc.id}-${k}`);if(se)se.textContent=fmt(met.v,k);
+      const ae=document.getElementById(`av-${mc.id}-${k}`);if(ae)ae.textContent=fmt(met.v,k);
+      const te=document.getElementById(`tv-${mc.id}-${k}`);if(te)te.textContent=fmt(met.v,k);
+      if(met.h) drawSparkMini(`sp-${mc.id}-${k}`,met.h,M[k].color||'#0070F2');
+      if(M[k]&&M[k].viz==='arc') drawArcMini(`arc-${mc.id}-${k}`,met.v,M[k],tcolor(mdef(k),met.v));
+    });
+  });
+  if(curView==='tanks') Object.values(TANKS).forEach(tank=>{
+    Object.entries(tank.m).forEach(([k,met])=>{
+      if(k==='level') return;
+      const el=document.getElementById(`tmv-${tank.id}-${k}`);
+      if(el) el.textContent=fmt(met.v,k);
+    });
+  });
+},1500);
+
+/* ══════════════ INTERVAL RANDOM GENERATOR ══════════════ */
+let genTimer=null;
+
+function stopGenInterval(){
+  if(genTimer){clearInterval(genTimer);genTimer=null;}
+  // reset button state if still on detail page
+  const startBtn=document.getElementById('gen-start-btn');
+  const stopBtn=document.getElementById('gen-stop-btn');
+  const status=document.getElementById('gen-status');
+  if(startBtn) startBtn.style.display='';
+  if(stopBtn)  stopBtn.style.display='none';
+  if(status)   status.style.display='none';
+}
+
+function startGenInterval(){
+  if(genTimer) return;
+  const mn=parseFloat(document.getElementById('rmin').value);
+  const mx=parseFloat(document.getElementById('rmax').value);
+  const ms=parseInt(document.getElementById('rinterval').value)||2000;
+  const def=mdef(detCtx.mkey);
+
+  function fireOne(){
+    const v=Math.round((mn+Math.random()*(mx-mn))/def.step)*def.step;
+    const inp=document.getElementById('di'); if(inp) inp.value=v;
+    applyVal(v);
+  }
+  fireOne(); // fire immediately then at intervals
+  genTimer=setInterval(fireOne,ms);
+
+  document.getElementById('gen-start-btn').style.display='none';
+  document.getElementById('gen-stop-btn').style.display='';
+  const status=document.getElementById('gen-status');
+  if(status){
+    status.style.display='flex';
+    document.getElementById('gen-status-txt').textContent=`Generating every ${(ms/1000).toFixed(1)}s`;
+  }
+}
+
+/* ══════════════ DETAIL PAGE ══════════════ */
+function renderDetail(){
+  const c=detCtx, def=mdef(c.mkey), val=getVal();
+  const color=tcolor(def,val);
+  let entity,topic;
+  if(c.etype==='machine'){const mc=MACH.find(x=>x.id===c.eid);entity=mc.name+' · '+mc.type;topic=mc.topic+'/'+c.mkey;}
+  else{const t=TANKS[c.eid];entity=t.name;topic=t.topic+'/'+c.mkey;}
+
+  const isSpark=def.viz==='spark';
+
+  let vizHTML='';
+  if(def.viz==='spark')  vizHTML=`<svg id="dsvg" width="640" height="100" style="display:block"></svg>`;
+  else if(def.viz==='arc') vizHTML=`<svg id="dsvg" width="240" height="140" style="display:block"></svg>`;
+  else if(def.viz==='thermo') vizHTML=`<div style="display:flex;align-items:center;gap:20px"><svg id="dsvg" width="60" height="180" style="display:block"></svg><div style="font-family:var(--mono);font-size:var(--f-xs);color:var(--tx2);line-height:2">${def.min}°C — ${def.max}°C<br>${val>60?'High — check cooling':val>40?'Elevated — monitor':'Normal range'}</div></div>`;
+  else if(def.viz==='ph') vizHTML=`<div style="width:100%"><div class="ph-band"><div class="ph-ptr" id="ph-ptr" style="left:${(val/14*100).toFixed(1)}%"></div></div><div class="ph-scale"><span>0 Acid</span><span>7 Neutral</span><span>14 Alkali</span></div></div>`;
+  else if(def.viz==='tank') vizHTML=`<div style="width:240px;height:200px;background:#ECF0F8;border:2px solid var(--bd-str);border-radius:14px 14px 8px 8px;overflow:hidden;position:relative;box-shadow:inset 0 2px 8px rgba(30,50,100,.08)"><svg class="tsvg" id="tsvg-detail" preserveAspectRatio="none" style="position:absolute;bottom:0;left:0;right:0;width:100%;z-index:2"></svg><div style="position:absolute;top:0;left:5px;right:5px;bottom:0;background:linear-gradient(180deg,rgba(255,255,255,.28) 0%,transparent 35%);pointer-events:none;border-radius:inherit;z-index:3"></div></div>`;
+  else if(def.viz==='bullet') vizHTML=`<div id="dsvg" style="width:100%"></div>`;
+
+  const inputHTML=def.input==='step'
+    ? `<div class="step-inp"><button class="si-btn" onclick="detStep(-1)">&#x2212;</button><input class="si-input" id="di" type="number" value="${val}" step="${def.step}" min="${def.min}" max="${def.max}" oninput="applyVal(this.value)"><button class="si-btn" onclick="detStep(1)">&#x2B;</button></div>`
+    : `<input class="sap-slider" id="di" type="range" min="${def.min}" max="${def.max}" step="${def.step}" value="${val}" oninput="applyVal(this.value)"><div class="slider-row"><span class="sl-lbl">${def.min} ${def.unit}</span><span class="sl-lbl">${def.max} ${def.unit}</span></div>`;
+
+  // Random section — sparklines get interval controls, others get single-shot
+  let randSection='';
+  if(isSpark){
+    randSection=`
+      <div class="fs">
+        <div class="fs-title">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="14" height="14" rx="3"/><circle cx="7" cy="7" r="1.5"/><circle cx="13" cy="7" r="1.5"/><circle cx="7" cy="13" r="1.5"/><circle cx="13" cy="13" r="1.5"/></svg>
+          Generate Time Series
+        </div>
+        <div class="rand-row">
+          <div class="rf"><label>Min</label><input id="rmin" type="number" value="${def.randMin??def.min}" step="${def.step}"></div>
+          <div class="rf"><label>Max</label><input id="rmax" type="number" value="${def.randMax??def.max}" step="${def.step}"></div>
+          <div class="rf">
+            <label>Interval</label>
+            <select id="rinterval">
+              <option value="500">0.5 s</option>
+              <option value="1000">1 s</option>
+              <option value="2000" selected>2 s</option>
+              <option value="5000">5 s</option>
+              <option value="10000">10 s</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <button class="btn primary sm" id="gen-start-btn" onclick="startGenInterval()">Start Series</button>
+          <button class="btn stop-btn sm" id="gen-stop-btn" onclick="stopGenInterval()" style="display:none">Stop Series</button>
+        </div>
+        <div class="gen-status" id="gen-status" style="display:none">
+          <div class="gen-dot"></div>
+          <span class="gen-status-txt" id="gen-status-txt">Generating...</span>
+        </div>
+      </div>`;
+  } else {
+    randSection=`
+      <div class="fs">
+        <div class="fs-title">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="14" height="14" rx="3"/><circle cx="7" cy="7" r="1.5"/><circle cx="13" cy="7" r="1.5"/><circle cx="7" cy="13" r="1.5"/><circle cx="13" cy="13" r="1.5"/></svg>
+          Generate Random Value
+        </div>
+        <div class="rand-row">
+          <div class="rf"><label>Min</label><input id="rmin" type="number" value="${def.randMin??def.min}" step="${def.step}"></div>
+          <div class="rf"><label>Max</label><input id="rmax" type="number" value="${def.randMax??def.max}" step="${def.step}"></div>
+          <button class="btn primary sm" onclick="genOnce()" style="min-height:var(--ts-sm);margin-top:18px">Generate</button>
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('detail-body').innerHTML=`
+    <div class="detail-hdr-card">
+      <div class="dhc-l">
+        <div class="dhc-metric">${def.label}</div>
+        <div class="dhc-entity">${entity}</div>
+        <div class="dhc-topic">${topic}</div>
+      </div>
+      <div class="dhc-r">
+        <div class="dhc-bigval" id="dbv" style="color:${color}">${fmt(val,c.mkey)}</div>
+        <div class="dhc-unit">${def.unit}</div>
+      </div>
+    </div>
+    <div class="viz-card">${vizHTML}</div>
+    <div class="form-card">
+      <div class="fs">
+        <div class="fs-title">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="7"/><path d="M10 7v3l2 2"/></svg>
+          Set Value
+        </div>
+        ${inputHTML}
+      </div>
+      ${randSection}
+    </div>`;
+  setTimeout(()=>refreshViz(val),50);
+}
+
+function applyVal(v){
+  if(!detCtx) return;
+  const numV=parseFloat(v); if(isNaN(numV)) return;
+  const final=setVal(numV);
+  const bv=document.getElementById('dbv');
+  if(bv){bv.textContent=fmt(final,detCtx.mkey); bv.classList.add('vf'); setTimeout(()=>bv.classList.remove('vf'),400);}
+  const inp=document.getElementById('di'); if(inp&&parseFloat(inp.value)!==final) inp.value=final;
+  refreshViz(final);
+  // also update tank metric chips if this is a tank metric
+  if(detCtx.etype==='tank'){
+    const el=document.getElementById(`tmv-${detCtx.eid}-${detCtx.mkey}`);
+    if(el) el.textContent=fmt(final,detCtx.mkey);
+  }
+}
+function detStep(d){const inp=document.getElementById('di');if(!inp)return;applyVal(parseFloat(inp.value)+d*mdef(detCtx.mkey).step);}
+function genOnce(){
+  const mn=parseFloat(document.getElementById('rmin').value);
+  const mx=parseFloat(document.getElementById('rmax').value);
+  const def=mdef(detCtx.mkey);
+  const v=Math.round((mn+Math.random()*(mx-mn))/def.step)*def.step;
+  const inp=document.getElementById('di'); if(inp) inp.value=v;
+  applyVal(v);
+}
+
+function refreshViz(val){
+  const def=mdef(detCtx.mkey);
+  if(def.viz==='spark'){
+    let h=detCtx.etype==='machine'?MACH.find(x=>x.id===detCtx.eid).m[detCtx.mkey].h:TANKS[detCtx.eid].m[detCtx.mkey].h||[val];
+    drawSparkDetail('dsvg',h,def);
+  } else if(def.viz==='arc') drawArcDetail('dsvg',val,def);
+  else if(def.viz==='thermo') drawThermo('dsvg',val,def);
+  else if(def.viz==='ph'){const p=document.getElementById('ph-ptr');if(p) p.style.left=(val/14*100).toFixed(1)+'%';}
+  else if(def.viz==='tank') renderTankDetail(val,detCtx.eid);
+  else if(def.viz==='bullet') drawBullet('dsvg',val,def);
+}
+
+/* ══════════════ VIZ RENDERERS ══════════════ */
+function drawSparkMini(id,hist,color){
+  const svg=document.getElementById(id); if(!svg||hist.length<2) return;
+  const W=svg.clientWidth||160, H=36;
+  const mn=Math.min(...hist)*.9, mx=Math.max(...hist)*1.05||1;
+  const pts=hist.map((v,i)=>{const x=(i/(hist.length-1))*W;const y=H-((v-mn)/(mx-mn||1))*(H-4)-2;return`${x},${y}`;});
+  const ld='M '+pts.join(' L '), ad=`M 0,${H} L ${ld.slice(2)} L ${W},${H} Z`;
+  const sid='ms'+id.replace(/\W/g,'_');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<defs><linearGradient id="${sid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".22"/><stop offset="100%" stop-color="${color}" stop-opacity=".02"/></linearGradient></defs>
+  <path d="${ad}" fill="url(#${sid})"/>
+  <path d="${ld}" stroke="${color}" stroke-width="1.6" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="2.5" fill="${color}"/>`;
+}
+function drawArcMini(id,v,def,color){
+  const svg=document.getElementById(id); if(!svg) return;
+  const W=72,H=46,cx=36,cy=42,r=28,sa=Math.PI*1.1,ea=Math.PI*1.9;
+  const ang=sa+(ea-sa)*(Math.min(v,def.max)/def.max);
+  function pt(a){return[cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  function arc(a1,a2){const[x1,y1]=pt(a1),[x2,y2]=pt(a2);return`M ${x1} ${y1} A ${r} ${r} 0 ${a2-a1>Math.PI?1:0} 1 ${x2} ${y2}`;}
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<path d="${arc(sa,ea)}" stroke="#E0E4EF" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="${arc(sa,ang)}" stroke="${color}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+}
+function drawSparkDetail(id,hist,def){
+  const svg=document.getElementById(id); if(!svg||hist.length<2) return;
+  const W=640,H=100,color=def.color||'#0070F2';
+  const mn=Math.min(def.min,...hist), mx=Math.max(def.max,...hist)||1;
+  const pts=hist.map((v,i)=>{const x=(i/(hist.length-1))*(W-20)+10;const y=H-10-((v-mn)/(mx-mn||1))*(H-22);return`${x},${y}`;});
+  const ld='M '+pts.join(' L '), ad=`M 10,${H-10} L ${ld.slice(2)} L ${W-10},${H-10} Z`;
+  const sid='ds'+id.replace(/\W/g,'_');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<defs><linearGradient id="${sid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${color}" stop-opacity=".22"/><stop offset="100%" stop-color="${color}" stop-opacity=".02"/></linearGradient></defs>
+  <line x1="10" y1="${H-10}" x2="${W-10}" y2="${H-10}" stroke="#DDE1EA" stroke-width="1"/>
+  <path d="${ad}" fill="url(#${sid})"/>
+  <path d="${ld}" stroke="${color}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="4" fill="${color}" stroke="white" stroke-width="2"/>
+  <text x="12" y="${H-1}" font-family="IBM Plex Mono" font-size="11" fill="#8090A8">${def.min} ${def.unit}</text>
+  <text x="${W-12}" y="${H-1}" font-family="IBM Plex Mono" font-size="11" fill="#8090A8" text-anchor="end">${def.max} ${def.unit}</text>`;
+}
+function drawArcDetail(id,v,def){
+  const svg=document.getElementById(id); if(!svg) return;
+  const W=240,H=140,cx=120,cy=130,r=96,sa=Math.PI*1.1,ea=Math.PI*1.9;
+  const color=tcolor(def,v), ang=sa+(ea-sa)*(Math.max(0,Math.min(v,def.max))/def.max);
+  function pt(a){return[cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  function arc(a1,a2){const[x1,y1]=pt(a1),[x2,y2]=pt(a2);return`M ${x1} ${y1} A ${r} ${r} 0 ${a2-a1>Math.PI?1:0} 1 ${x2} ${y2}`;}
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<path d="${arc(sa,ea)}" stroke="#E0E4EF" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="${arc(sa,ang)}" stroke="${color}" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <text x="${cx}" y="${cy-14}" text-anchor="middle" font-family="IBM Plex Mono" font-size="36" font-weight="500" fill="${color}">${fmt(v,def._k)}</text>
+  <text x="${cx}" y="${cy+8}" text-anchor="middle" font-family="IBM Plex Mono" font-size="16" fill="#8090A8">${def.unit}</text>`;
+}
+function drawThermo(id,val,def){
+  const svg=document.getElementById(id); if(!svg) return;
+  const W=60,H=180,pct=(val-def.min)/(def.max-def.min);
+  const fillH=Math.max(6,(H-40)*pct), col=val>60?'#BB0000':val>40?'#E76500':'#0070F2';
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=`<rect x="22" y="8" width="16" height="${H-44}" rx="8" fill="#E3E6EF"/>
+  <rect x="22" y="${H-36-fillH}" width="16" height="${fillH}" rx="8" fill="${col}"/>
+  <circle cx="30" cy="${H-18}" r="16" fill="${col}"/>
+  <circle cx="30" cy="${H-18}" r="9" fill="rgba(255,255,255,.3)"/>`;
+}
+function renderTankDetail(pct,tid){
+  const svg=document.getElementById('tsvg-detail'); if(!svg) return;
+  const W=240,H=200,lH=Math.max(0,(pct/100)*H),c=tcol(pct);
+  let wp=`M -2 ${lH} L -2 0 `;
+  for(let x=0;x<=W+3;x+=5){const y=Math.sin((x/W)*Math.PI*4+2)*3;wp+=`L ${x} ${y} `;}
+  wp+=`L ${W+2} ${lH} Z`;
+  svg.style.height=lH+'px'; svg.setAttribute('viewBox',`0 0 ${W} ${lH}`); svg.setAttribute('width',W); svg.setAttribute('height',lH);
+  svg.innerHTML=`<defs><linearGradient id="lgd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${c.fill}" stop-opacity=".8"/><stop offset="100%" stop-color="${c.dark}"/></linearGradient></defs>
+  <rect x="0" y="0" width="${W}" height="${lH}" fill="url(#lgd)"/>
+  <path d="${wp}" fill="${c.fill}" opacity=".6"/>
+  <path d="${wp}" fill="rgba(255,255,255,.18)" transform="translate(0,-3)"/>`;
+}
+function drawBullet(id,v,def){
+  const el=document.getElementById(id); if(!el) return;
+  const pct=Math.max(0,Math.min(100,(v-def.min)/(def.max-def.min)*100));
+  const col=v>def.max*.8?'#BB0000':v>def.max*.6?'#E76500':'#0070F2';
+  el.innerHTML=`<div style="background:var(--base3);border-radius:10px;height:20px;overflow:hidden;position:relative">
+    <div style="height:100%;width:${pct}%;background:${col};border-radius:10px;transition:width .4s ease"></div>
+    <div style="position:absolute;left:60%;top:0;bottom:0;width:2px;background:rgba(0,0,0,.12)"></div>
+    <div style="position:absolute;left:80%;top:0;bottom:0;width:2px;background:rgba(0,0,0,.12)"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:6px">
+    <span style="font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3)">${def.min} ${def.unit}</span>
+    <span style="font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3)">${def.max} ${def.unit}</span>
+  </div>`;
+}
+
+/* ══════════════ DEBUG LOG ══════════════ */
+let logSec=44;
+const logMsgs=[
+  ['pub','PUB factory/machines/cnc01/rpm'],['pub','PUB factory/machines/cnc01/spindle_load'],
+  ['pub','PUB factory/machines/fill01/flow_rate'],['pub','PUB factory/machines/pack01/speed'],
+  ['pub','PUB factory/tanks/raw/level'],['ok','NFC badge verified · M.Haegens'],
+  ['err','MQTT rc=-2 · reconnecting'],['pub','PUB factory/tanks/waste/ph'],
+];
+function addLog(){
+  const p=document.getElementById('logpanel'); if(!p) return;
+  const lines=p.querySelectorAll('.ll'); if(lines.length>=7) lines[lines.length-1].remove();
+  const[type,msg]=logMsgs[Math.floor(Math.random()*logMsgs.length)];
+  const line=document.createElement('div'); line.className='ll';
+  line.innerHTML=`<span class="lts">${String(logSec++).padStart(5,'0')}s</span><span class="lm ${type} new">${msg} → ${+(Math.random()*1000).toFixed(1)}</span>`;
+  p.insertBefore(line,p.firstChild);
+  setTimeout(()=>{const m=line.querySelector('.lm');if(m) m.classList.remove('new');},700);
+}
+
+/* ══════════════ BADGE DATA ══════════════ */
+const BADGES = [
+  { id:'EMP-0042', name:'Michiel Haegens',  role:'Shift Lead',           roleKey:'lead',       dept:'Production', plant:'Plant BE01', uid:'A3:F7:C2:91', certs:['ISO 9001','Lean','PLC Certified'],  avatarColor:'#0050BE' },
+  { id:'EMP-0117', name:'Jana Kovacevic',   role:'CNC Operator',         roleKey:'operator',   dept:'Machining',  plant:'Plant BE01', uid:'B1:2E:9A:04', certs:['CNC Level 3','Safety'],            avatarColor:'#0F6CBD' },
+  { id:'EMP-0089', name:'Lars Vermeulen',   role:'Process Engineer',     roleKey:'engineer',   dept:'Engineering',plant:'Plant BE01', uid:'C4:88:F1:3D', certs:['Six Sigma GB','HAZOP','ISO 14001'],avatarColor:'#8B4000' },
+  { id:'EMP-0201', name:'Amira El-Sayed',   role:'Quality Inspector',    roleKey:'quality',    dept:'Quality',    plant:'Plant BE01', uid:'D7:A3:55:E9', certs:['ISO 9001 Lead','FMEA','8D'],       avatarColor:'#6B0000' },
+  { id:'EMP-0033', name:'Pieter van Dijk',  role:'Production Supervisor',roleKey:'supervisor', dept:'Operations', plant:'Plant BE01', uid:'E2:CF:71:B8', certs:['MES Certified','Lean Black','IFS'],avatarColor:'#3D006B' },
+];
+const BC_ROLE_COLORS = {
+  operator:  { bg:'rgba(0,122,255,.22)',   border:'rgba(0,122,255,.5)',   text:'#7BC8FF' },
+  lead:      { bg:'rgba(0,200,100,.2)',    border:'rgba(0,200,100,.45)',  text:'#6AEAAA' },
+  engineer:  { bg:'rgba(255,165,0,.22)',   border:'rgba(255,165,0,.5)',   text:'#FFD080' },
+  supervisor:{ bg:'rgba(180,100,255,.22)', border:'rgba(180,100,255,.5)', text:'#DDAAFF' },
+  quality:   { bg:'rgba(255,80,80,.22)',   border:'rgba(255,80,80,.5)',   text:'#FFAAAA' },
+};
+
+/* ══════════════ NFC STATE ══════════════ */
+let nfcMode = 'virtual';
+let bcIndex = 0;
+let bcDragStartX = 0, bcDragCurX = 0, bcDragging = false;
+let activeOperator = BADGES[0];
+
+function nfcSetMode(m) {
+  nfcMode = m;
+  document.getElementById('nfc-btn-physical').classList.toggle('active', m === 'physical');
+  document.getElementById('nfc-btn-virtual').classList.toggle('active', m === 'virtual');
+  document.getElementById('nfc-physical').style.display = m === 'physical' ? 'flex' : 'none';
+  document.getElementById('nfc-virtual').style.display  = m === 'virtual'  ? 'flex' : 'none';
+  if(m === 'virtual') bcRenderCarousel();
+}
+
+/* ── BUILD CARD HTML ── */
+function bcBuildCard(badge) {
+  const rc = BC_ROLE_COLORS[badge.roleKey] || BC_ROLE_COLORS.operator;
+  const initials = badge.name.split(' ').map(n=>n[0]).join('');
+  return `
+  <div class="bc-holo"></div>
+  <div class="bc-inner">
+    <div class="bc-top">
+      <div class="bc-logo">
+        <div class="bc-logo-sq">
+          <svg viewBox="0 0 44 30" fill="none"><text x="0" y="26" font-family="'IBM Plex Sans',sans-serif" font-weight="700" font-size="26" fill="white" letter-spacing="1">SAP</text></svg>
+        </div>
+        <div><div class="bc-plant-name">Digital Manufacturing</div><div class="bc-plant-sub">${badge.plant}</div></div>
+      </div>
+      <div class="bc-emp-id">${badge.id}</div>
+    </div>
+    <div class="bc-main">
+      <div class="bc-avatar" style="background:${badge.avatarColor}22;border-color:${badge.avatarColor}55">
+        <svg viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="18" r="10" fill="${badge.avatarColor}" opacity=".85"/>
+          <path d="M8 42c0-8.8 7.2-16 16-16s16 7.2 16 16" fill="${badge.avatarColor}" opacity=".65"/>
+          <text x="24" y="24" text-anchor="middle" font-family="IBM Plex Sans" font-size="13" font-weight="700" fill="white" dominant-baseline="middle">${initials}</text>
+        </svg>
+      </div>
+      <div class="bc-info">
+        <div class="bc-name">${badge.name}</div>
+        <div class="bc-role-chip" style="background:${rc.bg};border-color:${rc.border};color:${rc.text}">${badge.role}</div>
+        <div class="bc-certs">${badge.certs.map(c=>`<span class="bc-cert">${c}</span>`).join('')}</div>
+      </div>
+    </div>
+    <div class="bc-foot">
+      <div class="bc-uid">UID: ${badge.uid}</div>
+      <div class="bc-dept">${badge.dept}</div>
+      <svg class="bc-nfc-ico" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.8" stroke-linecap="round">
+        <path d="M9 17a5 5 0 006 0M6.5 19.5a9 9 0 0011 0M12 12a2 2 0 100-4 2 2 0 000 4z"/>
+      </svg>
+    </div>
+  </div>`;
+}
+
+/* ── RENDER CAROUSEL ── */
+function bcRenderCarousel() {
+  const track = document.getElementById('carousel-track');
+  const outer = document.getElementById('carousel-outer');
+  const dotsEl = document.getElementById('bc-dots');
+  if(!track || !outer) return;
+
+  track.innerHTML = '';
+  BADGES.forEach((badge, i) => {
+    const card = document.createElement('div');
+    card.className = `bc-card r-${badge.roleKey}`;
+    card.innerHTML = bcBuildCard(badge);
+    card.style.marginRight = '22px';
+    card.addEventListener('click', () => bcGoTo(i));
+    track.appendChild(card);
+  });
+
+  dotsEl.innerHTML = '';
+  BADGES.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'bc-dot' + (i === bcIndex ? ' active' : '');
+    d.addEventListener('click', () => bcGoTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  bcApplyTransform(false);
+  bcUpdateClasses();
+  bcUpdateLabel();
+
+  // Drag events (scoped to the carousel outer to avoid clash with tank drag)
+  outer.addEventListener('mousedown', bcDragStart);
+  outer.addEventListener('touchstart', bcDragStart, {passive:true});
+}
+
+function bcCarouselOffset() {
+  const outer = document.getElementById('carousel-outer');
+  const W = outer ? outer.clientWidth : 692;
+  const cardW = 390;
+  const gap = 22;
+  const total = cardW + gap;
+  return -(bcIndex * total) + (W - cardW) / 2;
+}
+
+function bcApplyTransform(anim, extra=0) {
+  const track = document.getElementById('carousel-track');
+  if(!track) return;
+  const offset = bcCarouselOffset() + extra;
+  track.style.transition = anim ? 'transform .38s cubic-bezier(.4,0,.2,1)' : 'none';
+  track.style.transform = `translateX(${offset}px)`;
+}
+
+function bcUpdateClasses() {
+  document.querySelectorAll('.bc-card').forEach((c, i) => {
+    c.className = c.className.replace(/\b(c-active|c-prev|c-next|c-far)\b/g, '').trim();
+    const d = i - bcIndex;
+    if(d === 0) c.classList.add('c-active');
+    else if(Math.abs(d) === 1) c.classList.add(d < 0 ? 'c-prev' : 'c-next');
+    else c.classList.add('c-far');
+  });
+  document.querySelectorAll('.bc-dot').forEach((d,i) => d.classList.toggle('active', i === bcIndex));
+}
+
+function bcUpdateLabel() {
+  const el = document.getElementById('bc-arr-label');
+  if(el) el.textContent = `${bcIndex + 1} of ${BADGES.length}`;
+}
+
+function bcGoTo(i) {
+  bcIndex = Math.max(0, Math.min(BADGES.length - 1, i));
+  bcApplyTransform(true);
+  bcUpdateClasses();
+  bcUpdateLabel();
+  // Clear confirmed state on card change
+  document.getElementById('virt-scanned-result').innerHTML = '';
+  const btn = document.getElementById('bc-confirm-btn');
+  if(btn) { btn.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px"><circle cx="12" cy="12" r="3"/><path d="M6.5 17.5a9 9 0 0011 0"/><path d="M3 21a14 14 0 0018 0"/></svg> Activate Badge`; btn.className='btn primary full'; btn.style.cssText=''; }
+}
+
+function bcPrev() { bcGoTo(bcIndex - 1); }
+function bcNext() { bcGoTo(bcIndex + 1); }
+
+/* ── DRAG ── */
+function bcDragStart(e) {
+  bcDragging = true;
+  bcDragStartX = e.touches ? e.touches[0].clientX : e.clientX;
+  bcDragCurX = bcDragStartX;
+}
+document.addEventListener('mousemove', e => {
+  if(!bcDragging) return;
+  bcDragCurX = e.clientX;
+  bcApplyTransform(false, bcDragCurX - bcDragStartX);
+});
+document.addEventListener('touchmove', e => {
+  if(!bcDragging) return;
+  bcDragCurX = e.touches[0].clientX;
+  bcApplyTransform(false, bcDragCurX - bcDragStartX);
+}, {passive:true});
+document.addEventListener('mouseup', () => {
+  if(!bcDragging) return; bcDragging = false;
+  const d = bcDragCurX - bcDragStartX;
+  if(d < -60) bcGoTo(bcIndex + 1);
+  else if(d > 60) bcGoTo(bcIndex - 1);
+  else bcApplyTransform(true);
+});
+document.addEventListener('touchend', () => {
+  if(!bcDragging) return; bcDragging = false;
+  const d = bcDragCurX - bcDragStartX;
+  if(d < -60) bcGoTo(bcIndex + 1);
+  else if(d > 60) bcGoTo(bcIndex - 1);
+  else bcApplyTransform(true);
+});
+
+/* ── ACTIVATE (virtual) ── */
+function bcConfirm() {
+  const badge = BADGES[bcIndex];
+  activeOperator = badge;
+  const btn = document.getElementById('bc-confirm-btn');
+  btn.classList.add('cpulse');
+  setTimeout(() => btn.classList.remove('cpulse'), 500);
+  showScannedResult('virt-scanned-result', badge);
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:22px;height:22px"><polyline points="20 6 9 17 4 12"/></svg> Logged In — ${badge.name.split(' ')[0]}`;
+  btn.style.background = 'var(--ok-lt)'; btn.style.borderColor = 'var(--ok-bd)'; btn.style.color = 'var(--ok)';
+  btn.style.minHeight = 'var(--ts)';
+  // inject into debug log
+  addNFCLog(badge);
+  // update home screen operator row
+  updateHomeOperator(badge);
+}
+
+/* ── PHYSICAL SIM ── */
+function simPhysicalScan() {
+  const r = document.getElementById('nfc-ring'); if(!r) return;
+  r.style.transform = 'scale(1.06)';
+  r.querySelector('.nring-o').style.boxShadow = '0 0 0 14px rgba(16,126,62,.18),0 0 32px rgba(16,126,62,.22)';
+  setTimeout(() => { r.style.transform = ''; r.querySelector('.nring-o').style.boxShadow = ''; }, 550);
+  // simulate a random badge read
+  const badge = BADGES[Math.floor(Math.random() * BADGES.length)];
+  activeOperator = badge;
+  setTimeout(() => {
+    showScannedResult('phys-scanned-result', badge);
+    addNFCLog(badge);
+    updateHomeOperator(badge);
+  }, 400);
+}
+
+/* ── SHARED HELPERS ── */
+function showScannedResult(containerId, badge) {
+  const el = document.getElementById(containerId); if(!el) return;
+  el.innerHTML = `<div class="scanned-result">
+    <div class="scanned-av" style="background:${badge.avatarColor}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </div>
+    <div>
+      <div class="scanned-name">${badge.name}</div>
+      <div class="scanned-meta">${badge.role} · ${badge.plant} · UID ${badge.uid}</div>
+    </div>
+    <div style="margin-left:auto"><div class="badge ok">Active</div></div>
+  </div>`;
+}
+
+function addNFCLog(badge) {
+  const p = document.getElementById('logpanel'); if(!p) return;
+  const lines = p.querySelectorAll('.ll'); if(lines.length >= 7) lines[lines.length-1].remove();
+  const line = document.createElement('div'); line.className = 'll';
+  line.innerHTML = `<span class="lts">${String(logSec++).padStart(5,'0')}s</span><span class="lm ok new">NFC scan · ${badge.uid} → ${badge.name} (${badge.role})</span>`;
+  p.insertBefore(line, p.firstChild);
+  setTimeout(() => { const m = line.querySelector('.lm'); if(m) m.classList.remove('new'); }, 700);
+}
+
+function updateHomeOperator(badge) {
+  const el = document.getElementById('home-operator-name'); if(el) el.textContent = badge.name;
+}
+
+/* ══════════════ INIT ══════════════ */
+switchTab('home');
+setTimeout(buildMachines, 80);
+setTimeout(() => nfcSetMode('virtual'), 120);
+</script>
+</body>
+</html>

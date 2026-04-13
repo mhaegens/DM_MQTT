@@ -1,0 +1,47 @@
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sapdm-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # plain TCP — ESP32-P4, Node-RED, CLI tools (internal/WireGuard only)
+      - "9001:9001"   # WebSocket — browser dashboard (LAN) + Cloudflare Tunnel
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sapdm-cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - mosquitto
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: sapdm-nodered
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    volumes:
+      - ./nodered/data:/data
+    depends_on:
+      - mosquitto
+
+  dashboard:
+    image: nginx:alpine
+    container_name: sapdm-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./dashboard/html:/usr/share/nginx/html:ro
+
+networks:
+  default:
+    name: sapdm-net
