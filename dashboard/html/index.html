@@ -23,6 +23,8 @@
   --screen:720px;
   --ts:80px; --ts-sm:64px;
   --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
+  /* Tank shape: rounded-corner cylinder top + tapered cone bottom (cone from 22%→78%) */
+  --tank-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpolygon fill='black' points='0,78 100,78 78,100 22,100'/%3E%3C/svg%3E");
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
@@ -154,13 +156,14 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
 
 .tank-col{flex:1;display:flex;flex-direction:column;gap:5px;min-height:0;position:relative}
 
-/* Wrapper holds tank body + feet as a unit; drop-shadow follows clip-path outline */
+/* Wrapper holds tank body + feet; drop-shadow traces the mask outline */
 .tank-wrap{flex:1;display:flex;flex-direction:column;min-height:0;
   filter:drop-shadow(0 0 1.5px rgba(80,110,170,.32))}
 
-/* TANK BODY — cylindroconical: full-width cylinder, tapered cone at base */
+/* TANK BODY — rounded cylinder top + tapered cone; mask-image gives curved corners */
 .tank-body{flex:1;background:#ECF0F8;
-  clip-path:polygon(0% 0%,100% 0%,100% 80%,74% 100%,26% 100%,0% 80%);
+  -webkit-mask-image:var(--tank-mask);-webkit-mask-size:100% 100%;
+  mask-image:var(--tank-mask);mask-size:100% 100%;mask-repeat:no-repeat;
   overflow:hidden;position:relative;
   cursor:ns-resize;box-shadow:inset 0 2px 8px rgba(30,50,100,.09);
   min-height:0;margin:0 16px}
@@ -179,9 +182,10 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
   text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
 .tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
 
-/* TANK FEET — wide-apart support legs matching tank-body margin */
-.tank-feet{display:flex;justify-content:space-between;flex-shrink:0;height:14px;margin:0 4px;padding:0 5%}
-.tank-foot{width:19%;height:14px;background:var(--base3);border:2px solid var(--bd-str);
+/* TANK FEET — same margin as tank-body so foot inner edges align with cone bottom (22%/78%) */
+.tank-feet{display:flex;justify-content:space-between;flex-shrink:0;height:14px;
+  margin:0 16px;margin-top:-1px;padding:0 5%}
+.tank-foot{width:17%;height:14px;background:var(--base3);border:2px solid var(--bd-str);
   border-top:none;border-radius:0 0 5px 5px}
 
 /* TANK LABEL BUTTON (name + status, below feet) */
@@ -899,9 +903,9 @@ function renderTankOverview(tankId){
       </div>
     </div>
     <div class="viz-card">
-      <div style="width:180px;height:200px;background:#ECF0F8;border:2px solid var(--bd-str);border-radius:10px 10px 5px 5px;overflow:hidden;position:relative;box-shadow:inset 0 2px 8px rgba(30,50,100,.08)">
+      <div style="width:180px;height:200px;background:#ECF0F8;overflow:hidden;position:relative;box-shadow:inset 0 2px 8px rgba(30,50,100,.08);-webkit-mask-image:var(--tank-mask);-webkit-mask-size:100% 100%;mask-image:var(--tank-mask);mask-size:100% 100%;mask-repeat:no-repeat">
         <svg class="tsvg" id="tsvg-tov-${tankId}" preserveAspectRatio="none" style="position:absolute;bottom:0;left:0;right:0;width:100%;z-index:2"></svg>
-        <div style="position:absolute;top:0;left:5px;right:5px;bottom:0;background:linear-gradient(180deg,rgba(255,255,255,.28) 0%,transparent 35%);pointer-events:none;border-radius:inherit;z-index:3"></div>
+        <div style="position:absolute;top:0;left:5px;right:5px;bottom:0;background:linear-gradient(180deg,rgba(255,255,255,.28) 0%,transparent 35%);pointer-events:none;z-index:3"></div>
         <div class="tank-pct-overlay" id="tov-pct-overlay-${tankId}">${pct}%</div>
       </div>
     </div>
