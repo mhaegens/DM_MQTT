@@ -24,7 +24,7 @@
   --ts:80px; --ts-sm:64px;
   --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
   /* Tank shape: rounded-corner cylinder top + tapered cone bottom (cone from 22%→78%) */
-  --tank-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpath fill='black' d='M 0,78 L 100,78 L 82,98 Q 78,100 74,100 L 26,100 Q 22,100 18,98 L 0,78 Z'/%3E%3C/svg%3E");
+  --tank-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpath fill='black' d='M 0,78 L 100,78 L 67,96 Q 63,100 59,100 L 41,100 Q 37,100 33,96 L 0,78 Z'/%3E%3C/svg%3E");
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
@@ -156,7 +156,7 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
 
 .tank-col{flex:1;display:flex;flex-direction:column;gap:5px;min-height:0;position:relative}
 
-/* Wrapper holds tank body + feet; drop-shadow traces the mask outline */
+/* Wrapper holds tank body; drop-shadow traces the mask outline */
 .tank-wrap{flex:1;display:flex;flex-direction:column;min-height:0;
   filter:drop-shadow(0 0 1.5px rgba(80,110,170,.32))}
 
@@ -182,10 +182,10 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
   text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
 .tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
 
-/* TANK FEET — overlap onto tank bottom; z-index layers above */
+/* TANK FEET — sibling of tank-wrap in tank-col; negative margin overlaps up onto cone */
 .tank-feet{display:flex;justify-content:space-between;flex-shrink:0;height:14px;
-  margin:0 16px;margin-top:-6px;padding:0 5%;position:relative;z-index:8}
-.tank-foot{width:17%;height:14px;background:var(--base3);border:2px solid var(--bd-str);
+  margin:0 16px;margin-top:-12px;padding:0 6%;position:relative;z-index:10}
+.tank-foot{width:15%;height:14px;background:var(--base3);border:2px solid var(--bd-str);
   border-top:none;border-radius:0 0 5px 5px}
 
 /* TANK LABEL BUTTON (name + status, below feet) */
@@ -814,7 +814,6 @@ function buildTanks(){
     const col=document.createElement('div');
     col.className='tank-col';
 
-    // Wrap: tank body + feet
     const wrap=document.createElement('div');
     wrap.className='tank-wrap';
 
@@ -832,13 +831,13 @@ function buildTanks(){
       <div class="tank-pct-overlay" id="tpct-${tank.id}">${Math.round(TS[tank.id].pct)}%</div>`;
     wrap.appendChild(body);
 
-    // Feet
+    col.appendChild(wrap);
+
+    // Feet — sibling of wrap (outside drop-shadow filter context) so z-index works
     const feet=document.createElement('div');
     feet.className='tank-feet';
     feet.innerHTML='<div class="tank-foot"></div><div class="tank-foot"></div>';
-    wrap.appendChild(feet);
-
-    col.appendChild(wrap);
+    col.appendChild(feet);
 
     // Label button (name + status) — tapping opens overview
     const [statusTxt,statusCls]=tankStatus(Math.round(TS[tank.id].pct));
