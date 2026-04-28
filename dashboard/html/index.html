@@ -24,7 +24,7 @@
   --ts:80px; --ts-sm:64px;
   --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
   /* Tank shape: rounded-corner cylinder top + tapered cone bottom (cone from 22%→78%) */
-  --tank-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpolygon fill='black' points='0,78 100,78 78,100 22,100'/%3E%3C/svg%3E");
+  --tank-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpath fill='black' d='M 0,78 L 100,78 L 82,98 Q 78,100 74,100 L 26,100 Q 22,100 18,98 L 0,78 Z'/%3E%3C/svg%3E");
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
@@ -182,9 +182,9 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
   text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
 .tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
 
-/* TANK FEET — same margin as tank-body so foot inner edges align with cone bottom (22%/78%) */
+/* TANK FEET — overlap onto tank bottom; z-index layers above */
 .tank-feet{display:flex;justify-content:space-between;flex-shrink:0;height:14px;
-  margin:0 16px;margin-top:-1px;padding:0 5%}
+  margin:0 16px;margin-top:-6px;padding:0 5%;position:relative;z-index:8}
 .tank-foot{width:17%;height:14px;background:var(--base3);border:2px solid var(--bd-str);
   border-top:none;border-radius:0 0 5px 5px}
 
