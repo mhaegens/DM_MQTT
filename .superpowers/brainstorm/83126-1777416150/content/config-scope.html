@@ -1,0 +1,35 @@
+<h2>What does a "demo config" contain?</h2>
+<p class="subtitle">The JSON config will drive what the ESP32 simulates. Which assets should it cover?</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="machines" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Machines</h3>
+      <p>Industrial machines with running/stopped status, telemetry readings (RPM, temperature, OEE, etc.), pulse counter, and random-generation rules</p>
+    </div>
+  </div>
+  <div class="option" data-choice="tanks" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Tanks</h3>
+      <p>Vessels with animated fill level, temperature, flow, pressure, pH and other process readings</p>
+    </div>
+  </div>
+  <div class="option" data-choice="operators" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>NFC Operator Badges</h3>
+      <p>Operator cards with name, role, certifications, plant — scanned via PN532 NFC to publish login events to SAP DM</p>
+    </div>
+  </div>
+  <div class="option" data-choice="global" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Global / Demo Metadata</h3>
+      <p>Config name, version, publish interval, MQTT broker settings, demo description — the "wrapper" for a scenario</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">Select all that apply, then let me know in the terminal.</p>
