@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=720">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>SAP DM MQTT Simulator</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -382,6 +382,44 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
 .enav{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .ebtn{background:#FFF;border:1px solid #C8CCDA;color:#556B8A;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s}
 .ebtn.a{background:var(--hi);border-color:var(--hi-dk);color:#fff}
+
+/* ── DEVICE MODE: fill the physical screen, hide simulator chrome ── */
+@media (max-width: 800px) {
+  :root {
+    /* scale all token sizes to 100vw basis (720px design → vw) */
+    --screen: 100vw;
+    --ts:    11.1vw; --ts-sm: 8.9vw;
+    --f-xl:  5.6vw;  --f-lg:  4.4vw;  --f-md: 3.6vw;
+    --f-sm:  3.1vw;  --f-xs:  2.5vw;  --f-xxs: 2.1vw;
+    --r:     1.7vw;  --rsm:   1.1vw;
+  }
+  html,body{height:100%;overflow:hidden}
+  body{padding:0;gap:0;background:var(--bg);align-items:stretch}
+  .page-meta,.enav,.dlabel{display:none!important}
+  .device{background:none;border-radius:0;padding:0;box-shadow:none;border:none;width:100%}
+  .screen{width:100vw;height:100dvh;border-radius:0;border:none;flex:1}
+  /* shell stays proportional */
+  .shell{height:8.9vw;padding:0 2.8vw}
+  .sap-badge{width:6.1vw;height:6.1vw;border-radius:1.1vw}
+  .sap-badge svg{width:4.4vw;height:3.1vw}
+  /* breadcrumb */
+  .bc{height:6.1vw;padding:0 2.2vw}
+  /* tab bar */
+  .tabbar{height:10vw}
+  .tab svg{width:3.3vw;height:3.3vw}
+  /* machine card actions */
+  .mc-acts .btn{min-height:8.3vw}
+  /* step input */
+  .si-btn{width:var(--ts)}
+  .si-input{height:var(--ts);font-size:var(--f-lg)}
+  /* log panel */
+  .logpanel{font-size:var(--f-xxs)}
+  /* NFC ring */
+  .nring-wrap{width:20.8vw;height:20.8vw}
+  .nring-i svg{width:6.7vw;height:6.7vw}
+  /* badge card */
+  .bc-card{width:54vw;height:32vw}
+}
 </style>
 </head>
 <body>
