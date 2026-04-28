@@ -1,0 +1,22 @@
+## IDF Component Manager manifest
+## Run: idf.py update-dependencies
+## This pulls all display, touch, and LVGL components from the Espressif component registry.
+
+dependencies:
+  idf: ">=5.3"
+
+  ## LVGL 9 with IDF port
+  espressif/esp_lvgl_port:
+    version: "^2"
+
+  ## GT911 capacitive touch driver (I2C, GPIO7/8)
+  espressif/esp_lcd_touch_gt911:
+    version: "^1"
+
+  ## MQTT client (built into IDF, listed for clarity)
+  ## esp_mqtt is part of IDF — no separate component needed
+
+  ## ST7703 MIPI-DSI panel driver — confirmed from Waveshare ESP-IDF demo zip
+  ## (ESP32-P4-WIFI6-Touch-LCD-4B.zip / ESP-IDF/07_color_panel)
+  waveshare/esp_lcd_st7703:
+    version: "*"

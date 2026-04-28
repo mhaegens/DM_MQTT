@@ -1,0 +1,52 @@
+<h2>Reading Behavior Patterns</h2>
+<p class="subtitle">Which simulation patterns should be available per reading? Select all you want to support.</p>
+
+<div class="options" data-multiselect>
+
+  <div class="option" data-choice="noise" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Random noise</h3>
+      <p>Value bounces randomly within min/max on each tick. Baseline behavior — every reading has this.</p>
+      <div style="display:inline-block;margin-top:6px;background:#0070F215;border-radius:3px;padding:3px 8px;font-size:11px;font-family:monospace;color:#0070F2">
+        ≈≈≈≈≈≈≈≈≈≈ (jittery flatline)
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="drift" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Slow drift</h3>
+      <p>Value trends gradually upward or downward over time — great for tool wear, tank levels filling/draining.</p>
+      <div style="display:inline-block;margin-top:6px;background:#107E3E15;border-radius:3px;padding:3px 8px;font-size:11px;font-family:monospace;color:#107E3E">
+        ╱╱╱╱╱╱╱╱╱╱ (slow rise or fall)
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="spike" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Occasional spike</h3>
+      <p>Mostly steady with periodic sharp peaks — useful for pressure bursts, load spikes, fault simulations.</p>
+      <div style="display:inline-block;margin-top:6px;background:#BB000015;border-radius:3px;padding:3px 8px;font-size:11px;font-family:monospace;color:#BB0000">
+        ___/\___ (rare sharp peak)
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="cycle" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Cyclic / wave</h3>
+      <p>Oscillates between low and high on a set period — good for batch processes, fill-drain cycles, RPM during cutting passes.</p>
+      <div style="display:inline-block;margin-top:6px;background:#E7650015;border-radius:3px;padding:3px 8px;font-size:11px;font-family:monospace;color:#E76500">
+        ╭─╮╭─╮╭─╮ (wave up/down)
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1rem">Select all patterns you want. "Random noise" is always included as the default.</p>
