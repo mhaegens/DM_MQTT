@@ -152,16 +152,16 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
 
 .tanks-row{display:flex;gap:10px;flex:1;min-height:0}
 
-.tank-col{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0;position:relative}
+.tank-col{flex:1;display:flex;flex-direction:column;gap:5px;min-height:0;position:relative}
 
-.tank-name{font-family:var(--mono);font-size:var(--f-xxs);font-weight:500;letter-spacing:.12em;
-  color:var(--tx2);text-transform:uppercase;text-align:center;flex-shrink:0}
+/* Wrapper holds tank body + feet as a unit */
+.tank-wrap{flex:1;display:flex;flex-direction:column;min-height:0}
 
-/* TANK BODY — takes all remaining height */
+/* TANK BODY — cylindrical with padding via horizontal margin */
 .tank-body{flex:1;background:#ECF0F8;border:2px solid var(--bd-str);
-  border-radius:12px 12px 8px 8px;overflow:hidden;position:relative;
+  border-radius:10px 10px 5px 5px;overflow:hidden;position:relative;
   cursor:ns-resize;box-shadow:inset 0 2px 8px rgba(30,50,100,.09),var(--sh);
-  min-height:0}
+  min-height:0;margin:0 8px}
 .tank-body:hover{border-color:var(--hi)}
 .tank-body::after{content:'';position:absolute;top:0;left:5px;right:5px;bottom:0;
   background:linear-gradient(180deg,rgba(255,255,255,.3) 0%,transparent 35%);
@@ -178,7 +178,27 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
   text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
 .tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
 
-/* METRIC INDICATOR STRIP below each tank */
+/* TANK FEET */
+.tank-feet{display:flex;justify-content:space-around;padding:0 22%;flex-shrink:0;height:13px;margin:0 8px}
+.tank-foot{flex:1;height:13px;background:var(--base3);border:2px solid var(--bd-str);
+  border-top:none;border-radius:0 0 4px 4px;max-width:26%}
+.tank-foot+.tank-foot{margin-left:12px}
+
+/* TANK LABEL BUTTON (name + status, below feet) */
+.tank-label-btn{flex-shrink:0;background:var(--base);border:1.5px solid var(--bd);
+  border-radius:var(--rsm);padding:6px 8px;cursor:pointer;display:flex;
+  flex-direction:column;align-items:center;gap:4px;transition:all .12s;
+  box-shadow:var(--sh);font:inherit;width:100%}
+.tank-label-btn:hover,.tank-label-btn:active{border-color:var(--hi);background:var(--hi-lt)}
+.tank-label-name{font-family:var(--mono);font-size:var(--f-xxs);font-weight:600;
+  letter-spacing:.1em;color:var(--tx);text-transform:uppercase}
+.tank-label-status{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;padding:2px 8px;border-radius:10px}
+.tank-label-status.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.tank-label-status.warn{background:var(--warn-lt);color:var(--warn);border:1px solid var(--warn-bd)}
+.tank-label-status.err{background:var(--err-lt);color:var(--err);border:1px solid var(--err-bd)}
+
+/* METRIC INDICATOR STRIP below the label */
 .tank-indicator-strip{display:flex;gap:5px;flex-shrink:0}
 
 .tank-metric-btn{flex:1;background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
@@ -624,6 +644,11 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
     </div>
   </div>
 
+  <!-- ── TANK OVERVIEW ── -->
+  <div class="view" id="view-tank-overview">
+    <div class="detail-body" id="tank-overview-body"></div>
+  </div>
+
   <!-- ── DETAIL ── -->
   <div class="view" id="view-detail">
     <div class="detail-body" id="detail-body"></div>
@@ -717,7 +742,8 @@ function extNav(v,btn){
 function openDetail(etype,eid,mkey){
   stopGenInterval();
   const def=mdef(mkey);
-  detCtx={etype,eid,mkey};
+  const fromOv=(curView==='tank-overview'), ovEid=fromOv&&detCtx?detCtx.eid:null;
+  detCtx={etype,eid,mkey,fromOv,ovEid};
   let name;
   if(etype==='machine'){const mc=MACH.find(x=>x.id===eid);name=mc.name;}
   else name=TANKS[eid].name;
@@ -732,6 +758,10 @@ function openDetail(etype,eid,mkey){
 function goBack(){
   stopGenInterval();
   if(!detCtx) return;
+  if(detCtx.fromOv&&detCtx.ovEid){
+    openTankOverview(detCtx.ovEid);
+    return;
+  }
   document.getElementById('bc').style.display='none';
   switchTab(detCtx.etype==='machine'?'machines':'tanks');
 }
@@ -758,6 +788,17 @@ function setVal(v){
 /* ══════════════ TANK BUILD ══════════════ */
 let activeDrag=null, lastDY=0, lastDP=0, wasDrag=false;
 
+function tankStatus(pct){
+  if(pct<15) return ['Critical','err'];
+  if(pct<30) return ['Low Level','warn'];
+  return ['Operational','ok'];
+}
+function updateTankLabel(id){
+  const el=document.getElementById('tls-'+id); if(!el) return;
+  const [statusTxt,statusCls]=tankStatus(Math.round(TS[id].pct));
+  el.textContent=statusTxt; el.className='tank-label-status '+statusCls;
+}
+
 function buildTanks(){
   const scr=document.getElementById('tanks-screen');
   scr.innerHTML='';
@@ -769,11 +810,9 @@ function buildTanks(){
     const col=document.createElement('div');
     col.className='tank-col';
 
-    // Name
-    const name=document.createElement('div');
-    name.className='tank-name';
-    name.textContent=tank.name.toUpperCase();
-    col.appendChild(name);
+    // Wrap: tank body + feet
+    const wrap=document.createElement('div');
+    wrap.className='tank-wrap';
 
     // Tank body
     const body=document.createElement('div');
@@ -787,7 +826,24 @@ function buildTanks(){
       </div>
       <svg class="tsvg" id="tsvg-${tank.id}" preserveAspectRatio="none"></svg>
       <div class="tank-pct-overlay" id="tpct-${tank.id}">${Math.round(TS[tank.id].pct)}%</div>`;
-    col.appendChild(body);
+    wrap.appendChild(body);
+
+    // Feet
+    const feet=document.createElement('div');
+    feet.className='tank-feet';
+    feet.innerHTML='<div class="tank-foot"></div><div class="tank-foot"></div>';
+    wrap.appendChild(feet);
+
+    col.appendChild(wrap);
+
+    // Label button (name + status) — tapping opens overview
+    const [statusTxt,statusCls]=tankStatus(Math.round(TS[tank.id].pct));
+    const labelBtn=document.createElement('button');
+    labelBtn.className='tank-label-btn';
+    labelBtn.id='tlbl-'+tank.id;
+    labelBtn.innerHTML=`<div class="tank-label-name">${tank.name}</div><div class="tank-label-status ${statusCls}" id="tls-${tank.id}">${statusTxt}</div>`;
+    labelBtn.addEventListener('click',()=>openTankOverview(tank.id));
+    col.appendChild(labelBtn);
 
     // Metric indicator strip — one button per non-level metric
     const strip=document.createElement('div');
@@ -818,6 +874,88 @@ function buildTanks(){
   });
 
   scr.appendChild(row);
+}
+
+function openTankOverview(tankId){
+  stopGenInterval();
+  const tank=TANKS[tankId];
+  detCtx={etype:'tankOverview',eid:tankId,mkey:null,fromOv:false,ovEid:null};
+  document.getElementById('bc').style.display='flex';
+  document.getElementById('bc-back-lbl').textContent='Tanks';
+  document.getElementById('bc-cur').textContent=tank.name;
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-tank-overview').classList.add('active');
+  curView='tank-overview';
+  renderTankOverview(tankId);
+}
+
+function renderTankOverview(tankId){
+  const tank=TANKS[tankId];
+  const pct=Math.round(TS[tankId].pct);
+  const [statusTxt,statusCls]=tankStatus(pct);
+  const statusColor=statusCls==='ok'?'var(--ok)':statusCls==='warn'?'var(--warn)':'var(--err)';
+
+  let metricsHTML='';
+  Object.entries(tank.m).forEach(([k,met])=>{
+    const def=mdef(k); const c=tcolor(def,met.v); const cls=tcls(c);
+    metricsHTML+=`<div class="mtile" onclick="openDetail('tank','${tankId}','${k}')">
+      <span class="mt-lbl">${def.label}</span>
+      <span class="mt-val ${cls}" id="tov-${tankId}-${k}">${fmt(met.v,k)}</span>
+      <span class="mt-unit">${def.unit}</span>
+    </div>`;
+  });
+
+  document.getElementById('tank-overview-body').innerHTML=`
+    <div class="detail-hdr-card">
+      <div class="dhc-l">
+        <div class="dhc-metric">${tank.name}</div>
+        <div class="dhc-entity">Tank · ${tank.id.toUpperCase()}</div>
+        <div class="dhc-topic">${tank.topic}</div>
+      </div>
+      <div class="dhc-r">
+        <span class="badge ${statusCls}" id="tov-status-${tankId}">${statusTxt}</span>
+        <div class="dhc-bigval" id="tov-pct-${tankId}" style="color:${statusColor}">${pct}%</div>
+        <div class="dhc-unit">level</div>
+      </div>
+    </div>
+    <div class="viz-card">
+      <div style="width:180px;height:200px;background:#ECF0F8;border:2px solid var(--bd-str);border-radius:10px 10px 5px 5px;overflow:hidden;position:relative;box-shadow:inset 0 2px 8px rgba(30,50,100,.08)">
+        <svg class="tsvg" id="tsvg-tov-${tankId}" preserveAspectRatio="none" style="position:absolute;bottom:0;left:0;right:0;width:100%;z-index:2"></svg>
+        <div style="position:absolute;top:0;left:5px;right:5px;bottom:0;background:linear-gradient(180deg,rgba(255,255,255,.28) 0%,transparent 35%);pointer-events:none;border-radius:inherit;z-index:3"></div>
+        <div class="tank-pct-overlay" id="tov-pct-overlay-${tankId}">${pct}%</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${metricsHTML}
+    </div>`;
+}
+
+function renderTankOverviewViz(id){
+  const svg=document.getElementById('tsvg-tov-'+id); if(!svg) return;
+  const t=TS[id]; const W=180,H=200;
+  const lH=Math.max(0,(t.pct/100)*H),c=tcol(t.pct);
+  const amp=2.5, so=t.slosh*14;
+  const pts=[];
+  for(let x=0;x<=W+3;x+=4){
+    const y=Math.sin((x/W)*Math.PI*4+t.phase)*amp+Math.sin((x/W)*Math.PI*6+t.phase*.7)*amp*.4+so;
+    pts.push([x,y]);
+  }
+  let wp=`M -2 ${lH} L -2 ${pts[0][1]} `; pts.forEach(([x,y])=>wp+=`L ${x} ${y} `); wp+=`L ${W+2} ${lH} Z`;
+  svg.style.height=lH+'px'; svg.setAttribute('viewBox',`0 0 ${W} ${lH}`); svg.setAttribute('width',W); svg.setAttribute('height',lH);
+  svg.innerHTML=`<defs><linearGradient id="lgtov${id}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${c.fill}" stop-opacity=".8"/><stop offset="100%" stop-color="${c.dark}"/></linearGradient></defs>
+    <rect x="0" y="0" width="${W}" height="${lH}" fill="url(#lgtov${id})"/>
+    <path d="${wp}" fill="${c.fill}" opacity=".6"/>
+    <path d="${wp}" fill="rgba(255,255,255,.16)" transform="translate(0,-3)"/>`;
+  const pe=document.getElementById('tov-pct-overlay-'+id);
+  if(pe){pe.textContent=Math.round(t.pct)+'%'; pe.className='tank-pct-overlay'+(t.pct<25?' dark':'');}
+  const bigPct=document.getElementById('tov-pct-'+id);
+  const [,sc]=tankStatus(Math.round(t.pct));
+  const scol=sc==='ok'?'var(--ok)':sc==='warn'?'var(--warn)':'var(--err)';
+  if(bigPct){bigPct.textContent=Math.round(t.pct)+'%'; bigPct.style.color=scol;}
+  const statusEl=document.getElementById('tov-status-'+id);
+  const [st]=tankStatus(Math.round(t.pct));
+  if(statusEl){statusEl.textContent=st; statusEl.className='badge '+sc;}
 }
 
 document.addEventListener('mousemove',e=>{
@@ -888,6 +1026,7 @@ function renderTank(id){
   const dt=.016;
   for(const id in TS){const t=TS[id]; t.phase+=dt*(1.2+Math.abs(t.slosh)*.3); if(!t.drag) t.slosh*=.92;}
   for(const id in TS) if(curView==='tanks'||curView==='detail') renderTank(id);
+  if(curView==='tank-overview'&&detCtx&&detCtx.eid) renderTankOverviewViz(detCtx.eid);
   requestAnimationFrame(loop);
 })();
 
@@ -971,7 +1110,15 @@ setInterval(()=>{
       const el=document.getElementById(`tmv-${tank.id}-${k}`);
       if(el) el.textContent=fmt(met.v,k);
     });
+    updateTankLabel(tank.id);
   });
+  if(curView==='tank-overview'&&detCtx&&detCtx.eid){
+    const tid=detCtx.eid;
+    Object.entries(TANKS[tid].m).forEach(([k,met])=>{
+      const el=document.getElementById(`tov-${tid}-${k}`);
+      if(el) el.textContent=fmt(met.v,k);
+    });
+  }
 },1500);
 
 /* ══════════════ INTERVAL RANDOM GENERATOR ══════════════ */
