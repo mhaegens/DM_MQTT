@@ -32,7 +32,7 @@ gen_sans() {
         --font "$SANS_BD" -r "$CHARS" \
         --size "$SIZE" --format lvgl --bpp 4 \
         --output "$OUT/${NAME}.c" \
-        --font-name "$NAME"
+        --lv-font-name "$NAME"
     # Header
     printf "#pragma once\n#include \"lvgl.h\"\nextern lv_font_t %s;\n" \
         "$NAME" > "$OUT/${NAME}.h"
@@ -46,7 +46,7 @@ gen_mono() {
         --font "$MONO" -r "$CHARS" \
         --size "$SIZE" --format lvgl --bpp 4 \
         --output "$OUT/${NAME}.c" \
-        --font-name "$NAME"
+        --lv-font-name "$NAME"
     printf "#pragma once\n#include \"lvgl.h\"\nextern lv_font_t %s;\n" \
         "$NAME" > "$OUT/${NAME}.h"
 }

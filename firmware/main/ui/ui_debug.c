@@ -18,6 +18,11 @@ static lv_obj_t *s_rssi_val   = NULL;
 static int       s_log_head   = 0;
 static char      s_log_buf[LOG_LINES][80];
 
+static void debug_sim_btn_cb(lv_event_t *e) {
+    (void)e;
+    ui_debug_log("PUB", "factory/machines/cnc01/rpm", "4850");
+}
+
 void ui_debug_create(lv_obj_t *parent) {
     s_screen = lv_obj_create(parent);
     lv_obj_set_size(s_screen, SZ_SCREEN, CONTENT_H);
@@ -87,9 +92,7 @@ void ui_debug_create(lv_obj_t *parent) {
     lv_obj_set_style_text_font(sim_lbl, FONT_SANS_SM, 0);
     lv_obj_set_style_text_color(sim_lbl, COL_BASE, 0);
     lv_obj_center(sim_lbl);
-    lv_obj_add_event_cb(sim_btn, [](lv_event_t *e) {
-        ui_debug_log("PUB", "factory/machines/cnc01/rpm", "4850");
-    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(sim_btn, debug_sim_btn_cb, LV_EVENT_CLICKED, NULL);
 
     ui_debug_refresh();
 }
