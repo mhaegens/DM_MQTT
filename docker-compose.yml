@@ -5,8 +5,8 @@ services:
     container_name: sapdm-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"   # plain TCP — ESP32-P4, Node-RED, CLI tools (internal/WireGuard only)
-      - "9001:9001"   # WebSocket — browser dashboard (LAN) + Cloudflare Tunnel
+      - "1883:1883"   # plain TCP — Node-RED and local tools (internal only)
+      - "9001:9001"   # WebSocket — ESP32-P4 + SAP DM (via Cloudflare Tunnel) + browser dashboard
     volumes:
       - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - ./mosquitto/data:/mosquitto/data

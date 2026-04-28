@@ -77,29 +77,27 @@ The demo is designed for presales and enablement contexts, illustrating how mach
 
 ### 2.1 Layer Overview
 
-| Layer | Component          | Technology                     | Responsibility                                             |
-|-------|--------------------|--------------------------------|------------------------------------------------------------|
-| 1     | Physical Device    | ESP32-P4 Smart 86 Box          | Signal simulation, NFC scan, MQTT publishing via touch UI  |
-| 2     | Network Tunnel     | WireGuard VPN                  | Secure connectivity between mobile hotspot and homelab     |
-| 3     | MQTT Broker        | Mosquitto (Docker)             | Message routing; TCP 1883, WebSocket 9001                  |
-| 4     | Internet Exposure  | Cloudflare Tunnel (Docker)     | Exposes Mosquitto WebSocket endpoint to SAP DM cloud       |
-| 5     | Flow Management    | Node-RED (Docker)              | Visual flows, simulation fallback, dashboard panels        |
-| 6     | Web Dashboard      | Custom HTML via Nginx (Docker) | Browser-based real-time monitoring and manual publish UI   |
-| 7     | Cloud Application  | SAP DM (BTP)                   | Subscribes to MQTT topics; production execution and visibility |
+| Layer | Component          | Technology                     | Responsibility                                                         |
+|-------|--------------------|--------------------------------|------------------------------------------------------------------------|
+| 1     | Physical Device    | ESP32-P4 Smart 86 Box          | Signal simulation, NFC scan, MQTT publishing via Cloudflare WSS        |
+| 2     | MQTT Broker        | Mosquitto (Docker)             | Message routing; TCP 1883 (internal), WebSocket 9001                   |
+| 3     | Internet Exposure  | Cloudflare Tunnel (Docker)     | Exposes Mosquitto WebSocket endpoint to ESP32-P4 and SAP DM cloud      |
+| 4     | Flow Management    | Node-RED (Docker)              | Visual flows, simulation fallback, dashboard panels                    |
+| 5     | Web Dashboard      | Custom HTML via Nginx (Docker) | Browser-based real-time monitoring and manual publish UI               |
+| 6     | Cloud Application  | SAP DM (BTP)                   | Subscribes to MQTT topics; production execution and visibility         |
 
 ### 2.2 Data Flow
 
 ```
-ESP32-P4 (WiFi via phone hotspot)
-  --> WireGuard --> Mosquitto TCP :1883
-                       --> Cloudflare Tunnel --> SAP DM (BTP) subscribes via MQTT over WSS
-                       --> Node-RED subscriber (TCP :1883)
-                       --> Web Dashboard (WebSocket :9001 via LAN)
+ESP32-P4 (WiFi, any internet connection)
+  --> Cloudflare Tunnel (WSS) --> Mosquitto WebSocket :9001
+                                     --> Node-RED subscriber (TCP :1883)
+                                     --> Web Dashboard (WebSocket :9001 via LAN)
 
 SAP DM (cloud)
-  --> Cloudflare Tunnel --> Mosquitto WebSocket :9001
+  --> Cloudflare Tunnel (WSS) --> Mosquitto WebSocket :9001
 
-Browser (on WireGuard network)
+Browser (on LAN)
   --> Nginx :80 --> dashboard HTML
       dashboard --> Mosquitto WebSocket :9001
 
@@ -113,13 +111,16 @@ SAP DM's native IoT/MQTT connectivity can subscribe directly to a broker over MQ
 
 ### 2.4 Connectivity Model
 
-- ESP32-P4 connects to the mobile phone hotspot (WiFi 6 via onboard ESP32-C6 co-processor)
-- Phone is a WireGuard peer; ESP32-P4 traffic routes through it to the homelab Mosquitto instance on TCP 1883
+- ESP32-P4 connects to any WiFi or phone hotspot with internet access (WiFi 6 via onboard ESP32-C6 co-processor)
+- Connects to Mosquitto WebSocket via `wss://mqttfordm.haegens.be` — the same Cloudflare Tunnel endpoint used by SAP DM
+- No VPN or port forwarding required; the device needs only outbound internet access
 - Cloudflare Tunnel runs as a container and establishes an outbound connection to the Cloudflare edge — no inbound ports required on the homelab router
-- SAP DM connects to the public Cloudflare hostname (e.g., `mqtt.yourdomain.com`) over WSS (port 443)
-- Browser dashboard connects to Mosquitto WebSocket on the local LAN (port 9001) via WireGuard
+- SAP DM connects to the public Cloudflare hostname over WSS (port 443)
+- Browser dashboard connects to Mosquitto WebSocket directly on the local LAN (port 9001)
 
-> **Note:** The Cloudflare Tunnel only exposes the WebSocket listener. Plain TCP port 1883 stays internal and is never exposed to the internet.
+> **Note:** The Cloudflare Tunnel only exposes the WebSocket listener. Plain TCP port 1883 is used internally by Node-RED and local tools only, and is never exposed to the internet.
+
+> **Firmware note:** The ESP32-P4 firmware must use an MQTT client library with WebSocket transport support to connect via the Cloudflare Tunnel. Plain TCP MQTT (port 1883) is not routed through the tunnel.
 
 ---
 
@@ -127,10 +128,9 @@ SAP DM's native IoT/MQTT connectivity can subscribe directly to a broker over MQ
 
 All demo infrastructure lives in dedicated LXC containers that can be stopped from Proxmox when not in use.
 
-| LXC           | Purpose                             | Always On | Notes                                        |
-|---------------|-------------------------------------|-----------|----------------------------------------------|
-| `sapdm-demo`  | Full demo stack via Docker Compose  | No        | Start before demo, stop after                |
-| `wireguard`   | WireGuard VPN endpoint              | Yes       | Must be running for remote device access     |
+| LXC           | Purpose                             | Always On | Notes                            |
+|---------------|-------------------------------------|-----------|----------------------------------|
+| `sapdm-demo`  | Full demo stack via Docker Compose  | No        | Start before demo, stop after    |
 
 ### 3.1 sapdm-demo LXC Specifications
 
@@ -251,7 +251,7 @@ persistence false
 log_dest stdout
 ```
 
-> **Note:** For demos on shared or customer networks, enable password authentication and restrict port 1883 to the WireGuard subnet. See section 16.1.
+> **Note:** For demos on shared or customer networks, enable password authentication on Mosquitto and restrict port 1883 to trusted hosts. See section 16.1.
 
 ### 4.5 Lifecycle Commands
 
@@ -357,16 +357,11 @@ The PN532 connects to the ESP32-P4 expansion header via I2C with no conflict wit
 | NFC lib       | Elechouse PN532 Arduino library                    |
 | MQTT lib      | PubSubClient by Nick O'Leary                       |
 | WiFi          | ESP32 WiFi stack via ESP32-C6 SDIO bridge          |
-| Broker target | Mosquitto TCP :1883 on `sapdm-demo` LXC static IP  |
+| Broker target | Mosquitto WebSocket via `wss://mqttfordm.haegens.be` (Cloudflare Tunnel) |
 
-### 6.4 WireGuard VPN
+### 6.4 Network Connectivity
 
-| Property          | Value                                              |
-|-------------------|----------------------------------------------------|
-| Server endpoint   | Proxmox host or dedicated LXC, UDP port 51820      |
-| Peers             | Phone (mobile hotspot), Mac (development/testing)  |
-| Routing           | Split tunnel — homelab subnet only                 |
-| Client apps       | WireGuard (iOS/Android/macOS, free, official)      |
+The ESP32-P4 connects to any WiFi or phone hotspot with internet access. It reaches the MQTT broker via the Cloudflare Tunnel at `wss://mqttfordm.haegens.be` — no VPN or dedicated network configuration required on the device side.
 
 ### 6.5 Complete Hardware BOM
 
@@ -570,7 +565,7 @@ Full list of all simulated signals with properties.
 
 ### 10.1 Purpose
 
-A single-page HTML file served by Nginx at `http://192.168.1.60`. Connects to Mosquitto via MQTT over WebSocket on port 9001 using the MQTT.js browser library. Accessible from any device on the WireGuard network, providing a second visible surface during demos on a nearby laptop.
+A single-page HTML file served by Nginx at `http://192.168.1.60`. Connects to Mosquitto via MQTT over WebSocket on port 9001 using the MQTT.js browser library. Accessible from any device on the local LAN, providing a second visible surface during demos on a nearby laptop.
 
 ### 10.2 Features
 
@@ -618,19 +613,14 @@ Pre-build Node-RED flows that replicate the ESP32-P4 device signals for each ass
 
 ### 12.1 Provision the sapdm-demo LXC on Proxmox
 
+Run `proxmox/create-lxc.sh` from the Proxmox host shell. It prompts for LXC ID, IP, storage, and other settings, then creates the container with the correct configuration (nesting enabled for Docker), starts it, and runs `install.sh` inside automatically.
+
 ```bash
-# Create Ubuntu 24.04 LXC (2 GB RAM, 16 GB disk, 2 cores) via Proxmox UI
-# Assign static LAN IP 192.168.1.60
-# Enable nesting in LXC options (required for Docker)
-
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-
-# Create directory structure
-mkdir -p /opt/sapdm-demo/{mosquitto/config,mosquitto/data,mosquitto/log,cloudflared,nodered/data,dashboard/html}
+# On the Proxmox host:
+bash <(curl -fsSL https://raw.githubusercontent.com/mhaegens/DM_MQTT/main/proxmox/create-lxc.sh)
 ```
 
-Place `mosquitto.conf` and `docker-compose.yml` as defined in section 4.
+To provision manually instead, create a Ubuntu 24.04 LXC with 2 GB RAM, 16 GB disk, 2 cores, a static LAN IP, and nesting enabled in the LXC options, then run `install.sh` inside it.
 
 ### 12.2 Configure Cloudflare Tunnel
 
@@ -640,23 +630,11 @@ Place `mosquitto.conf` and `docker-compose.yml` as defined in section 4.
 4. Start the stack and verify the tunnel is Active in the Cloudflare dashboard
 5. Test externally: `wscat -c wss://mqtt.yourdomain.com`
 
-### 12.3 Set Up WireGuard
+### 12.3 ESP32-P4 Connectivity
 
-```bash
-apt install wireguard
+No VPN required. The ESP32-P4 connects directly to `wss://mqttfordm.haegens.be` over any internet connection using MQTT over WebSocket. The Cloudflare Tunnel handles TLS; the device needs only outbound internet access.
 
-# Generate keypair
-wg genkey | tee /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
-
-# Create /etc/wireguard/wg0.conf with server config and peer entries for phone and Mac
-# Enable IP forwarding
-echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf && sysctl -p
-
-# Start and enable
-systemctl enable --now wg-quick@wg0
-```
-
-Add the phone as a WireGuard peer using the WireGuard app and the server public key.
+Ensure the Cloudflare Tunnel is active (section 12.2) and the ESP32-P4 firmware uses an MQTT client library with WebSocket transport support.
 
 ### 12.4 Start the Demo Stack
 
@@ -715,9 +693,9 @@ Topics follow the pattern `factory/{asset-type}/{asset-id}/{signal}`.
 
 | Port     | Protocol          | Exposed To             | Used By                              |
 |----------|-------------------|------------------------|--------------------------------------|
-| 1883     | MQTT TCP          | LAN + WireGuard only   | ESP32-P4, Node-RED, CLI tools        |
-| 9001     | MQTT WebSocket    | LAN + Cloudflare Tunnel| Browser dashboard, SAP DM via tunnel |
-| 443 (WSS)| MQTT WebSocket TLS| Internet               | SAP DM cloud via `mqtt.yourdomain.com` |
+| 1883     | MQTT TCP          | LAN only (internal)    | Node-RED, local CLI tools            |
+| 9001     | MQTT WebSocket    | LAN + Cloudflare Tunnel| Browser dashboard, ESP32-P4, SAP DM  |
+| 443 (WSS)| MQTT WebSocket TLS| Internet               | ESP32-P4 + SAP DM via `mqttfordm.haegens.be` |
 
 ### 13.2 Machine Topics
 
@@ -827,8 +805,8 @@ SAP DM connects directly to Mosquitto via the Cloudflare Tunnel public hostname 
 | PN532 not detected on I2C scan           | DIP switches in wrong mode or wiring error| Confirm module is set to I2C mode; check SDA/SCL wiring and 3.3V supply             |
 | NFC card reads fail                      | Card type unsupported or antenna blocked  | Verify MIFARE Classic card; remove metal objects from behind the module              |
 | ESP32-P4 WiFi never connects             | SDIO bridge firmware issue                | Ensure firmware uses the WiFi-via-C6 SDIO stack, not native P4 WiFi calls           |
-| MQTT shows disconnected on device        | Broker unreachable or WireGuard down      | Check WireGuard peer status; verify `sapdm-demo` LXC is running and port 1883 is open |
-| MQTT rc=-2 on device                     | Broker IP/port unreachable                | Test with `mosquitto_pub` from Mac on the same WireGuard subnet                     |
+| MQTT shows disconnected on device        | Cloudflare Tunnel down or hostname wrong  | Check `docker logs sapdm-cloudflared`; verify tunnel is Active in Cloudflare dashboard |
+| MQTT rc=-2 on device                     | WSS URL or port unreachable               | Test with `wscat -c wss://mqttfordm.haegens.be` from a laptop on the same network  |
 | LVGL rendering slow or tearing           | Double buffering not configured           | Enable double buffering in LVGL config; use DMA for RGB transfer via BSP             |
 
 ### 15.3 Useful Diagnostic Commands
@@ -858,8 +836,8 @@ curl -i -N -H "Upgrade: websocket" -H "Connection: Upgrade" http://192.168.1.60:
 # Test public WSS endpoint (requires wscat: npm install -g wscat)
 wscat -c wss://mqtt.yourdomain.com
 
-# Check WireGuard peers
-sudo wg show
+# Test public WSS endpoint from outside (requires wscat: npm install -g wscat)
+wscat -c wss://mqttfordm.haegens.be
 ```
 
 ---
@@ -869,11 +847,10 @@ sudo wg show
 ### 16.1 Known Limitations
 
 - Arduino library ecosystem for ESP32-P4 is newer than for ESP32-S3; some libraries may require patching or migration to ESP-IDF
-- WireGuard on the ESP32-P4 directly is not implemented; the phone acts as the network relay
-- Mosquitto TCP port 1883 and Node-RED port 1880 carry no authentication; acceptable for LAN/WireGuard use but must be addressed before demos on shared networks
+- Mosquitto TCP port 1883 and Node-RED port 1880 carry no authentication; acceptable for LAN use but must be addressed before demos on shared networks
 - Cloudflare Tunnel exposes port 9001 without authentication by default; Cloudflare Access policies must be added before any customer-facing demo on a public network
 - SAP DM IoT/MQTT connectivity configuration details (DC parameter definitions, SFC mapping) depend on tenant version and are not fully documented here; requires per-tenant configuration
-- No authentication on Node-RED editor; anyone on the WireGuard network can edit flows
+- No authentication on Node-RED editor; anyone on the LAN can edit flows
 
 ### 16.2 Potential Enhancements
 
@@ -920,7 +897,7 @@ sudo wg show
 | MIFARE              | NXP contactless smart card standard widely used for access control and industrial badges                     |
 | LVGL                | Light and Versatile Graphics Library: open-source embedded GUI library; version 9 used on ESP32-P4           |
 | BSP                 | Board Support Package: Waveshare-provided driver layer for display, touch, and peripheral initialisation     |
-| WireGuard           | Modern VPN protocol connecting the mobile hotspot peer to the homelab Proxmox host                           |
+| Cloudflare Tunnel   | Outbound-only encrypted tunnel from the homelab to Cloudflare's edge, exposing Mosquitto WebSocket publicly  |
 | Proxmox VE          | Open-source virtualization platform running LXC containers and KVM VMs                                       |
 | LXC                 | Linux Container: lightweight OS-level virtualization used in Proxmox                                         |
 | Docker Compose      | Tool for defining and running multi-container Docker applications from a single YAML file                    |
