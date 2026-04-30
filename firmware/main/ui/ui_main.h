@@ -44,3 +44,11 @@ void ui_notify_wifi_status(bool connected, int rssi, const char *ip);
 // ─── Hardware button callbacks ────────────────────────────────────────────────
 void ui_btn_short_press(void);
 void ui_btn_long_press(void);
+
+// ─── Font externs and FONT_* macros ──────────────────────────────────────────
+// Re-exported via ui_theme.h (included above). Any code that includes ui_main.h
+// already has access to:
+//   extern lv_font_t ibm_plex_sans_40 / _32 / _26 / _22 / _18 / _15
+//   extern lv_font_t ibm_plex_mono_26 / _18 / _15
+//   FONT_SANS_XL / FONT_SANS_LG / FONT_SANS_MD / FONT_SANS_SM / FONT_SANS_XS / FONT_SANS_XXS
+//   FONT_MONO_MD / FONT_MONO_XS / FONT_MONO_XXS

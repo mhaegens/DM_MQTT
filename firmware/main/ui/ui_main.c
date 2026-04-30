@@ -72,7 +72,7 @@ static lv_obj_t *create_status_pill(lv_obj_t *parent,
     lv_obj_set_size(pill, LV_SIZE_CONTENT, 28);
     lv_obj_set_style_bg_color(pill, COL_OK_LT, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_color(pill, lv_color_hex(COL_OK_BD), LV_PART_MAIN);
+    lv_obj_set_style_border_color(pill, lv_color_hex(0x9ADDB8), LV_PART_MAIN);
     lv_obj_set_style_border_width(pill, 1, LV_PART_MAIN);
     lv_obj_set_style_radius(pill, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     lv_obj_set_style_pad_left(pill, 8, LV_PART_MAIN);
