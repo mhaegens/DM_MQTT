@@ -23,11 +23,14 @@ void ui_machines_refresh(void);
 void ui_machines_pulse_first(void);
 void ui_tanks_create(lv_obj_t *parent);
 void ui_tanks_activate(void);
+void ui_tanks_deactivate(void);
 void ui_debug_create(lv_obj_t *parent);
 void ui_debug_refresh(void);
 void ui_nfc_create(lv_obj_t *parent);
 void ui_detail_create(lv_obj_t *parent);
 void ui_detail_step(int direction);
+void ui_tank_overview_create(lv_obj_t *parent);
+void ui_tank_overview_activate(int tank_idx);
 
 static const char *TAG = "ui";
 
@@ -35,10 +38,15 @@ static const char *TAG = "ui";
 lv_obj_t *g_screens[VIEW_COUNT] = {NULL};
 lv_obj_t *g_shell_bar           = NULL;
 lv_obj_t *g_tab_bar             = NULL;
+lv_obj_t *g_crumb_bar           = NULL;
 lv_obj_t *g_content             = NULL;
 lv_obj_t *g_shell_subtitle      = NULL;
 ViewId    g_current_view        = VIEW_HOME;
 ViewId    g_prev_view           = VIEW_HOME;
+
+static lv_obj_t *s_crumb_label  = NULL;
+static int       s_tank_ovw_idx = 0;
+static char      s_tank_ovw_crumb[80] = "";
 
 // ─── Tab metadata ─────────────────────────────────────────────────────────────
 static const char *TAB_ICONS[]  = {
@@ -130,11 +138,13 @@ static void build_shell_bar(void)
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(g_shell_bar, 10, LV_PART_MAIN);
 
-    // ── Left group: SAP badge + title column ──────────────────────────────────
+    // ── Left group: SAP logo + title column ──────────────────────────────────
     lv_obj_t *left_group = lv_obj_create(g_shell_bar);
     lv_obj_set_size(left_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(left_group, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(left_group, 0, LV_PART_MAIN);
+    lv_obj_set_style_outline_width(left_group, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(left_group, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(left_group, 0, LV_PART_MAIN);
     lv_obj_remove_flag(left_group, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(left_group, LV_LAYOUT_FLEX);
@@ -144,26 +154,19 @@ static void build_shell_bar(void)
     lv_obj_set_style_pad_column(left_group, 10, LV_PART_MAIN);
     lv_obj_set_flex_grow(left_group, 1);   // expands to push status pills right
 
-    // SAP badge square
-    lv_obj_t *badge = lv_obj_create(left_group);
-    lv_obj_set_size(badge, SZ_BADGE_SAP, SZ_BADGE_SAP);
-    lv_obj_set_style_bg_color(badge, COL_HI, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(badge, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(badge, SZ_RADIUS_SM, LV_PART_MAIN);
-    lv_obj_remove_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t *sap_lbl = lv_label_create(badge);
-    lv_label_set_text(sap_lbl, "SAP");
-    lv_obj_set_style_text_font(sap_lbl, FONT_MONO_XXS, LV_PART_MAIN);
-    lv_obj_set_style_text_color(sap_lbl, COL_BASE, LV_PART_MAIN);
-    lv_obj_center(sap_lbl);
+    // SAP geometric logo image (68×44px RGB565)
+    extern const lv_image_dsc_t sap_logo;
+    lv_obj_t *logo = lv_image_create(left_group);
+    lv_image_set_src(logo, &sap_logo);
+    lv_obj_remove_flag(logo, LV_OBJ_FLAG_SCROLLABLE);
 
     // Title + subtitle column
     lv_obj_t *title_col = lv_obj_create(left_group);
     lv_obj_set_size(title_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(title_col, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(title_col, 0, LV_PART_MAIN);
+    lv_obj_set_style_outline_width(title_col, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(title_col, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(title_col, 0, LV_PART_MAIN);
     lv_obj_remove_flag(title_col, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(title_col, LV_LAYOUT_FLEX);
@@ -188,6 +191,8 @@ static void build_shell_bar(void)
     lv_obj_set_size(right_group, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(right_group, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(right_group, 0, LV_PART_MAIN);
+    lv_obj_set_style_outline_width(right_group, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(right_group, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(right_group, 0, LV_PART_MAIN);
     lv_obj_remove_flag(right_group, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(right_group, LV_LAYOUT_FLEX);
@@ -200,6 +205,71 @@ static void build_shell_bar(void)
                        COL_OK, &s_mqtt_dot, &s_mqtt_lbl);
     create_status_pill(right_group, "WiFi",
                        COL_OK, &s_wifi_dot, &s_wifi_lbl);
+}
+
+// ─── Crumb bar ────────────────────────────────────────────────────────────────
+static void crumb_back_cb(lv_event_t *e)
+{
+    (void)e;
+    ui_pop_detail();
+}
+
+static void build_crumb_bar(void)
+{
+    g_crumb_bar = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(g_crumb_bar, SZ_SCREEN, SZ_CRUMB);
+    lv_obj_set_pos(g_crumb_bar, 0, SZ_SHELL);
+    lv_obj_set_style_bg_color(g_crumb_bar, COL_BASE2, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(g_crumb_bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(g_crumb_bar, COL_BD, LV_PART_MAIN);
+    lv_obj_set_style_border_width(g_crumb_bar, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_side(g_crumb_bar, LV_BORDER_SIDE_BOTTOM, LV_PART_MAIN);
+    lv_obj_set_style_radius(g_crumb_bar, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(g_crumb_bar, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(g_crumb_bar, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(g_crumb_bar, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(g_crumb_bar, 0, LV_PART_MAIN);
+    lv_obj_set_style_outline_width(g_crumb_bar, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(g_crumb_bar, 0, LV_PART_MAIN);
+    lv_obj_remove_flag(g_crumb_bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(g_crumb_bar, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(g_crumb_bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(g_crumb_bar, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(g_crumb_bar, 8, LV_PART_MAIN);
+
+    // Back button
+    lv_obj_t *back_btn = lv_btn_create(g_crumb_bar);
+    lv_obj_set_size(back_btn, LV_SIZE_CONTENT, SZ_CRUMB - 8);
+    lv_obj_set_style_bg_color(back_btn, COL_HI_LT, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(back_btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_color(back_btn, lv_color_hex(0xC5DCFF), LV_PART_MAIN);
+    lv_obj_set_style_border_width(back_btn, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(back_btn, SZ_RADIUS_SM, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(back_btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(back_btn, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(back_btn, 4, LV_PART_MAIN);
+    lv_obj_add_event_cb(back_btn, crumb_back_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *back_lbl = lv_label_create(back_btn);
+    lv_label_set_text(back_lbl, "< Back");
+    lv_obj_set_style_text_font(back_lbl, FONT_SANS_XS, LV_PART_MAIN);
+    lv_obj_set_style_text_color(back_lbl, COL_HI, LV_PART_MAIN);
+    lv_obj_center(back_lbl);
+
+    // Separator dot
+    lv_obj_t *sep = lv_label_create(g_crumb_bar);
+    lv_label_set_text(sep, "/");
+    lv_obj_set_style_text_font(sep, FONT_SANS_XS, LV_PART_MAIN);
+    lv_obj_set_style_text_color(sep, COL_TX3, LV_PART_MAIN);
+
+    // Breadcrumb current-item label
+    s_crumb_label = lv_label_create(g_crumb_bar);
+    lv_label_set_text(s_crumb_label, "");
+    lv_obj_set_style_text_font(s_crumb_label, FONT_SANS_XS, LV_PART_MAIN);
+    lv_obj_set_style_text_color(s_crumb_label, COL_TX2, LV_PART_MAIN);
+
+    lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
@@ -274,7 +344,7 @@ static void build_tab_bar(void)
 
         lv_obj_t *icon_lbl = lv_label_create(col);
         lv_label_set_text(icon_lbl, TAB_ICONS[i]);
-        lv_obj_set_style_text_font(icon_lbl, FONT_SANS_MD, LV_PART_MAIN);
+        lv_obj_set_style_text_font(icon_lbl, &lv_font_montserrat_24, LV_PART_MAIN);
         lv_obj_set_style_text_color(icon_lbl, COL_TX3, LV_PART_MAIN);
 
         lv_obj_t *text_lbl = lv_label_create(col);
@@ -323,6 +393,7 @@ void ui_main_init(void)
     lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, LV_PART_MAIN);
 
     build_shell_bar();
+    build_crumb_bar();
 
     // Content area — sits between shell bar and tab bar
     g_content = lv_obj_create(lv_scr_act());
@@ -337,13 +408,14 @@ void ui_main_init(void)
 
     build_tab_bar();
 
-    // Build all six screen modules (they create g_screens[VIEW_*] internally)
+    // Build all screen modules (they create g_screens[VIEW_*] internally)
     ui_home_create(g_content);
     ui_machines_create(g_content);
     ui_tanks_create(g_content);
     ui_debug_create(g_content);
     ui_nfc_create(g_content);
     ui_detail_create(g_content);
+    ui_tank_overview_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -352,7 +424,10 @@ void ui_main_init(void)
 
 void ui_switch_tab(ViewId v)
 {
-    if (v > VIEW_NFC) return;   // VIEW_DETAIL is not reachable via tab bar
+    if ((int)v > VIEW_NFC) return;   // VIEW_DETAIL and VIEW_TANK_OVW not reachable via tab bar
+
+    // Deactivate tanks timer if leaving tanks
+    if (g_current_view == VIEW_TANKS) ui_tanks_deactivate();
 
     // Hide all screens
     for (int i = 0; i < VIEW_COUNT; i++) {
@@ -362,7 +437,7 @@ void ui_switch_tab(ViewId v)
     if (g_screens[v]) lv_obj_clear_flag(g_screens[v], LV_OBJ_FLAG_HIDDEN);
 
     g_current_view = v;
-    g_prev_view    = v;   // used as fallback for pop_detail
+    g_prev_view    = v;
     tab_highlight(v);
 
     // Screen-specific activation callbacks
@@ -387,11 +462,12 @@ void ui_push_detail(const char *back_label, const char *metric_label)
     if (g_screens[VIEW_DETAIL])
         lv_obj_clear_flag(g_screens[VIEW_DETAIL], LV_OBJ_FLAG_HIDDEN);
 
-    // Update shell subtitle to breadcrumb
-    if (g_shell_subtitle) {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "\xe2\x86\x90 %s / %s", back_label, metric_label);
-        lv_label_set_text(g_shell_subtitle, buf);
+    // Show breadcrumb bar with current location
+    if (g_crumb_bar) lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) {
+        char buf[80];
+        snprintf(buf, sizeof(buf), "%s / %s", back_label, metric_label);
+        lv_label_set_text(s_crumb_label, buf);
     }
 
     g_current_view = VIEW_DETAIL;
@@ -399,18 +475,42 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
-    // Restore tab bar
-    if (g_tab_bar) lv_obj_clear_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
-
-    // Restore shell subtitle
-    if (g_shell_subtitle) {
-        char buf[64];
-        snprintf(buf, sizeof(buf),
-                 "SAP Digital Manufacturing \xc2\xb7 %s", PLANT_NAME);
-        lv_label_set_text(g_shell_subtitle, buf);
+    if (g_prev_view == VIEW_TANK_OVW) {
+        // Return from Detail → Tank Overview (not all the way to Tanks)
+        for (int i = 0; i < VIEW_COUNT; i++) {
+            if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_clear_flag(g_screens[VIEW_TANK_OVW], LV_OBJ_FLAG_HIDDEN);
+        if (s_crumb_label) lv_label_set_text(s_crumb_label, s_tank_ovw_crumb);
+        g_prev_view    = VIEW_TANKS;
+        g_current_view = VIEW_TANK_OVW;
+    } else {
+        // Standard: restore tab bar, hide crumb bar, return to tab view
+        if (g_tab_bar)   lv_obj_clear_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
+        if (g_crumb_bar) lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+        ui_switch_tab(g_prev_view);
     }
+}
 
-    ui_switch_tab(g_prev_view);
+void ui_push_tank_ovw(int tank_idx)
+{
+    if (g_current_view == VIEW_DETAIL) return;
+    g_prev_view = g_current_view;
+    s_tank_ovw_idx = tank_idx;
+    snprintf(s_tank_ovw_crumb, sizeof(s_tank_ovw_crumb),
+             "Tanks / %s", g_tanks[tank_idx].name);
+
+    for (int i = 0; i < VIEW_COUNT; i++) {
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_tab_bar)   lv_obj_add_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
+    if (g_screens[VIEW_TANK_OVW])
+        lv_obj_clear_flag(g_screens[VIEW_TANK_OVW], LV_OBJ_FLAG_HIDDEN);
+    if (g_crumb_bar) lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, s_tank_ovw_crumb);
+
+    g_current_view = VIEW_TANK_OVW;
+    ui_tank_overview_activate(tank_idx);
 }
 
 // ─── Status pill helpers ──────────────────────────────────────────────────────
@@ -441,8 +541,8 @@ void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 // ─── Hardware button callbacks ────────────────────────────────────────────────
 void ui_btn_short_press(void)
 {
-    if (g_current_view == VIEW_DETAIL) ui_detail_step(-1);
-    else                               ui_machines_pulse_first();
+    if (g_current_view == VIEW_DETAIL || g_current_view == VIEW_TANK_OVW)
+        ui_pop_detail();
 }
 
 void ui_btn_long_press(void)

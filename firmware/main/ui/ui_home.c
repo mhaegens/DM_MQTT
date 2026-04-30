@@ -13,7 +13,8 @@
 static lv_obj_t *s_screen          = NULL;
 static lv_obj_t *s_kpi_val[4]     = {NULL};
 static lv_obj_t *s_kpi_meta[4]    = {NULL};
-static lv_obj_t *s_operator_label = NULL;  // "OPERATOR" row value; updated in refresh
+static lv_obj_t *s_operator_label = NULL;
+static lv_obj_t *s_ip_label       = NULL;
 
 // ─── KPI card ────────────────────────────────────────────────────────────────
 // Creates a 140px tall card inside the grid container at position (idx%2, idx/2).
@@ -183,8 +184,8 @@ void ui_home_create(lv_obj_t *parent)
 
     // ── 2×2 KPI grid ─────────────────────────────────────────────────────────
     lv_obj_t *grid = lv_obj_create(s_screen);
-    lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_remove_style_all(grid);
+    lv_obj_set_size(grid, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -204,7 +205,7 @@ void ui_home_create(lv_obj_t *parent)
         { "MQTT MSGS",    "387",   "since boot"      },
         { "WIFI RSSI",    "-61",   "dBm"             },
     };
-    lv_color_t acc[4] = { COL_OK, COL_HI, COL_WARN, COL_TEAL };
+    lv_color_t acc[4] = { COL_HI, COL_HI, COL_WARN, COL_TEAL };
 
     for (int i = 0; i < 4; i++) {
         make_kpi_card(grid, i, kpi[i].label, kpi[i].val, kpi[i].meta, acc[i]);
@@ -212,8 +213,8 @@ void ui_home_create(lv_obj_t *parent)
 
     // ── Status rows column (8px gap) ─────────────────────────────────────────
     lv_obj_t *rows_col = lv_obj_create(s_screen);
-    lv_obj_set_size(rows_col, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_remove_style_all(rows_col);
+    lv_obj_set_size(rows_col, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(rows_col, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_clear_flag(rows_col, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(rows_col, LV_FLEX_FLOW_COLUMN);
@@ -230,16 +231,16 @@ void ui_home_create(lv_obj_t *parent)
                     "CONNECTED");
 
     // Row 1: Device IP (updated in refresh; badge = blue "DHCP")
-    make_status_row(rows_col,
+    s_ip_label = make_status_row(rows_col,
                     "DEVICE IP",
-                    g_device_ip[0] ? g_device_ip : "\xe2\x80\x94",
+                    g_device_ip[0] ? g_device_ip : "-",
                     COL_HI_LT, COL_HI, lv_color_hex(0xC5DCFF),
                     "DHCP");
 
     // Row 2: Operator (updated in refresh; badge = green "ACTIVE")
     s_operator_label = make_status_row(rows_col,
                                        "OPERATOR",
-                                       "\xe2\x80\x94",
+                                       "-",
                                        COL_OK_LT, COL_OK, lv_color_hex(0x9ADDB8),
                                        "ACTIVE");
 
@@ -281,12 +282,15 @@ void ui_home_refresh(void)
     // KPI 3: WiFi RSSI (meta "dBm" is static)
     lv_label_set_text_fmt(s_kpi_val[3], "%d", g_wifi_rssi);
 
+    // Device IP row
+    if (s_ip_label) lv_label_set_text(s_ip_label, g_device_ip[0] ? g_device_ip : "-");
+
     // Operator row
     if (s_operator_label) {
         if (g_active_badge >= 0 && g_active_badge < BADGE_COUNT)
             lv_label_set_text(s_operator_label,
                               g_badges[g_active_badge].name);
         else
-            lv_label_set_text(s_operator_label, "\xe2\x80\x94");
+            lv_label_set_text(s_operator_label, "-");
     }
 }

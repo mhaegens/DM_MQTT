@@ -6,8 +6,8 @@
 #include "ui_machines.h"
 #include "ui_main.h"
 #include "ui_theme.h"
+#include "ui_detail.h"
 #include "data.h"
-#include "mqtt_task.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
@@ -62,7 +62,7 @@ static void toggle_cb(lv_event_t *e) {
     Machine *mc = &g_machines[idx];
 
     mc->running = !mc->running;
-    mqtt_pub_machine_status(mc->id, mc->running);
+    ESP_LOGI(TAG, "Toggle: %s -> %s", mc->id, mc->running ? "running" : "stopped");
 
     // Update button appearance
     if (mc->running) {
@@ -91,7 +91,7 @@ static void pulse_cb(lv_event_t *e) {
     Machine *mc = &g_machines[idx];
 
     mc->pulses++;
-    mqtt_pub_machine_pulse(mc->id, mc->pulses);
+    ESP_LOGI(TAG, "Pulse: %s pulses=%d", mc->id, mc->pulses);
 
     // Brief visual flash: temporarily brighten card bg, restore after 200ms
     lv_obj_set_style_bg_color(s_cards[idx], COL_HI_LT, 0);
@@ -102,9 +102,7 @@ static void pulse_cb(lv_event_t *e) {
 // ─── Metric tile / arc tap callback ──────────────────────────────────────────
 static void metric_tap_cb(lv_event_t *e) {
     MetricCtx *ctx = (MetricCtx *)lv_event_get_user_data(e);
-    Machine *mc = &g_machines[ctx->machine];
-    Metric  *m  = &mc->metrics[ctx->metric];
-    ui_push_detail(mc->name, m->label);
+    ui_detail_open_machine_metric(ctx->machine, ctx->metric);
 }
 
 // ─── Update card border color (running = green, stopped = red) ───────────────
@@ -234,7 +232,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     // Flex column: header / body / footer
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_STRETCH, LV_FLEX_ALIGN_CENTER);
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(card, 0, 0);
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -293,7 +291,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_style_pad_ver(body, 8, 0);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_STRETCH, LV_FLEX_ALIGN_CENTER);
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(body, 6, 0);
     lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -308,7 +306,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
     if (spark_idx >= 0) {
         Metric *sm = &mc->metrics[spark_idx];
-        lv_color_t spark_col = lv_color_hex(sm->color ? sm->color : COL_HI);
+        lv_color_t spark_col = sm->color ? lv_color_hex(sm->color) : COL_HI;
 
         // Sparkline row: chart + current value label
         lv_obj_t *spark_row = lv_obj_create(body);
@@ -339,7 +337,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_chart_series_t *ser = lv_chart_add_series(chart, spark_col,
                                                       LV_CHART_AXIS_PRIMARY_Y);
         for (int i = 0; i < sm->history_len; i++) {
-            lv_chart_set_next_value(chart, ser, (lv_value_prec_t)sm->history[i]);
+            lv_chart_set_next_value(chart, ser, (lv_value_precise_t)sm->history[i]);
         }
         lv_chart_refresh(chart);
 
@@ -403,7 +401,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_set_style_pad_all(tile_row, 0, 0);
         lv_obj_set_flex_flow(tile_row, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tile_row, LV_FLEX_ALIGN_START,
-                              LV_FLEX_ALIGN_STRETCH, LV_FLEX_ALIGN_CENTER);
+                              LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_gap(tile_row, 6, 0);
         lv_obj_clear_flag(tile_row, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -564,7 +562,7 @@ void ui_machines_refresh(void) {
             }
             if (spark_idx >= 0) {
                 lv_chart_set_next_value(s_charts[i], s_series[i],
-                    (lv_value_prec_t)mc->metrics[spark_idx].value);
+                    (lv_value_precise_t)mc->metrics[spark_idx].value);
                 lv_chart_refresh(s_charts[i]);
             }
         }
@@ -576,7 +574,7 @@ void ui_machines_pulse_first(void) {
     for (int i = 0; i < MACHINE_COUNT; i++) {
         if (g_machines[i].running) {
             g_machines[i].pulses++;
-            mqtt_pub_machine_pulse(g_machines[i].id, g_machines[i].pulses);
+            ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, g_machines[i].pulses);
 
             // Flash card background briefly
             if (s_cards[i]) {

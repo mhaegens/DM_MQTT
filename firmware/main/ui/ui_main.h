@@ -19,13 +19,15 @@ typedef enum {
     VIEW_DEBUG    = 3,
     VIEW_NFC      = 4,
     VIEW_DETAIL   = 5,   // not a tab; pushed over any tab view
-    VIEW_COUNT    = 6,
+    VIEW_TANK_OVW = 6,   // not a tab; pushed over Tanks tab
+    VIEW_COUNT    = 7,
 } ViewId;
 
 // ─── Global LVGL objects (for use by screen modules) ─────────────────────────
 extern lv_obj_t *g_screens[VIEW_COUNT];   // one container per ViewId
 extern lv_obj_t *g_shell_bar;
 extern lv_obj_t *g_tab_bar;
+extern lv_obj_t *g_crumb_bar;            // breadcrumb bar shown during detail view
 extern lv_obj_t *g_content;              // parent container for all screen modules
 extern lv_obj_t *g_shell_subtitle;       // subtitle label; updated by push/pop detail
 extern ViewId    g_current_view;
@@ -36,6 +38,7 @@ void ui_main_init(void);
 void ui_switch_tab(ViewId v);
 void ui_push_detail(const char *back_label, const char *metric_label);
 void ui_pop_detail(void);
+void ui_push_tank_ovw(int tank_idx);
 
 // ─── Status update callbacks (called from MQTT/WiFi event handlers) ───────────
 void ui_notify_mqtt_status(bool connected);

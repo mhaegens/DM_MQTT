@@ -8,25 +8,20 @@ idf_component_register(
         "ui/ui_debug.c"
         "ui/ui_nfc.c"
         "ui/ui_detail.c"
+        "ui/ui_tank_overview.c"
         "ui/data.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_15.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_18.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_22.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_26.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_32.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_40.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_15.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_18.c"
-        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_26.c"
+        "ui/assets/sap_logo.c"
     INCLUDE_DIRS
         "."
         "ui"
-        "${CMAKE_SOURCE_DIR}/fonts"
+        "ui/assets"
     REQUIRES
         waveshare__esp32_p4_wifi6_touch_lcd_4b
         espressif__esp_lvgl_port
-        esp_log
+        log
         freertos
+        esp_timer
+        mqtt
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)

@@ -56,39 +56,19 @@
 #define SZ_DOT          8    // status dot diameter
 #define SZ_THUMB       28    // slider thumb diameter
 
-// ─── Font sizes ──────────────────────────────────────────────────────────────
-// Fonts must be declared as extern and defined in the generated font .c files.
-// Generate with: lv_font_conv --font IBMPlexSans.ttf --size N --format lvgl --bpp 4
-#define F_XL  40   // KPI hero values
-#define F_LG  32   // machine names / large metric
-#define F_MD  26   // card titles / body large
-#define F_SM  22   // button text / body medium
-#define F_XS  18   // body text / small values
-#define F_XXS 15   // captions, labels (minimum readable)
-
-// Forward-declare all font objects (defined in fonts/*.c)
-// Sans (UI text)
-extern lv_font_t ibm_plex_sans_40;
-extern lv_font_t ibm_plex_sans_32;
-extern lv_font_t ibm_plex_sans_26;
-extern lv_font_t ibm_plex_sans_22;
-extern lv_font_t ibm_plex_sans_18;
-extern lv_font_t ibm_plex_sans_15;
-// Mono (metric values, topics, status codes)
-extern lv_font_t ibm_plex_mono_26;
-extern lv_font_t ibm_plex_mono_18;
-extern lv_font_t ibm_plex_mono_15;
-
-// Convenience macros — use these in UI code
-#define FONT_SANS_XL   (&ibm_plex_sans_40)
-#define FONT_SANS_LG   (&ibm_plex_sans_32)
-#define FONT_SANS_MD   (&ibm_plex_sans_26)
-#define FONT_SANS_SM   (&ibm_plex_sans_22)
-#define FONT_SANS_XS   (&ibm_plex_sans_18)
-#define FONT_SANS_XXS  (&ibm_plex_sans_15)
-#define FONT_MONO_MD   (&ibm_plex_mono_26)
-#define FONT_MONO_XS   (&ibm_plex_mono_18)
-#define FONT_MONO_XXS  (&ibm_plex_mono_15)
+// ─── Fonts — Montserrat (built into LVGL, confirmed working on device) ────────
+// IBM Plex fonts are compiled with bitmap_format=1 (compressed) which is
+// incompatible with LVGL 9's decompressor — all glyphs render as squares.
+// Enabled in sdkconfig.defaults: MONTSERRAT_16, 18, 22, 24.
+#define FONT_SANS_XL   (&lv_font_montserrat_24)
+#define FONT_SANS_LG   (&lv_font_montserrat_24)
+#define FONT_SANS_MD   (&lv_font_montserrat_24)
+#define FONT_SANS_SM   (&lv_font_montserrat_22)
+#define FONT_SANS_XS   (&lv_font_montserrat_18)
+#define FONT_SANS_XXS  (&lv_font_montserrat_16)
+#define FONT_MONO_MD   (&lv_font_montserrat_24)
+#define FONT_MONO_XS   (&lv_font_montserrat_18)
+#define FONT_MONO_XXS  (&lv_font_montserrat_16)
 
 // ─── Content area geometry ───────────────────────────────────────────────────
 // Height of the area between shell bar and tab bar (main content zone)
