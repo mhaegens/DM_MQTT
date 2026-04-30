@@ -30,9 +30,9 @@ void ui_detail_create(lv_obj_t *parent) {
     lv_obj_center(ph);
 }
 
-void ui_detail_open_tank_level(int tank_idx)        { ui_push_detail(); }
-void ui_detail_open_tank_metric(int tank, int midx)  { ui_push_detail(); }
-void ui_detail_open_machine_metric(int mach, int midx){ ui_push_detail(); }
+void ui_detail_open_tank_level(int tank_idx)        { ui_push_detail("Tanks", "Level"); (void)tank_idx; }
+void ui_detail_open_tank_metric(int tank, int midx)  { ui_push_detail("Tanks", "Metric"); (void)tank; (void)midx; }
+void ui_detail_open_machine_metric(int mach, int midx){ ui_push_detail("Machines", "Metric"); (void)mach; (void)midx; }
 
 void ui_detail_step(int direction) {
     // Phase 6: apply step change to active metric + publish to MQTT

@@ -1,12 +1,17 @@
 #pragma once
 #include <stdbool.h>
 #include "lvgl.h"
+#include "ui_theme.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ui_main.h — Top-level UI orchestration: LVGL init, screen management,
-//  shell bar, tab bar, screen transitions.
+//  ui_main.h — Top-level UI orchestration: shell bar, tab bar, screen
+//  containers, navigation, and font extern declarations.
+//
+//  All UI screen modules include this header to access shared globals,
+//  font macros, and navigation functions.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── View IDs ─────────────────────────────────────────────────────────────────
 typedef enum {
     VIEW_HOME     = 0,
     VIEW_MACHINES = 1,
@@ -14,26 +19,28 @@ typedef enum {
     VIEW_DEBUG    = 3,
     VIEW_NFC      = 4,
     VIEW_DETAIL   = 5,   // not a tab; pushed over any tab view
+    VIEW_COUNT    = 6,
 } ViewId;
 
-void ui_main_init(void);
-void ui_switch_tab(ViewId view);
-void ui_push_detail(void);   // push detail overlay, save return tab
-void ui_pop_detail(void);    // return to previous tab
+// ─── Global LVGL objects (for use by screen modules) ─────────────────────────
+extern lv_obj_t *g_screens[VIEW_COUNT];   // one container per ViewId
+extern lv_obj_t *g_shell_bar;
+extern lv_obj_t *g_tab_bar;
+extern lv_obj_t *g_content;              // parent container for all screen modules
+extern lv_obj_t *g_shell_subtitle;       // subtitle label; updated by push/pop detail
+extern ViewId    g_current_view;
+extern ViewId    g_prev_view;            // saved by ui_push_detail, restored by pop
 
-// Called from MQTT and WiFi event handlers (thread-safe: posts to LVGL queue)
+// ─── Init and navigation ──────────────────────────────────────────────────────
+void ui_main_init(void);
+void ui_switch_tab(ViewId v);
+void ui_push_detail(const char *back_label, const char *metric_label);
+void ui_pop_detail(void);
+
+// ─── Status update callbacks (called from MQTT/WiFi event handlers) ───────────
 void ui_notify_mqtt_status(bool connected);
 void ui_notify_wifi_status(bool connected, int rssi, const char *ip);
 
-// Called from button handler
+// ─── Hardware button callbacks ────────────────────────────────────────────────
 void ui_btn_short_press(void);
 void ui_btn_long_press(void);
-
-// Global LVGL objects accessible to screen modules
-extern lv_obj_t *g_shell_bar;
-extern lv_obj_t *g_tab_bar;
-extern lv_obj_t *g_content;      // parent for all screen content
-extern lv_obj_t *g_screens[6];   // one lv_obj per ViewId
-
-// Currently active view
-extern ViewId g_current_view;
