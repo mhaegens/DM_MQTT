@@ -2,14 +2,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include <math.h>
-
-// ─── Geometry ──────────────────────────────────────────────────────────────
-#define SCREEN_W     720
-#define SCREEN_H     720
-#define SHELL_H       64
-#define TABBAR_H      72
-#define CONTENT_H    (SCREEN_H - SHELL_H - TABBAR_H)  // 584
 #define HISTORY_LEN   32
 
 // ─── Colors ────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 // ─── History pre-fill macro ─────────────────────────────────────────────────
 // Fills 32 history slots with plausible variation around init value.
 // Uses a deterministic pseudo-random formula; exact values don't matter.
-#define HIST(v, i) ((v) * (0.85f + (float)(i) * 0.012f * (float)(((i) * 17 + 3) % 3 - 1)))
+#define HIST(v, i) ((v) * (0.92f + 0.08f * (float)(((i) * 7 + 13) % 5 - 2) / 2.0f))
 
 // ─── Machines ───────────────────────────────────────────────────────────────
 
@@ -600,4 +600,4 @@ Badge g_badges[BADGE_COUNT] = {
 // ─── Globals ────────────────────────────────────────────────────────────────
 
 int g_active_badge = 0;
-int g_log_sec      = 44;
+int g_log_sec      = 44; /* simulated uptime seconds shown in debug log */
