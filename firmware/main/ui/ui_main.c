@@ -53,6 +53,7 @@ static const char *TAB_LABELS[] = { "Home", "Machines", "Tanks", "Debug", "NFC" 
 // Per-tab button + active-indicator bar (static; accessed by ui_switch_tab)
 static lv_obj_t *s_tab_btns[5]       = {NULL};
 static lv_obj_t *s_tab_indicators[5] = {NULL};  // 144×3 top bar, shown when active
+static lv_obj_t *s_tab_cols[5]       = {NULL};  // inner icon+label column per tab
 
 // Status pills (color updated by notify functions)
 static lv_obj_t *s_mqtt_dot  = NULL;
@@ -253,6 +254,7 @@ static void build_tab_bar(void)
         lv_obj_set_style_border_width(bar, 0, LV_PART_MAIN);
         lv_obj_set_style_radius(bar, 0, LV_PART_MAIN);
         lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(bar, LV_OBJ_FLAG_CLICKABLE);
         s_tab_indicators[i] = bar;
 
         // Inner column: icon + label, centered inside button
@@ -268,6 +270,7 @@ static void build_tab_bar(void)
         lv_obj_set_flex_align(col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_row(col, 2, LV_PART_MAIN);
+        s_tab_cols[i] = col;
 
         lv_obj_t *icon_lbl = lv_label_create(col);
         lv_label_set_text(icon_lbl, TAB_ICONS[i]);
@@ -298,8 +301,8 @@ static void tab_highlight(ViewId v)
                 lv_obj_add_flag(s_tab_indicators[i], LV_OBJ_FLAG_HIDDEN);
         }
 
-        // Recolor icon + label inside the inner column (child 1, after indicator bar)
-        lv_obj_t *col_obj = lv_obj_get_child(s_tab_btns[i], 1);
+        // Recolor icon + label inside the inner column
+        lv_obj_t *col_obj = s_tab_cols[i];
         if (col_obj) {
             lv_obj_t *icon = lv_obj_get_child(col_obj, 0);
             lv_obj_t *lbl  = lv_obj_get_child(col_obj, 1);
@@ -371,6 +374,7 @@ void ui_switch_tab(ViewId v)
 
 void ui_push_detail(const char *back_label, const char *metric_label)
 {
+    if (g_current_view == VIEW_DETAIL) return;
     g_prev_view = g_current_view;
 
     // Hide all screens and the tab bar
