@@ -5,11 +5,6 @@
 #include "config.h"
 #include <stdio.h>
 
-// Runtime vars still defined in data_model.c / mqtt_task.c / wifi_simple.c
-extern int  g_mqtt_msg_count;
-extern int  g_wifi_rssi;
-extern char g_device_ip[16];
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  ui_home.c — Home screen: 2×2 KPI grid + 3 connection status rows.
 //  Refreshed on tab activation and on MQTT/WiFi events.

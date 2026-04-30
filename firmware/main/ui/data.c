@@ -599,5 +599,8 @@ Badge g_badges[BADGE_COUNT] = {
 
 // ─── Globals ────────────────────────────────────────────────────────────────
 
-int g_active_badge = 0;
-int g_log_sec      = 44; /* simulated uptime seconds shown in debug log */
+int  g_active_badge    = 0;
+int  g_log_sec         = 44; /* simulated uptime seconds shown in debug log */
+int  g_mqtt_msg_count  = 387;
+int  g_wifi_rssi       = -61;
+char g_device_ip[16]   = "192.168.43.112";

@@ -105,6 +105,11 @@ typedef struct {
 #define TANK_COUNT    3
 #define BADGE_COUNT   5
 
+// Runtime state (updated by wifi/mqtt tasks later; static placeholders for UI mockup)
+extern int  g_mqtt_msg_count;
+extern int  g_wifi_rssi;
+extern char g_device_ip[16];
+
 extern Machine g_machines[MACHINE_COUNT];
 extern Tank    g_tanks[TANK_COUNT];
 extern Badge   g_badges[BADGE_COUNT];
