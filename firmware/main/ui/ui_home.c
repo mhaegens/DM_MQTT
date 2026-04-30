@@ -1,9 +1,14 @@
 #include "ui_home.h"
 #include "ui_main.h"
 #include "ui_theme.h"
-#include "data_model.h"
+#include "data.h"
 #include "config.h"
 #include <stdio.h>
+
+// Runtime vars still defined in data_model.c / mqtt_task.c / wifi_simple.c
+extern int  g_mqtt_msg_count;
+extern int  g_wifi_rssi;
+extern char g_device_ip[16];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ui_home.c — Home screen: 2×2 KPI grid + 3 connection status rows.
@@ -252,11 +257,13 @@ void ui_home_refresh(void)
     if (!s_screen) return;
 
     // KPI 0: Running / Total machines
-    int running = data_running_count();
-    lv_label_set_text_fmt(s_kpi_val[0], "%d / %d", running, MACH_COUNT);
+    int running = 0;
+    for (int i = 0; i < MACHINE_COUNT; i++)
+        if (g_machines[i].running) running++;
+    lv_label_set_text_fmt(s_kpi_val[0], "%d / %d", running, MACHINE_COUNT);
 
     const char *stopped_name = NULL;
-    for (int i = 0; i < MACH_COUNT; i++) {
+    for (int i = 0; i < MACHINE_COUNT; i++) {
         if (!g_machines[i].running) {
             stopped_name = g_machines[i].name;
             break;
@@ -268,7 +275,10 @@ void ui_home_refresh(void)
         lv_label_set_text(s_kpi_meta[0], "All running");
 
     // KPI 1: Pulses today (meta is static, set at create time)
-    lv_label_set_text_fmt(s_kpi_val[1], "%d", data_total_pulses());
+    int total_pulses = 0;
+    for (int i = 0; i < MACHINE_COUNT; i++)
+        total_pulses += g_machines[i].pulses;
+    lv_label_set_text_fmt(s_kpi_val[1], "%d", total_pulses);
 
     // KPI 2: MQTT message count (meta "since boot" is static)
     lv_label_set_text_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
@@ -278,9 +288,9 @@ void ui_home_refresh(void)
 
     // Operator row
     if (s_operator_label) {
-        if (g_active_operator >= 0 && g_active_operator < OP_COUNT)
+        if (g_active_badge >= 0 && g_active_badge < BADGE_COUNT)
             lv_label_set_text(s_operator_label,
-                              g_operators[g_active_operator].name);
+                              g_badges[g_active_badge].name);
         else
             lv_label_set_text(s_operator_label, "\xe2\x80\x94");
     }
