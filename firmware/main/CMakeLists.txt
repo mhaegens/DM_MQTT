@@ -1,11 +1,6 @@
 idf_component_register(
     SRCS
         "main.c"
-        "data_model.c"
-        "mqtt_task.c"
-        "sim_task.c"
-        "wifi_simple.c"
-        "hw/buttons.c"
         "ui/ui_main.c"
         "ui/ui_home.c"
         "ui/ui_machines.c"
@@ -13,22 +8,25 @@ idf_component_register(
         "ui/ui_debug.c"
         "ui/ui_nfc.c"
         "ui/ui_detail.c"
+        "ui/data.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_15.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_18.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_22.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_26.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_32.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_sans_40.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_15.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_18.c"
+        "${CMAKE_SOURCE_DIR}/fonts/ibm_plex_mono_26.c"
     INCLUDE_DIRS
         "."
         "ui"
-        "hw"
         "${CMAKE_SOURCE_DIR}/fonts"
     REQUIRES
-        nvs_flash
-        esp_event
-        esp_netif
-        esp_wifi
-        mqtt
-        esp_timer
-        driver
+        waveshare__esp32_p4_wifi6_touch_lcd_4b
+        espressif__esp_lvgl_port
+        esp_log
         freertos
-        log
-        # BSP provides display + touch + LVGL; add when BSP component is present:
-        # waveshare_bsp
-        # lvgl
 )
+
+target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)
