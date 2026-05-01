@@ -1,4 +1,4 @@
-// ui_tanks.c — Three tank columns with fill-level bars + metric chips.
+// ui_tanks.c — Three beer-tank columns: dome cap + fill body + stand legs.
 #include "ui_tanks.h"
 #include "ui_main.h"
 #include "ui_theme.h"
@@ -11,26 +11,26 @@
 
 static const char *TAG = "tanks";
 
-#define COL_GAP   8
-#define ROW_PAD  12
-#define TANK_BODY_H  300   // height of the fill-bar container
-#define CHIP_H        36   // height of each metric chip
+#define COL_GAP      8
+#define ROW_PAD     12
+#define TANK_BODY_H 440   // fill-bar container height (taller now chips are gone)
+#define DOME_H       52   // dome cap height (semi-ellipse top)
+#define DOME_OVERLAP 26   // dome overlaps body by this many px (negative margin)
+#define STAND_W_PCT  45   // stand width as % of col_w
+#define STAND_H      18   // stand base height
 
-static lv_obj_t *s_screen                     = NULL;
-static lv_obj_t *s_fill_bars[TANK_COUNT]      = {NULL};
-static lv_obj_t *s_pct_labels[TANK_COUNT]     = {NULL};
-static lv_obj_t *s_status_badges[TANK_COUNT]  = {NULL};
-static lv_timer_t *s_refresh_timer            = NULL;
-
-// Per-metric chip value labels (for refresh)
-static lv_obj_t *s_chip_vals[TANK_COUNT][MAX_TANK_METRICS] = {{NULL}};
+static lv_obj_t *s_screen                    = NULL;
+static lv_obj_t *s_fill_bars[TANK_COUNT]     = {NULL};
+static lv_obj_t *s_pct_labels[TANK_COUNT]    = {NULL};
+static lv_obj_t *s_status_badges[TANK_COUNT] = {NULL};
+static lv_timer_t *s_refresh_timer           = NULL;
 
 // Per-tank drag state
-static int16_t  s_press_y[TANK_COUNT];
-static float    s_press_pct[TANK_COUNT];
-static bool     s_dragging[TANK_COUNT];
+static int16_t s_press_y[TANK_COUNT];
+static float   s_press_pct[TANK_COUNT];
+static bool    s_dragging[TANK_COUNT];
 
-// ─── Status badge text from level ─────────────────────────────────────────────
+// ─── Status helpers ────────────────────────────────────────────────────────────
 static const char *status_text(float pct) {
     if (pct < 15.0f) return "Critical";
     if (pct < 40.0f) return "Low";
@@ -43,11 +43,11 @@ static lv_color_t status_color(float pct) {
     return COL_OK;
 }
 
-// ─── Update fill bar height and colour from current level ──────────────────
+// ─── Update fill bar from current level ────────────────────────────────────────
 static void refresh_tank(int idx) {
     if (!s_fill_bars[idx] || !s_pct_labels[idx]) return;
-    Tank *t    = &g_tanks[idx];
-    float pct  = tank_level(t);
+    Tank *t   = &g_tanks[idx];
+    float pct = tank_level(t);
     if (pct < 0.0f)   pct = 0.0f;
     if (pct > 100.0f) pct = 100.0f;
 
@@ -58,7 +58,6 @@ static void refresh_tank(int idx) {
     if (fill_h < 0) fill_h = 0;
 
     lv_color_t fc = lv_color_hex(tank_fill_color(pct));
-
     lv_obj_set_height(fill, fill_h);
     lv_obj_set_pos(fill, 1, total_h - fill_h + 1);
     lv_obj_set_style_bg_color(fill, fc, 0);
@@ -74,21 +73,9 @@ static void refresh_tank(int idx) {
     snprintf(buf, sizeof(buf), "%d%%", (int)pct);
     lv_label_set_text(s_pct_labels[idx], buf);
 
-    // Update status badge
     if (s_status_badges[idx]) {
         lv_label_set_text(s_status_badges[idx], status_text(pct));
         lv_obj_set_style_text_color(s_status_badges[idx], status_color(pct), 0);
-    }
-
-    // Update metric chip values
-    for (int k = 1; k < t->metric_count; k++) {
-        if (!s_chip_vals[idx][k]) continue;
-        Metric *m = &t->metrics[k];
-        char val_str[24];
-        snprintf(val_str, sizeof(val_str), "%.1f %s", m->value, m->unit);
-        lv_label_set_text(s_chip_vals[idx][k], val_str);
-        lv_obj_set_style_text_color(s_chip_vals[idx][k],
-                                    lv_color_hex(metric_color(m)), 0);
     }
 }
 
@@ -98,21 +85,13 @@ static void refresh_timer_cb(lv_timer_t *timer) {
     for (int i = 0; i < TANK_COUNT; i++) refresh_tank(i);
 }
 
-// ─── Tank label button tap ─────────────────────────────────────────────────
+// ─── Label button tap → drill into tank overview ───────────────────────────────
 static void label_btn_cb(lv_event_t *e) {
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     ui_push_tank_ovw(idx);
 }
 
-// ─── Chip tap ──────────────────────────────────────────────────────────────
-typedef struct { int tank; int metric; } TankMetricCtx;
-
-static void chip_tap_cb(lv_event_t *e) {
-    TankMetricCtx *ctx = (TankMetricCtx *)lv_event_get_user_data(e);
-    ui_detail_open_tank_metric(ctx->tank, ctx->metric);
-}
-
-// ─── Tank body events: drag-to-set-level + tap-to-detail ──────────────────
+// ─── Tank body events: drag-to-set-level + tap-to-detail ──────────────────────
 static void tank_event_cb(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
@@ -127,8 +106,7 @@ static void tank_event_cb(lv_event_t *e) {
         s_press_y[idx]   = pt.y;
         s_press_pct[idx] = tank_level(t);
         s_dragging[idx]  = false;
-    }
-    else if (code == LV_EVENT_PRESSING) {
+    } else if (code == LV_EVENT_PRESSING) {
         lv_indev_t *indev = lv_indev_active();
         if (!indev) return;
         lv_point_t pt;
@@ -145,54 +123,83 @@ static void tank_event_cb(lv_event_t *e) {
             t->metrics[0].value = new_pct;
             refresh_tank(idx);
         }
-    }
-    else if (code == LV_EVENT_SHORT_CLICKED) {
+    } else if (code == LV_EVENT_SHORT_CLICKED) {
         if (!s_dragging[idx]) {
             ui_detail_open_tank_level(idx);
         }
         s_dragging[idx] = false;
-    }
-    else if (code == LV_EVENT_RELEASED) {
+    } else if (code == LV_EVENT_RELEASED) {
         s_dragging[idx] = false;
     }
 }
 
-// ─── Build one tank column ─────────────────────────────────────────────────
+// ─── Build one tank column ──────────────────────────────────────────────────────
 static void build_tank_col(lv_obj_t *parent, int idx) {
-    Tank *t     = &g_tanks[idx];
-    int col_w   = (CONTENT_W - COL_GAP * (TANK_COUNT + 1)) / TANK_COUNT;
+    Tank *t   = &g_tanks[idx];
+    int col_w = (CONTENT_W - COL_GAP * (TANK_COUNT + 1)) / TANK_COUNT;
 
+    // Absolute layout positions
+    int body_y  = DOME_H - DOME_OVERLAP;                  // body top
+    int stand_y = body_y + TANK_BODY_H;                   // stand top
+    int lbl_y   = stand_y + STAND_H + 6;                  // label button top
+    int stand_w = col_w * STAND_W_PCT / 100;
+
+    // ── Outer transparent column ──────────────────────────────────────────────
     lv_obj_t *col = lv_obj_create(parent);
     lv_obj_set_size(col, col_w, CONTENT_H - ROW_PAD * 2);
     lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(col, 0, 0);
     lv_obj_set_style_pad_all(col, 0, 0);
+    lv_obj_set_style_shadow_width(col, 0, 0);
     lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(col, 6, 0);
 
-    // ── Fill-bar outer container ──────────────────────────────────────────
+    // ── Dome cap — created FIRST so body renders on top of dome's lower half ──
+    lv_obj_t *dome = lv_obj_create(col);
+    lv_obj_set_size(dome, col_w - 8, DOME_H);
+    lv_obj_set_pos(dome, 4, 0);
+    lv_obj_set_style_bg_color(dome, COL_BASE2, 0);
+    lv_obj_set_style_border_color(dome, COL_BD_STR, 0);
+    lv_obj_set_style_border_width(dome, 1, 0);
+    lv_obj_set_style_radius(dome, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_clip_corner(dome, true, 0);
+    lv_obj_set_style_pad_all(dome, 0, 0);
+    lv_obj_set_style_shadow_width(dome, 0, 0);
+    lv_obj_clear_flag(dome, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    // Shine strip on dome
+    lv_obj_t *dome_shine = lv_obj_create(dome);
+    lv_obj_set_size(dome_shine, (col_w - 8) / 3, DOME_H - 4);
+    lv_obj_set_pos(dome_shine, 4, 2);
+    lv_obj_set_style_bg_color(dome_shine, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_bg_opa(dome_shine, LV_OPA_20, 0);
+    lv_obj_set_style_border_width(dome_shine, 0, 0);
+    lv_obj_set_style_radius(dome_shine, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(dome_shine, 0, 0);
+    lv_obj_set_style_shadow_width(dome_shine, 0, 0);
+    lv_obj_clear_flag(dome_shine, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    // ── Fill-bar outer container (tank body) — created AFTER dome to overlap it
     lv_obj_t *outer = lv_obj_create(col);
     lv_obj_set_size(outer, col_w, TANK_BODY_H);
+    lv_obj_set_pos(outer, 0, body_y);
     lv_obj_set_style_bg_color(outer, COL_BASE2, 0);
     lv_obj_set_style_border_color(outer, COL_BD_STR, 0);
     lv_obj_set_style_border_width(outer, 1, 0);
-    lv_obj_set_style_radius(outer, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_radius(outer, SZ_RADIUS, 0);
     lv_obj_set_style_clip_corner(outer, true, 0);
     lv_obj_set_style_pad_all(outer, 0, 0);
+    lv_obj_set_style_shadow_width(outer, 0, 0);
     lv_obj_clear_flag(outer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(outer, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSED,        (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSING,       (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_SHORT_CLICKED,  (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_RELEASED,       (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSED,       (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSING,      (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_RELEASED,      (void *)(intptr_t)idx);
 
-    // Fill bar (anchored to bottom, sized by pct%)
-    lv_obj_t *fill = lv_obj_create(outer);
-    float pct = tank_level(t);
+    // Fill bar (anchored to bottom of outer)
+    float pct  = tank_level(t);
     int fill_h = (int)((TANK_BODY_H - 2) * pct / 100.0f);
+    lv_obj_t *fill = lv_obj_create(outer);
     lv_obj_set_size(fill, col_w - 2, fill_h);
     lv_obj_set_pos(fill, 1, TANK_BODY_H - 2 - fill_h);
     lv_obj_set_style_bg_color(fill, lv_color_hex(tank_fill_color(pct)), 0);
@@ -205,7 +212,7 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_obj_clear_flag(fill, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     s_fill_bars[idx] = fill;
 
-    // Shine strip
+    // Shine strip on fill
     lv_obj_t *shine = lv_obj_create(fill);
     lv_obj_set_size(shine, (col_w - 2) / 3, fill_h > 12 ? fill_h - 6 : fill_h);
     lv_obj_set_pos(shine, 3, 0);
@@ -231,7 +238,7 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
         lv_obj_clear_flag(tick, LV_OBJ_FLAG_CLICKABLE);
     }
 
-    // Percentage label centered on fill bar
+    // Percentage label centered on body
     lv_obj_t *pct_lbl = lv_label_create(outer);
     char buf[8];
     snprintf(buf, sizeof(buf), "%d%%", (int)pct);
@@ -241,9 +248,22 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_obj_center(pct_lbl);
     s_pct_labels[idx] = pct_lbl;
 
-    // ── Tank label button (name + status badge) ───────────────────────────
+    // ── Stand base ────────────────────────────────────────────────────────────
+    lv_obj_t *stand = lv_obj_create(col);
+    lv_obj_set_size(stand, stand_w, STAND_H);
+    lv_obj_set_pos(stand, (col_w - stand_w) / 2, stand_y);
+    lv_obj_set_style_bg_color(stand, COL_BASE3, 0);
+    lv_obj_set_style_border_color(stand, COL_BD, 0);
+    lv_obj_set_style_border_width(stand, 1, 0);
+    lv_obj_set_style_radius(stand, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(stand, 0, 0);
+    lv_obj_set_style_shadow_width(stand, 0, 0);
+    lv_obj_clear_flag(stand, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    // ── Label button (name + status badge) → drill into tank overview ─────────
     lv_obj_t *label_btn = lv_obj_create(col);
     lv_obj_set_size(label_btn, col_w, 40);
+    lv_obj_set_pos(label_btn, 0, lbl_y);
     lv_obj_set_style_bg_color(label_btn, COL_BASE, 0);
     lv_obj_set_style_border_color(label_btn, COL_BD, 0);
     lv_obj_set_style_border_width(label_btn, 1, 0);
@@ -269,59 +289,9 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_obj_set_style_text_font(badge_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(badge_lbl, status_color(pct), 0);
     s_status_badges[idx] = badge_lbl;
-
-    // ── Metric chip strip (skip index 0 = level) ──────────────────────────
-    for (int k = 1; k < t->metric_count; k++) {
-        Metric *m = &t->metrics[k];
-
-        lv_obj_t *chip = lv_obj_create(col);
-        lv_obj_set_size(chip, col_w, CHIP_H);
-        lv_obj_set_style_bg_color(chip, COL_BASE, 0);
-        lv_obj_set_style_radius(chip, SZ_RADIUS_SM, 0);
-        lv_obj_set_style_border_color(chip, COL_BD, 0);
-        lv_obj_set_style_border_width(chip, 1, 0);
-        lv_obj_set_style_pad_hor(chip, 8, 0);
-        lv_obj_set_style_pad_ver(chip, 0, 0);
-        lv_obj_set_style_shadow_width(chip, 0, 0);
-        lv_obj_clear_flag(chip, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_flex_flow(chip, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(chip, LV_FLEX_ALIGN_START,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(chip, 5, 0);
-        lv_obj_add_flag(chip, LV_OBJ_FLAG_CLICKABLE);
-
-        TankMetricCtx *ctx = malloc(sizeof(TankMetricCtx));
-        ctx->tank   = idx;
-        ctx->metric = k;
-        lv_obj_add_event_cb(chip, chip_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
-
-        // Colored 8px status dot
-        lv_obj_t *dot = lv_obj_create(chip);
-        lv_obj_set_size(dot, 8, 8);
-        lv_obj_set_style_bg_color(dot, lv_color_hex(metric_color(m)), 0);
-        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(dot, 4, 0);
-        lv_obj_set_style_border_width(dot, 0, 0);
-        lv_obj_set_style_pad_all(dot, 0, 0);
-        lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-        lv_obj_t *key = lv_label_create(chip);
-        lv_label_set_text(key, m->label);
-        lv_obj_set_style_text_font(key, FONT_SANS_XXS, 0);
-        lv_obj_set_style_text_color(key, COL_TX2, 0);
-        lv_obj_set_flex_grow(key, 1);
-
-        lv_obj_t *val = lv_label_create(chip);
-        char val_str[24];
-        snprintf(val_str, sizeof(val_str), "%.1f %s", m->value, m->unit);
-        lv_label_set_text(val, val_str);
-        lv_obj_set_style_text_font(val, FONT_MONO_XXS, 0);
-        lv_obj_set_style_text_color(val, lv_color_hex(metric_color(m)), 0);
-        s_chip_vals[idx][k] = val;
-    }
 }
 
-// ─── Public ────────────────────────────────────────────────────────────────
+// ─── Public ────────────────────────────────────────────────────────────────────
 void ui_tanks_create(lv_obj_t *parent) {
     s_screen = lv_obj_create(parent);
     lv_obj_set_size(s_screen, CONTENT_W, CONTENT_H);

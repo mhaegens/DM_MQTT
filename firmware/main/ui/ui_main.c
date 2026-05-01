@@ -182,7 +182,7 @@ static void build_shell_bar(void)
 
     g_shell_subtitle = lv_label_create(title_col);
     lv_label_set_text_fmt(g_shell_subtitle,
-                          "SAP Digital Manufacturing \xc2\xb7 %s", PLANT_NAME);
+                          "SAP Digital Manufacturing - %s", PLANT_NAME);
     lv_obj_set_style_text_font(g_shell_subtitle, FONT_MONO_XXS, LV_PART_MAIN);
     lv_obj_set_style_text_color(g_shell_subtitle, COL_TX2, LV_PART_MAIN);
 
@@ -342,10 +342,20 @@ static void build_tab_bar(void)
         lv_obj_set_style_pad_row(col, 2, LV_PART_MAIN);
         s_tab_cols[i] = col;
 
-        lv_obj_t *icon_lbl = lv_label_create(col);
-        lv_label_set_text(icon_lbl, TAB_ICONS[i]);
-        lv_obj_set_style_text_font(icon_lbl, &lv_font_montserrat_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(icon_lbl, COL_TX3, LV_PART_MAIN);
+        lv_obj_t *icon_lbl;
+        if (i == VIEW_TANKS) {
+            extern const lv_image_dsc_t tank_icon;
+            lv_obj_t *img = lv_image_create(col);
+            lv_image_set_src(img, &tank_icon);
+            lv_obj_set_style_image_recolor(img, COL_TX3, 0);
+            lv_obj_set_style_image_recolor_opa(img, LV_OPA_COVER, 0);
+            icon_lbl = img;
+        } else {
+            icon_lbl = lv_label_create(col);
+            lv_label_set_text(icon_lbl, TAB_ICONS[i]);
+            lv_obj_set_style_text_font(icon_lbl, &lv_font_montserrat_24, LV_PART_MAIN);
+            lv_obj_set_style_text_color(icon_lbl, COL_TX3, LV_PART_MAIN);
+        }
 
         lv_obj_t *text_lbl = lv_label_create(col);
         lv_label_set_text(text_lbl, TAB_LABELS[i]);
@@ -376,7 +386,14 @@ static void tab_highlight(ViewId v)
         if (col_obj) {
             lv_obj_t *icon = lv_obj_get_child(col_obj, 0);
             lv_obj_t *lbl  = lv_obj_get_child(col_obj, 1);
-            if (icon) lv_obj_set_style_text_color(icon, col, LV_PART_MAIN);
+            if (icon) {
+                if (lv_obj_has_class(icon, &lv_image_class)) {
+                    lv_obj_set_style_image_recolor(icon, col, 0);
+                    lv_obj_set_style_image_recolor_opa(icon, LV_OPA_COVER, 0);
+                } else {
+                    lv_obj_set_style_text_color(icon, col, LV_PART_MAIN);
+                }
+            }
             if (lbl)  lv_obj_set_style_text_color(lbl,  col, LV_PART_MAIN);
         }
     }
@@ -452,11 +469,10 @@ void ui_push_detail(const char *back_label, const char *metric_label)
     if (g_current_view == VIEW_DETAIL) return;
     g_prev_view = g_current_view;
 
-    // Hide all screens and the tab bar
+    // Hide all screens
     for (int i = 0; i < VIEW_COUNT; i++) {
         if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
     }
-    if (g_tab_bar) lv_obj_add_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
 
     // Show detail overlay
     if (g_screens[VIEW_DETAIL])
@@ -485,8 +501,7 @@ void ui_pop_detail(void)
         g_prev_view    = VIEW_TANKS;
         g_current_view = VIEW_TANK_OVW;
     } else {
-        // Standard: restore tab bar, hide crumb bar, return to tab view
-        if (g_tab_bar)   lv_obj_clear_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
+        // Standard: hide crumb bar, return to tab view
         if (g_crumb_bar) lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
         ui_switch_tab(g_prev_view);
     }
@@ -503,7 +518,6 @@ void ui_push_tank_ovw(int tank_idx)
     for (int i = 0; i < VIEW_COUNT; i++) {
         if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
     }
-    if (g_tab_bar)   lv_obj_add_flag(g_tab_bar, LV_OBJ_FLAG_HIDDEN);
     if (g_screens[VIEW_TANK_OVW])
         lv_obj_clear_flag(g_screens[VIEW_TANK_OVW], LV_OBJ_FLAG_HIDDEN);
     if (g_crumb_bar) lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);

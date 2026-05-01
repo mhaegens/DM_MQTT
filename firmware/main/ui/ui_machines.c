@@ -29,7 +29,7 @@ static const char *TAG = "machines";
 #define DOT_D      14    // status dot diameter
 #define ARC_W      72
 #define ARC_H      50
-#define SPARK_H    40
+#define SPARK_H    32
 
 // ─── Persistent widget references (for refresh / pulse) ───────────────────────
 static lv_obj_t *s_screen                  = NULL;
@@ -115,40 +115,34 @@ static void update_card_border(int idx) {
 // ─── Build one metric tile (for non-SPARK, non-ARC metrics) ──────────────────
 static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_obj_t *tile = lv_obj_create(parent);
-    lv_obj_set_height(tile, LV_SIZE_CONTENT);
+    lv_obj_set_height(tile, LV_PCT(100));   // fill the tile_row height
     lv_obj_set_flex_grow(tile, 1);
     lv_obj_set_style_bg_color(tile, COL_BASE2, 0);
     lv_obj_set_style_border_color(tile, COL_BD, 0);
     lv_obj_set_style_border_width(tile, 1, 0);
     lv_obj_set_style_radius(tile, SZ_RADIUS_SM, 0);
     lv_obj_set_style_pad_hor(tile, 8, 0);
-    lv_obj_set_style_pad_ver(tile, 6, 0);
+    lv_obj_set_style_pad_ver(tile, 4, 0);
     lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_START,
+    lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(tile, 2, 0);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Key label (caption)
+    // Key label
     lv_obj_t *key_lbl = lv_label_create(tile);
     lv_label_set_text(key_lbl, m->label);
     lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
 
-    // Value label
+    // Combined value + unit label (larger font, threshold-colored)
     lv_color_t val_col = lv_color_hex(metric_color(m));
     lv_obj_t *val_lbl = lv_label_create(tile);
-    char val_str[24];
-    snprintf(val_str, sizeof(val_str), "%.1f", m->value);
+    char val_str[32];
+    snprintf(val_str, sizeof(val_str), "%.1f %s", m->value, m->unit);
     lv_label_set_text(val_lbl, val_str);
-    lv_obj_set_style_text_font(val_lbl, FONT_MONO_XS, 0);
+    lv_obj_set_style_text_font(val_lbl, FONT_SANS_SM, 0);
     lv_obj_set_style_text_color(val_lbl, val_col, 0);
-
-    // Unit label
-    lv_obj_t *unit_lbl = lv_label_create(tile);
-    lv_label_set_text(unit_lbl, m->unit);
-    lv_obj_set_style_text_font(unit_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(unit_lbl, COL_TX3, 0);
 
     // Tap to open detail
     lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
@@ -160,8 +154,10 @@ static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
 
 // ─── Build arc gauge widget for one VIZ_ARC metric ───────────────────────────
 static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
+    lv_color_t arc_col = lv_color_hex(metric_color(m));
+
     lv_obj_t *cont = lv_obj_create(parent);
-    lv_obj_set_size(cont, ARC_W + 4, ARC_H + 18);  // arc + value label below
+    lv_obj_set_size(cont, ARC_W + 4, ARC_H + 18);  // key(16) + gap(2) + arc(50) = 68
     lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(cont, 0, 0);
     lv_obj_set_style_pad_all(cont, 0, 0);
@@ -171,6 +167,18 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_obj_set_style_pad_gap(cont, 2, 0);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
+    // Key label above arc — first word only (fits in ARC_W)
+    char abbrev[16];
+    strncpy(abbrev, m->label, 15);
+    abbrev[15] = 0;
+    for (int ci = 0; abbrev[ci]; ci++) {
+        if (abbrev[ci] == ' ') { abbrev[ci] = 0; break; }
+    }
+    lv_obj_t *key_lbl = lv_label_create(cont);
+    lv_label_set_text(key_lbl, abbrev);
+    lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
+
     // Arc widget
     lv_obj_t *arc = lv_arc_create(cont);
     lv_obj_set_size(arc, ARC_W, ARC_H);
@@ -179,21 +187,27 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_arc_set_range(arc, (int16_t)m->min_val, (int16_t)m->max_val);
     lv_arc_set_value(arc, (int16_t)m->value);
 
-    // BG arc: gray
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(arc, 0, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc, lv_color_hex(0xE0E4EF), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc, 5, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, 7, LV_PART_MAIN);
 
-    // Indicator arc: metric threshold color
-    lv_color_t arc_col = lv_color_hex(metric_color(m));
     lv_obj_set_style_arc_color(arc, arc_col, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc, 5, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(arc, 7, LV_PART_INDICATOR);
 
-    // Hide knob
     lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
     lv_obj_set_style_pad_all(arc, 0, LV_PART_KNOB);
 
-    // Remove clickability from the arc itself
     lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+
+    // Value label centered inside the arc
+    lv_obj_t *val_lbl = lv_label_create(arc);
+    char val_str[24];
+    snprintf(val_str, sizeof(val_str), "%.0f %s", m->value, m->unit);
+    lv_label_set_text(val_lbl, val_str);
+    lv_obj_set_style_text_font(val_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(val_lbl, arc_col, 0);
+    lv_obj_center(val_lbl);
 
     // Make container tappable → open detail
     lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
@@ -201,15 +215,6 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     ctx->machine = midx;
     ctx->metric  = kidx;
     lv_obj_add_event_cb(cont, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
-
-    // Value label below arc
-    lv_obj_t *val_lbl = lv_label_create(cont);
-    char val_str[24];
-    snprintf(val_str, sizeof(val_str), "%.0f %s", m->value, m->unit);
-    lv_label_set_text(val_lbl, val_str);
-    lv_obj_set_style_text_font(val_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(val_lbl, arc_col, 0);
-    lv_obj_set_style_text_align(val_lbl, LV_TEXT_ALIGN_CENTER, 0);
 }
 
 // ─── Build one machine card ────────────────────────────────────────────────────
@@ -288,11 +293,11 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(body, 0, 0);
     lv_obj_set_style_pad_hor(body, 10, 0);
-    lv_obj_set_style_pad_ver(body, 8, 0);
+    lv_obj_set_style_pad_ver(body, 4, 0);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(body, 6, 0);
+    lv_obj_set_style_pad_gap(body, 4, 0);
     lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
 
     // ── Sparkline (first VIZ_SPARK metric with history) ──────────────────────
@@ -396,6 +401,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     if (tile_count > 0) {
         lv_obj_t *tile_row = lv_obj_create(body);
         lv_obj_set_size(tile_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_flex_grow(tile_row, 1);
         lv_obj_set_style_bg_opa(tile_row, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(tile_row, 0, 0);
         lv_obj_set_style_pad_all(tile_row, 0, 0);

@@ -63,20 +63,18 @@ static void update_carousel(void) {
         if (!s_badge_cards[i]) continue;
         int rel = i - s_carousel_idx;
 
-        // Hide cards more than 2 away
-        if (rel < -2 || rel > 2) {
+        // Hide cards more than 1 away (only 3 cards visible at a time)
+        if (rel < -1 || rel > 1) {
             lv_obj_add_flag(s_badge_cards[i], LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_clear_flag(s_badge_cards[i], LV_OBJ_FLAG_HIDDEN);
 
             int scale, opa, x, y;
             switch (rel) {
-                case  0: scale=256; opa=255; x=190;  y=20; break;
-                case -1: scale=215; opa=220; x=-70;  y=34; break;
-                case  1: scale=215; opa=220; x=450;  y=34; break;
-                case -2: scale=184; opa=140; x=-240; y=44; break;
-                case  2: scale=184; opa=140; x=620;  y=44; break;
-                default: scale=256; opa=255; x=190;  y=20; break;
+                case  0: scale=256; opa=255; x=180;  y=20; break;
+                case -1: scale=230; opa=220; x=-100; y=30; break;
+                case  1: scale=230; opa=220; x=520;  y=30; break;
+                default: scale=256; opa=255; x=180;  y=20; break;
             }
             lv_obj_set_pos(s_badge_cards[i], x, y);
             lv_obj_set_style_transform_scale(s_badge_cards[i], (int16_t)scale, 0);
@@ -201,11 +199,11 @@ static lv_obj_t *build_badge_card(lv_obj_t *parent, int idx)
     lv_obj_set_style_text_color(plant_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_opa(plant_lbl, LV_OPA_70, 0);
 
-    lv_obj_t *id_lbl = lv_label_create(top);
-    lv_label_set_text(id_lbl, b->id);
-    lv_obj_set_style_text_font(id_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(id_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_opa(id_lbl, LV_OPA_70, 0);
+    lv_obj_t *dept_lbl_top = lv_label_create(top);
+    lv_label_set_text(dept_lbl_top, b->dept);
+    lv_obj_set_style_text_font(dept_lbl_top, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(dept_lbl_top, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_opa(dept_lbl_top, LV_OPA_70, 0);
 
     // Middle: avatar + name + role
     lv_obj_t *mid = lv_obj_create(card);
@@ -215,7 +213,7 @@ static lv_obj_t *build_badge_card(lv_obj_t *parent, int idx)
     lv_obj_set_flex_flow(mid, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(mid, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(mid, 6, 0);
+    lv_obj_set_style_pad_gap(mid, 4, 0);
 
     lv_obj_t *avatar = lv_obj_create(mid);
     lv_obj_set_size(avatar, 44, 44);
@@ -265,26 +263,41 @@ static lv_obj_t *build_badge_card(lv_obj_t *parent, int idx)
     lv_obj_set_style_text_color(role_lbl, lv_color_hex(0xFFFFFF), 0);
     lv_obj_center(role_lbl);
 
-    // Bottom: uid | dept
+    // Bottom: cert/skill pills (fallback to uid if no certs)
     lv_obj_t *bot = lv_obj_create(card);
     lv_obj_remove_style_all(bot);
     lv_obj_set_size(bot, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_clear_flag(bot, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(bot, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(bot, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    lv_obj_set_flex_align(bot, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(bot, 6, 0);
 
-    lv_obj_t *uid_lbl = lv_label_create(bot);
-    lv_label_set_text(uid_lbl, b->uid);
-    lv_obj_set_style_text_font(uid_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(uid_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_opa(uid_lbl, LV_OPA_50, 0);
-
-    lv_obj_t *dept_lbl = lv_label_create(bot);
-    lv_label_set_text(dept_lbl, b->dept);
-    lv_obj_set_style_text_font(dept_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(dept_lbl, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_opa(dept_lbl, LV_OPA_50, 0);
+    if (b->cert_count > 0) {
+        for (int ci = 0; ci < b->cert_count && ci < MAX_CERTS; ci++) {
+            lv_obj_t *pill = lv_obj_create(bot);
+            lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            lv_obj_set_style_bg_color(pill, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_bg_opa(pill, LV_OPA_20, 0);
+            lv_obj_set_style_border_width(pill, 0, 0);
+            lv_obj_set_style_radius(pill, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_pad_hor(pill, 8, 0);
+            lv_obj_set_style_pad_ver(pill, 3, 0);
+            lv_obj_set_style_shadow_width(pill, 0, 0);
+            lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_t *cert_lbl = lv_label_create(pill);
+            lv_label_set_text(cert_lbl, b->certs[ci]);
+            lv_obj_set_style_text_font(cert_lbl, FONT_MONO_XXS, 0);
+            lv_obj_set_style_text_color(cert_lbl, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_text_opa(cert_lbl, LV_OPA_90, 0);
+        }
+    } else {
+        lv_obj_t *uid_lbl = lv_label_create(bot);
+        lv_label_set_text(uid_lbl, b->uid);
+        lv_obj_set_style_text_font(uid_lbl, FONT_MONO_XXS, 0);
+        lv_obj_set_style_text_color(uid_lbl, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_opa(uid_lbl, LV_OPA_50, 0);
+    }
 
     return card;
 }
@@ -425,7 +438,7 @@ void ui_nfc_create(lv_obj_t *parent)
     lv_obj_set_style_text_align(inst1, LV_TEXT_ALIGN_CENTER, 0);
 
     lv_obj_t *inst2 = lv_label_create(s_phys_panel);
-    lv_label_set_text(inst2, "MIFARE Classic · Hold within 5 cm");
+    lv_label_set_text(inst2, "MIFARE Classic - Hold within 5 cm");
     lv_obj_set_style_text_font(inst2, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(inst2, COL_TX3, 0);
     lv_obj_set_style_text_align(inst2, LV_TEXT_ALIGN_CENTER, 0);

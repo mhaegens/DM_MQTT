@@ -11,6 +11,7 @@ idf_component_register(
         "ui/ui_tank_overview.c"
         "ui/data.c"
         "ui/assets/sap_logo.c"
+        "ui/assets/tank_icon.c"
     INCLUDE_DIRS
         "."
         "ui"
