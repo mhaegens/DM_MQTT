@@ -1,1 +1,14 @@
 firmware/components/waveshare_bsp/
+
+# ESP-IDF build output
+build/
+
+# Downloaded component dependencies (fetched at build time)
+managed_components/
+dependencies.lock
+
+# Generated config — sdkconfig.defaults is the source of truth
+sdkconfig
+
+# Claude Code editor metadata
+.claude/

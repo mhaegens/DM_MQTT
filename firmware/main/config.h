@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Default WiFi credentials (overridden by captive-portal provisioning after first boot)
-#define DEFAULT_WIFI_SSID     "your-ssid"
-#define DEFAULT_WIFI_PASSWORD "your-password"
+#define DEFAULT_WIFI_SSID     "iPhone van Michiel"
+#define DEFAULT_WIFI_PASSWORD "LegoPi123"
 
 // MQTT broker — Cloudflare Tunnel WSS endpoint
 #define MQTT_BROKER_URI  "wss://mqttfordm.haegens.be"

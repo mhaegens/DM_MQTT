@@ -2,9 +2,10 @@
 #include "ui_debug.h"
 #include "ui_main.h"
 #include "ui_theme.h"
-#include "data_model.h"
+#include "data.h"
 #include "config.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -15,8 +16,6 @@ static lv_obj_t *s_broker_val = NULL;
 static lv_obj_t *s_mqtt_val   = NULL;
 static lv_obj_t *s_ip_val     = NULL;
 static lv_obj_t *s_rssi_val   = NULL;
-static int       s_log_head   = 0;
-static char      s_log_buf[LOG_LINES][80];
 
 static void debug_sim_btn_cb(lv_event_t *e) {
     (void)e;
@@ -76,7 +75,7 @@ void ui_debug_create(lv_obj_t *parent) {
 
     for (int i = 0; i < LOG_LINES; i++) {
         s_log_labels[i] = lv_label_create(log_panel);
-        lv_label_set_text(s_log_labels[i], "—");
+        lv_label_set_text(s_log_labels[i], " ");
         lv_obj_set_style_text_font(s_log_labels[i], FONT_MONO_XXS, 0);
         lv_obj_set_style_text_color(s_log_labels[i], COL_TX3, 0);
     }
@@ -98,8 +97,7 @@ void ui_debug_create(lv_obj_t *parent) {
 }
 
 void ui_debug_refresh(void) {
-    if (s_broker_val) lv_label_set_text_fmt(s_broker_val, "%s:%d",
-                          g_mqtt_broker, MQTT_BROKER_PORT);
+    if (s_broker_val) lv_label_set_text(s_broker_val, MQTT_BROKER_URI);
     if (s_mqtt_val)   lv_label_set_text(s_mqtt_val,
                           g_mqtt_connected ? "Connected" : "Disconnected");
     if (s_ip_val)     lv_label_set_text(s_ip_val, g_device_ip);
@@ -109,14 +107,20 @@ void ui_debug_refresh(void) {
 }
 
 void ui_debug_log(const char *type, const char *topic, const char *value) {
-    // Shift all labels down (oldest at top scrolls off)
+    // Shift all labels up (oldest at index 0 scrolls off)
     for (int i = 0; i < LOG_LINES - 1; i++) {
         lv_label_set_text(s_log_labels[i],
                           lv_label_get_text(s_log_labels[i + 1]));
         lv_obj_set_style_text_color(s_log_labels[i], COL_TX3, 0);
     }
-    char line[80];
-    snprintf(line, sizeof(line), "%s %s \xe2\x86\x92 %s", type, topic, value);
+    int64_t sec = esp_timer_get_time() / 1000000;
+    char line[96];
+    snprintf(line, sizeof(line), "%3llds %s %s->%s", (long long)sec, type, topic, value);
     lv_label_set_text(s_log_labels[LOG_LINES - 1], line);
-    lv_obj_set_style_text_color(s_log_labels[LOG_LINES - 1], COL_DBG_PUB, 0);
+
+    lv_color_t col;
+    if      (strcmp(type, "OK")  == 0) col = COL_DBG_OK;
+    else if (strcmp(type, "ERR") == 0) col = COL_DBG_ERR;
+    else                               col = COL_DBG_PUB;
+    lv_obj_set_style_text_color(s_log_labels[LOG_LINES - 1], col, 0);
 }

@@ -1,11 +1,6 @@
 idf_component_register(
     SRCS
         "main.c"
-        "data_model.c"
-        "mqtt_task.c"
-        "sim_task.c"
-        "wifi_simple.c"
-        "hw/buttons.c"
         "ui/ui_main.c"
         "ui/ui_home.c"
         "ui/ui_machines.c"
@@ -13,22 +8,21 @@ idf_component_register(
         "ui/ui_debug.c"
         "ui/ui_nfc.c"
         "ui/ui_detail.c"
+        "ui/ui_tank_overview.c"
+        "ui/data.c"
+        "ui/assets/sap_logo.c"
+        "ui/assets/tank_icon.c"
     INCLUDE_DIRS
         "."
         "ui"
-        "hw"
-        "${CMAKE_SOURCE_DIR}/fonts"
+        "ui/assets"
     REQUIRES
-        nvs_flash
-        esp_event
-        esp_netif
-        esp_wifi
-        mqtt
-        esp_timer
-        driver
-        freertos
+        waveshare__esp32_p4_wifi6_touch_lcd_4b
+        espressif__esp_lvgl_port
         log
-        # BSP provides display + touch + LVGL; add when BSP component is present:
-        # waveshare_bsp
-        # lvgl
+        freertos
+        esp_timer
+        mqtt
 )
+
+target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)

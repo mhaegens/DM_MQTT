@@ -16,7 +16,17 @@ dependencies:
   ## MQTT client (built into IDF, listed for clarity)
   ## esp_mqtt is part of IDF — no separate component needed
 
-  ## ST7703 MIPI-DSI panel driver — confirmed from Waveshare ESP-IDF demo zip
-  ## (ESP32-P4-WIFI6-Touch-LCD-4B.zip / ESP-IDF/07_color_panel)
+  ## ST7703 MIPI-DSI panel driver
   waveshare/esp_lcd_st7703:
     version: "*"
+
+  ## Official Waveshare BSP (same version used by the working lvgl_demo_v9)
+  waveshare/esp32_p4_wifi6_touch_lcd_4b:
+    version: "*"
+
+  ## ESP32-P4 WiFi via ESP32-C6 companion — disabled for UI bring-up
+  ## Re-enable for Phase 3:
+  # espressif/esp_wifi_remote:
+  #   version: "*"
+  # espressif/esp_hosted:
+  #   version: "*"

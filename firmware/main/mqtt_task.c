@@ -3,6 +3,7 @@
 #include "config.h"
 #include "ui/ui_main.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "mqtt_client.h"
 #include <stdio.h>
 #include <string.h>

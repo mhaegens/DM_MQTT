@@ -1,6 +1,7 @@
 // wifi_simple.c — Phase 3: connect to WiFi using compile-time credentials.
 // Phase 8 replaces this with wifi_prov_init() (captive portal).
 #include "config.h"
+#include "data_model.h"
 #include "ui/ui_main.h"
 #include "esp_wifi.h"
 #include "esp_log.h"

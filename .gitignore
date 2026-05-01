@@ -11,3 +11,15 @@ nodered/
 
 # macOS
 .DS_Store
+
+# Editor backup files
+*.bak*
+
+# One-off scripts not meant for the repo
+scripts/split_pdfs.py
+
+# Claude Code editor metadata
+.claude/
+
+# Superpowers AI session cache
+.superpowers/
