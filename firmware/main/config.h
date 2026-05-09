@@ -36,7 +36,7 @@
 // discrepancy is observed during bring-up)
 #define GPIO_I2C_SDA      7
 #define GPIO_I2C_SCL      8
-#define GPIO_BOOT_BTN     9    // Also I2S DSDIN — see audio.h conflict note
+#define GPIO_BOOT_BTN    35    // BOOT button (GPIO35 = ESP32-P4 strapping pin); GPIO9 is I2S DSDIN
 
 // SD card (SDIO 4-bit) — available but not used in Phase 1
 #define GPIO_SD_CLK       43

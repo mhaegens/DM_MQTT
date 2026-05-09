@@ -12,6 +12,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── View IDs ─────────────────────────────────────────────────────────────────
+// ORDERING CONTRACT: tab screens (VIEW_HOME..VIEW_NFC) MUST stay before overlay
+// screens (VIEW_NFC+1..). ui_btn_short_press() uses > VIEW_NFC to distinguish them.
 typedef enum {
     VIEW_HOME     = 0,
     VIEW_MACHINES = 1,
