@@ -33,6 +33,7 @@ void ui_detail_create(lv_obj_t *parent);
 void ui_detail_step(int direction);
 void ui_tank_overview_create(lv_obj_t *parent);
 void ui_tank_overview_activate(int tank_idx);
+void ui_tank_overview_deactivate(void);
 
 static const char *TAG = "ui";
 
@@ -503,6 +504,9 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
+    if (g_current_view == VIEW_TANK_OVW) {
+        ui_tank_overview_deactivate();
+    }
     if (g_current_view == VIEW_WIFI_SETUP) {
         if (g_crumb_bar) lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
         ui_switch_tab(g_prev_view);
@@ -527,6 +531,7 @@ void ui_pop_detail(void)
 void ui_push_tank_ovw(int tank_idx)
 {
     if (g_current_view == VIEW_DETAIL) return;
+    ui_tank_overview_deactivate();   // stop any prior animation
     g_prev_view = g_current_view;
     s_tank_ovw_idx = tank_idx;
     snprintf(s_tank_ovw_crumb, sizeof(s_tank_ovw_crumb),
