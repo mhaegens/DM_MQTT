@@ -8,6 +8,10 @@
 #include "ui/ui_main.h"
 #include "ui/ui_screenshot.h"
 #include "config.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
+#include "esp_event.h"
+#include "wifi_manager.h"
 
 static const char *TAG = "main";
 
@@ -58,6 +62,12 @@ static void console_task(void *arg) {
 
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
+
+    // Network prerequisites — must come before WiFi init
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    wifi_manager_init();
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),

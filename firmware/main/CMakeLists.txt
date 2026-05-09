@@ -1,6 +1,8 @@
 idf_component_register(
     SRCS
         "main.c"
+        "wifi_manager.c"
+        "wifi_portal.c"
         "ui/ui_main.c"
         "ui/ui_home.c"
         "ui/ui_machines.c"
@@ -11,6 +13,7 @@ idf_component_register(
         "ui/ui_tank_overview.c"
         "ui/ui_screenshot.c"
         "ui/ui_wifi_setup.c"
+        "ui/ui_wifi_password.c"
         "ui/ui_mqtt_detail.c"
         "ui/data.c"
         "ui/assets/sap_logo.c"
@@ -26,6 +29,11 @@ idf_component_register(
         freertos
         esp_timer
         mqtt
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)
