@@ -1,4 +1,5 @@
-// ui_tanks.c — Three beer-tank columns: dome cap + fill body + stand legs.
+// ui_tanks.c — Three hopper-shaped tanks: cylindrical top + tapered bottom.
+// Rendered via LV_EVENT_DRAW_MAIN with lv_draw_rect and lv_draw_triangle.
 #include "ui_tanks.h"
 #include "ui_main.h"
 #include "ui_theme.h"
@@ -11,19 +12,30 @@
 
 static const char *TAG = "tanks";
 
-#define COL_GAP      8
-#define ROW_PAD     12
-#define TANK_BODY_H 440   // fill-bar container height (taller now chips are gone)
-#define DOME_H       52   // dome cap height (semi-ellipse top)
-#define DOME_OVERLAP 26   // dome overlaps body by this many px (negative margin)
-#define STAND_W_PCT  45   // stand width as % of col_w
-#define STAND_H      18   // stand base height
+// ─── Layout constants ─────────────────────────────────────────────────────────
+#define COL_GAP          8
+#define ROW_PAD         12
+#define TANK_TOTAL_H   460    // total tank widget height (px)
+#define TANK_UPPER_RATIO 70   // % of TANK_TOTAL_H = cylindrical section
+#define TANK_TIP_W      20    // flat base width at bottom of taper (px)
+#define TANK_RADIUS     12    // top-corner border radius
+#define LABEL_BTN_H     48    // tank name / badge button height (2 rows)
+#define LABEL_BTN_GAP    6    // gap between tank widget and label button
 
-static lv_obj_t *s_screen                    = NULL;
-static lv_obj_t *s_fill_bars[TANK_COUNT]     = {NULL};
-static lv_obj_t *s_pct_labels[TANK_COUNT]    = {NULL};
-static lv_obj_t *s_status_badges[TANK_COUNT] = {NULL};
-static lv_timer_t *s_refresh_timer           = NULL;
+// ─── Per-tank column state ────────────────────────────────────────────────────
+typedef struct {
+    int        tank_idx;
+    lv_coord_t col_w;
+    lv_obj_t  *tank_widget;
+    lv_obj_t  *pct_label;
+    lv_obj_t  *tick_labels[3];
+    lv_coord_t tick_ys[3];
+    lv_obj_t  *badge_label;
+} tank_col_t;
+
+static tank_col_t  s_cols[TANK_COUNT];
+static lv_obj_t   *s_screen       = NULL;
+static lv_timer_t *s_refresh_timer = NULL;
 
 // Per-tank drag state
 static int16_t s_press_y[TANK_COUNT];
@@ -32,9 +44,9 @@ static bool    s_dragging[TANK_COUNT];
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 static const char *status_text(float pct) {
-    if (pct < 15.0f) return "Critical";
-    if (pct < 40.0f) return "Low";
-    return "OK";
+    if (pct < 15.0f) return "CRITICAL";
+    if (pct < 40.0f) return "LOW LEVEL";
+    return "OPERATIONAL";
 }
 
 static lv_color_t status_color(float pct) {
@@ -43,39 +55,200 @@ static lv_color_t status_color(float pct) {
     return COL_OK;
 }
 
-// ─── Update fill bar from current level ────────────────────────────────────────
+// ─── Hopper shape helpers ──────────────────────────────────────────────────────
+
+// Width of the hopper at fill_px pixels from the bottom.
+// At fill_px=0: TANK_TIP_W; at fill_px=taper_h: full column width.
+static lv_coord_t hopper_width_at_fill(lv_coord_t col_w, lv_coord_t taper_h,
+                                        lv_coord_t fill_px) {
+    if (fill_px <= 0)          return TANK_TIP_W;
+    if (fill_px >= taper_h)    return col_w;
+    return TANK_TIP_W + (col_w - TANK_TIP_W) * fill_px / taper_h;
+}
+
+// Draw a filled rectangle with no border.
+static void draw_filled_rect(lv_layer_t *layer,
+                              lv_coord_t x1, lv_coord_t y1,
+                              lv_coord_t x2, lv_coord_t y2,
+                              lv_color_t color, lv_opa_t opa, int32_t radius) {
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.bg_color    = color;
+    dsc.bg_opa      = opa;
+    dsc.border_width = 0;
+    dsc.radius      = radius;
+    lv_area_t area = {x1, y1, x2, y2};
+    lv_draw_rect(layer, &dsc, &area);
+}
+
+// Draw a trapezoid as two triangles (top_x1..top_x2 at top_y, narrowing to
+// bot_x1..bot_x2 at bot_y).
+static void draw_taper(lv_layer_t *layer,
+                        lv_coord_t top_x1, lv_coord_t top_x2,
+                        lv_coord_t bot_x1, lv_coord_t bot_x2,
+                        lv_coord_t top_y,  lv_coord_t bot_y,
+                        lv_color_t color,  lv_opa_t opa) {
+    lv_draw_triangle_dsc_t dsc;
+    lv_draw_triangle_dsc_init(&dsc);
+    dsc.color = color;
+    dsc.opa   = opa;
+
+    // Triangle 1: top-left, top-right, bottom-right
+    dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
+    dsc.p[1].x = top_x2; dsc.p[1].y = top_y;
+    dsc.p[2].x = bot_x2; dsc.p[2].y = bot_y;
+    lv_draw_triangle(layer, &dsc);
+
+    // Triangle 2: top-left, bottom-left, bottom-right
+    dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
+    dsc.p[1].x = bot_x1; dsc.p[1].y = bot_y;
+    dsc.p[2].x = bot_x2; dsc.p[2].y = bot_y;
+    lv_draw_triangle(layer, &dsc);
+}
+
+// ─── Custom draw callback ──────────────────────────────────────────────────────
+static void tank_draw_cb(lv_event_t *e) {
+    if (lv_event_get_code(e) != LV_EVENT_DRAW_MAIN) return;
+
+    lv_obj_t   *obj   = lv_event_get_target(e);
+    lv_layer_t *layer = lv_event_get_layer(e);
+    tank_col_t *col   = (tank_col_t *)lv_obj_get_user_data(obj);
+    if (!col) return;
+
+    Tank  *t   = &g_tanks[col->tank_idx];
+    float  pct = tank_level(t);
+    if (pct < 0.0f)   pct = 0.0f;
+    if (pct > 100.0f) pct = 100.0f;
+    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
+
+    lv_area_t  coords;
+    lv_obj_get_coords(obj, &coords);
+    lv_coord_t ox      = coords.x1;
+    lv_coord_t oy      = coords.y1;
+    lv_coord_t w       = lv_obj_get_width(obj);
+    lv_coord_t h       = TANK_TOTAL_H;
+    lv_coord_t upper_h = h * TANK_UPPER_RATIO / 100;
+    lv_coord_t taper_h = h - upper_h;
+    lv_coord_t tip_x1  = ox + (w - TANK_TIP_W) / 2;
+    lv_coord_t tip_x2  = ox + (w + TANK_TIP_W) / 2;
+    lv_coord_t bot_y   = oy + h;
+    lv_coord_t jct_y   = oy + upper_h;
+
+    /* 1. Background: upper rect with rounded top + 1px border */
+    {
+        lv_draw_rect_dsc_t dsc;
+        lv_draw_rect_dsc_init(&dsc);
+        dsc.bg_color    = COL_BASE2;
+        dsc.bg_opa      = LV_OPA_COVER;
+        dsc.border_color = COL_BD_STR;
+        dsc.border_width = 1;
+        dsc.border_opa  = LV_OPA_COVER;
+        dsc.radius      = TANK_RADIUS;
+        lv_area_t area = {ox, oy, ox + w - 1, jct_y};
+        lv_draw_rect(layer, &dsc, &area);
+    }
+
+    /* 2. Background: taper (covers the bottom border of the rect above) */
+    draw_taper(layer, ox, ox + w, tip_x1, tip_x2, jct_y, bot_y,
+               COL_BASE2, LV_OPA_COVER);
+
+    /* 3. Taper outline: diagonal lines for the slanted edges */
+    {
+        lv_draw_line_dsc_t line;
+        lv_draw_line_dsc_init(&line);
+        line.color = COL_BD_STR;
+        line.width = 1;
+        line.opa   = LV_OPA_COVER;
+        line.p1.x = ox;       line.p1.y = jct_y;
+        line.p2.x = tip_x1;   line.p2.y = bot_y;
+        lv_draw_line(layer, &line);
+        line.p1.x = ox + w;   line.p1.y = jct_y;
+        line.p2.x = tip_x2;   line.p2.y = bot_y;
+        lv_draw_line(layer, &line);
+    }
+
+    /* 4. Fill */
+    lv_coord_t fill_px = (lv_coord_t)(pct * (float)h / 100.0f);
+    if (fill_px > 0) {
+        lv_coord_t waterline = oy + h - fill_px;
+
+        if (waterline >= jct_y) {
+            /* Fill only inside taper */
+            lv_coord_t fw   = hopper_width_at_fill(w, taper_h, fill_px);
+            lv_coord_t ftx1 = ox + (w - fw) / 2;
+            lv_coord_t ftx2 = ox + (w + fw) / 2;
+            draw_taper(layer, ftx1, ftx2, tip_x1, tip_x2,
+                       waterline, bot_y, fc, LV_OPA_COVER);
+        } else {
+            /* Fill spans rect + full taper */
+            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y,
+                             fc, LV_OPA_COVER, 0);
+            draw_taper(layer, ox, ox + w, tip_x1, tip_x2,
+                       jct_y, bot_y, fc, LV_OPA_COVER);
+        }
+
+        /* Shine strip on left side of fill */
+        lv_coord_t shine_y1 = waterline + 4;
+        lv_coord_t shine_y2 = bot_y - 6;
+        if (shine_y2 > shine_y1) {
+            draw_filled_rect(layer, ox + 3, shine_y1, ox + 9, shine_y2,
+                             lv_color_white(), LV_OPA_20, SZ_RADIUS_SM);
+        }
+    }
+
+    /* 5. Tick lines at 25%, 50%, 75% fill marks */
+    static const int TICK_PCTS[] = {75, 50, 25};
+    for (int i = 0; i < 3; i++) {
+        lv_coord_t tick_y_off = h * (100 - TICK_PCTS[i]) / 100;
+        lv_coord_t tick_y     = oy + tick_y_off;
+        lv_coord_t depth      = tick_y_off - upper_h;
+        lv_coord_t tick_w;
+        if (depth <= 0) {
+            tick_w = w;
+        } else {
+            tick_w = hopper_width_at_fill(w, taper_h, taper_h - depth);
+        }
+        lv_coord_t tx1 = ox + (w - tick_w) / 2;
+        lv_draw_rect_dsc_t tdsc;
+        lv_draw_rect_dsc_init(&tdsc);
+        tdsc.bg_color    = lv_color_hex(0xC0C8D8);
+        tdsc.bg_opa      = LV_OPA_COVER;
+        tdsc.border_width = 0;
+        tdsc.radius      = 0;
+        lv_area_t tick_area = {tx1, tick_y, tx1 + tick_w - 1, tick_y + 1};
+        lv_draw_rect(layer, &tdsc, &tick_area);
+    }
+}
+
+// ─── Update fill and labels from current level ────────────────────────────────
 static void refresh_tank(int idx) {
-    if (!s_fill_bars[idx] || !s_pct_labels[idx]) return;
-    Tank *t   = &g_tanks[idx];
-    float pct = tank_level(t);
+    tank_col_t *col = &s_cols[idx];
+    if (!col->tank_widget) return;
+
+    Tank  *t   = &g_tanks[idx];
+    float  pct = tank_level(t);
     if (pct < 0.0f)   pct = 0.0f;
     if (pct > 100.0f) pct = 100.0f;
 
-    lv_obj_t *fill  = s_fill_bars[idx];
-    lv_obj_t *outer = lv_obj_get_parent(fill);
-    int total_h     = lv_obj_get_height(outer) - 2;
-    int fill_h      = (int)(total_h * pct / 100.0f);
-    if (fill_h < 0) fill_h = 0;
-
-    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
-    lv_obj_set_height(fill, fill_h);
-    lv_obj_set_pos(fill, 1, total_h - fill_h + 1);
-    lv_obj_set_style_bg_color(fill, fc, 0);
-
-    lv_obj_t *shine = lv_obj_get_child(fill, 0);
-    if (shine) {
-        int shine_h = fill_h > 12 ? fill_h - 6 : fill_h;
-        lv_obj_set_size(shine, lv_obj_get_width(fill) / 3, shine_h);
-        lv_obj_set_pos(shine, 3, 0);
-    }
+    lv_obj_invalidate(col->tank_widget);
 
     char buf[8];
     snprintf(buf, sizeof(buf), "%d%%", (int)pct);
-    lv_label_set_text(s_pct_labels[idx], buf);
+    lv_label_set_text(col->pct_label, buf);
 
-    if (s_status_badges[idx]) {
-        lv_label_set_text(s_status_badges[idx], status_text(pct));
-        lv_obj_set_style_text_color(s_status_badges[idx], status_color(pct), 0);
+    lv_coord_t fill_px  = (lv_coord_t)(pct * TANK_TOTAL_H / 100.0f);
+    lv_coord_t fill_mid = TANK_TOTAL_H - fill_px / 2;
+    lv_coord_t lbl_h    = lv_obj_get_height(col->pct_label);
+    lv_coord_t lbl_w    = lv_obj_get_width(col->pct_label);
+    lv_coord_t col_w    = col->col_w;
+    lv_coord_t label_y  = fill_mid - lbl_h / 2;
+    if (label_y > TANK_TOTAL_H - lbl_h - 2) label_y = TANK_TOTAL_H - lbl_h - 2;
+    if (label_y < 0) label_y = 0;
+    lv_obj_set_pos(col->pct_label, (col_w - lbl_w) / 2, label_y);
+
+    if (col->badge_label) {
+        lv_label_set_text(col->badge_label, status_text(pct));
+        lv_obj_set_style_text_color(col->badge_label, status_color(pct), 0);
     }
 }
 
@@ -91,7 +264,7 @@ static void label_btn_cb(lv_event_t *e) {
     ui_push_tank_ovw(idx);
 }
 
-// ─── Tank body events: drag-to-set-level + tap-to-detail ──────────────────────
+// ─── Tank widget drag + tap events ────────────────────────────────────────────
 static void tank_event_cb(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
@@ -114,8 +287,8 @@ static void tank_event_cb(lv_event_t *e) {
         int dy = s_press_y[idx] - pt.y;
         if (dy > 8 || dy < -8) s_dragging[idx] = true;
         if (s_dragging[idx]) {
-            lv_obj_t *outer = lv_event_get_target(e);
-            int h = lv_obj_get_height(outer);
+            lv_obj_t *widget = lv_event_get_target(e);
+            int h = lv_obj_get_height(widget);
             if (h <= 0) return;
             float new_pct = s_press_pct[idx] + (float)dy / (float)h * 100.0f;
             if (new_pct < 0.0f)   new_pct = 0.0f;
@@ -133,136 +306,97 @@ static void tank_event_cb(lv_event_t *e) {
     }
 }
 
-// ─── Build one tank column ──────────────────────────────────────────────────────
+// ─── Position tick number labels after layout resolves ────────────────────────
+static void position_tick_labels(int col_idx) {
+    tank_col_t *col    = &s_cols[col_idx];
+    lv_coord_t  w      = col->col_w;
+    lv_coord_t  upper_h = TANK_TOTAL_H * TANK_UPPER_RATIO / 100;
+    lv_coord_t  taper_h = TANK_TOTAL_H - upper_h;
+
+    static const int TICK_PCTS[] = {75, 50, 25};
+    for (int i = 0; i < 3; i++) {
+        lv_coord_t tick_y_off = TANK_TOTAL_H * (100 - TICK_PCTS[i]) / 100;
+        lv_coord_t depth      = tick_y_off - upper_h;
+        lv_coord_t tick_w;
+        if (depth <= 0) {
+            tick_w = w;
+        } else {
+            tick_w = hopper_width_at_fill(w, taper_h, taper_h - depth);
+        }
+        lv_coord_t right_edge = (w + tick_w) / 2;
+        lv_coord_t lbl_w      = lv_obj_get_width(col->tick_labels[i]);
+        lv_coord_t lbl_h      = lv_obj_get_height(col->tick_labels[i]);
+        lv_obj_set_pos(col->tick_labels[i],
+                       right_edge - lbl_w - 3,
+                       tick_y_off - lbl_h / 2);
+    }
+}
+
+// ─── Build one tank column ─────────────────────────────────────────────────────
 static void build_tank_col(lv_obj_t *parent, int idx) {
-    Tank *t   = &g_tanks[idx];
-    int col_w = (CONTENT_W - COL_GAP * (TANK_COUNT + 1)) / TANK_COUNT;
+    Tank      *t    = &g_tanks[idx];
+    lv_coord_t col_w = (CONTENT_W - COL_GAP * (TANK_COUNT + 1)) / TANK_COUNT;
+    tank_col_t *col = &s_cols[idx];
+    col->tank_idx = idx;
+    col->col_w    = col_w;
 
-    // Absolute layout positions
-    int body_y  = DOME_H - DOME_OVERLAP;                  // body top
-    int stand_y = body_y + TANK_BODY_H;                   // stand top
-    int lbl_y   = stand_y + STAND_H + 6;                  // label button top
-    int stand_w = col_w * STAND_W_PCT / 100;
+    /* Outer transparent column container */
+    lv_obj_t *cont = lv_obj_create(parent);
+    lv_obj_set_size(cont, col_w, CONTENT_H - ROW_PAD * 2);
+    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+    lv_obj_set_style_pad_all(cont, 0, 0);
+    lv_obj_set_style_shadow_width(cont, 0, 0);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
-    // ── Outer transparent column ──────────────────────────────────────────────
-    lv_obj_t *col = lv_obj_create(parent);
-    lv_obj_set_size(col, col_w, CONTENT_H - ROW_PAD * 2);
-    lv_obj_set_style_bg_opa(col, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(col, 0, 0);
-    lv_obj_set_style_pad_all(col, 0, 0);
-    lv_obj_set_style_shadow_width(col, 0, 0);
-    lv_obj_clear_flag(col, LV_OBJ_FLAG_SCROLLABLE);
+    /* Tank widget — transparent background, custom draw fills it */
+    lv_obj_t *tank_w = lv_obj_create(cont);
+    lv_obj_set_size(tank_w, col_w, TANK_TOTAL_H);
+    lv_obj_set_pos(tank_w, 0, 0);
+    lv_obj_set_style_bg_opa(tank_w, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(tank_w, 0, 0);
+    lv_obj_set_style_outline_width(tank_w, 0, 0);
+    lv_obj_set_style_pad_all(tank_w, 0, 0);
+    lv_obj_set_style_shadow_width(tank_w, 0, 0);
+    lv_obj_clear_flag(tank_w, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(tank_w, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_user_data(tank_w, col);
+    lv_obj_add_event_cb(tank_w, tank_draw_cb,   LV_EVENT_DRAW_MAIN,     NULL);
+    lv_obj_add_event_cb(tank_w, tank_event_cb,  LV_EVENT_PRESSED,       (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(tank_w, tank_event_cb,  LV_EVENT_PRESSING,      (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(tank_w, tank_event_cb,  LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)idx);
+    lv_obj_add_event_cb(tank_w, tank_event_cb,  LV_EVENT_RELEASED,      (void *)(intptr_t)idx);
+    col->tank_widget = tank_w;
 
-    // ── Dome cap — created FIRST so body renders on top of dome's lower half ──
-    lv_obj_t *dome = lv_obj_create(col);
-    lv_obj_set_size(dome, col_w - 8, DOME_H);
-    lv_obj_set_pos(dome, 4, 0);
-    lv_obj_set_style_bg_color(dome, COL_BASE2, 0);
-    lv_obj_set_style_border_color(dome, COL_BD_STR, 0);
-    lv_obj_set_style_border_width(dome, 1, 0);
-    lv_obj_set_style_radius(dome, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_clip_corner(dome, true, 0);
-    lv_obj_set_style_pad_all(dome, 0, 0);
-    lv_obj_set_style_shadow_width(dome, 0, 0);
-    lv_obj_clear_flag(dome, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // Shine strip on dome
-    lv_obj_t *dome_shine = lv_obj_create(dome);
-    lv_obj_set_size(dome_shine, (col_w - 8) / 3, DOME_H - 4);
-    lv_obj_set_pos(dome_shine, 4, 2);
-    lv_obj_set_style_bg_color(dome_shine, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(dome_shine, LV_OPA_20, 0);
-    lv_obj_set_style_border_width(dome_shine, 0, 0);
-    lv_obj_set_style_radius(dome_shine, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(dome_shine, 0, 0);
-    lv_obj_set_style_shadow_width(dome_shine, 0, 0);
-    lv_obj_clear_flag(dome_shine, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // ── Fill-bar outer container (tank body) — created AFTER dome to overlap it
-    lv_obj_t *outer = lv_obj_create(col);
-    lv_obj_set_size(outer, col_w, TANK_BODY_H);
-    lv_obj_set_pos(outer, 0, body_y);
-    lv_obj_set_style_bg_color(outer, COL_BASE2, 0);
-    lv_obj_set_style_border_color(outer, COL_BD_STR, 0);
-    lv_obj_set_style_border_width(outer, 1, 0);
-    lv_obj_set_style_radius(outer, SZ_RADIUS, 0);
-    lv_obj_set_style_clip_corner(outer, true, 0);
-    lv_obj_set_style_pad_all(outer, 0, 0);
-    lv_obj_set_style_shadow_width(outer, 0, 0);
-    lv_obj_clear_flag(outer, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(outer, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSED,       (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_PRESSING,      (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_SHORT_CLICKED, (void *)(intptr_t)idx);
-    lv_obj_add_event_cb(outer, tank_event_cb, LV_EVENT_RELEASED,      (void *)(intptr_t)idx);
-
-    // Fill bar (anchored to bottom of outer)
-    float pct  = tank_level(t);
-    int fill_h = (int)((TANK_BODY_H - 2) * pct / 100.0f);
-    lv_obj_t *fill = lv_obj_create(outer);
-    lv_obj_set_size(fill, col_w - 2, fill_h);
-    lv_obj_set_pos(fill, 1, TANK_BODY_H - 2 - fill_h);
-    lv_obj_set_style_bg_color(fill, lv_color_hex(tank_fill_color(pct)), 0);
-    lv_obj_set_style_bg_opa(fill, LV_OPA_80, 0);
-    lv_obj_set_style_border_width(fill, 0, 0);
-    lv_obj_set_style_radius(fill, 0, 0);
-    lv_obj_set_style_pad_all(fill, 0, 0);
-    lv_obj_set_style_outline_width(fill, 0, 0);
-    lv_obj_set_style_shadow_width(fill, 0, 0);
-    lv_obj_clear_flag(fill, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-    s_fill_bars[idx] = fill;
-
-    // Shine strip on fill
-    lv_obj_t *shine = lv_obj_create(fill);
-    lv_obj_set_size(shine, (col_w - 2) / 3, fill_h > 12 ? fill_h - 6 : fill_h);
-    lv_obj_set_pos(shine, 3, 0);
-    lv_obj_set_style_bg_color(shine, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(shine, LV_OPA_20, 0);
-    lv_obj_set_style_border_width(shine, 0, 0);
-    lv_obj_set_style_radius(shine, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(shine, 0, 0);
-    lv_obj_set_style_outline_width(shine, 0, 0);
-    lv_obj_set_style_shadow_width(shine, 0, 0);
-    lv_obj_clear_flag(shine, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // Tick marks at 25%, 50%, 75%
-    for (int p = 25; p <= 75; p += 25) {
-        int ty = (int)((TANK_BODY_H - 2) * (100 - p) / 100);
-        lv_obj_t *tick = lv_obj_create(outer);
-        lv_obj_set_size(tick, col_w / 4, 1);
-        lv_obj_set_pos(tick, col_w - col_w / 4 - 2, ty);
-        lv_obj_set_style_bg_color(tick, lv_color_hex(0xC0C8D8), 0);
-        lv_obj_set_style_border_width(tick, 0, 0);
-        lv_obj_set_style_radius(tick, 0, 0);
-        lv_obj_set_style_pad_all(tick, 0, 0);
-        lv_obj_clear_flag(tick, LV_OBJ_FLAG_CLICKABLE);
+    /* Tick number labels (75, 50, 25) positioned after layout resolves */
+    static const int TICK_PCTS[] = {75, 50, 25};
+    for (int i = 0; i < 3; i++) {
+        lv_coord_t tick_y_off = TANK_TOTAL_H * (100 - TICK_PCTS[i]) / 100;
+        lv_obj_t *tl = lv_label_create(tank_w);
+        lv_label_set_text_fmt(tl, "%d", TICK_PCTS[i]);
+        lv_obj_set_style_text_color(tl, COL_TX3, 0);
+        lv_obj_set_style_text_font(tl, FONT_SANS_XXS, 0);
+        lv_obj_clear_flag(tl, LV_OBJ_FLAG_CLICKABLE);
+        col->tick_labels[i] = tl;
+        col->tick_ys[i]     = tick_y_off;
     }
 
-    // Percentage label centered on body
-    lv_obj_t *pct_lbl = lv_label_create(outer);
+    /* Percentage label — centered initially, repositioned by refresh_tank */
+    float pct = tank_level(t);
+    lv_obj_t *pct_lbl = lv_label_create(tank_w);
     char buf[8];
     snprintf(buf, sizeof(buf), "%d%%", (int)pct);
     lv_label_set_text(pct_lbl, buf);
     lv_obj_set_style_text_font(pct_lbl, FONT_MONO_MD, 0);
-    lv_obj_set_style_text_color(pct_lbl, COL_BASE, 0);
+    lv_obj_set_style_text_color(pct_lbl, lv_color_white(), 0);
+    lv_obj_clear_flag(pct_lbl, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_center(pct_lbl);
-    s_pct_labels[idx] = pct_lbl;
+    col->pct_label = pct_lbl;
 
-    // ── Stand base ────────────────────────────────────────────────────────────
-    lv_obj_t *stand = lv_obj_create(col);
-    lv_obj_set_size(stand, stand_w, STAND_H);
-    lv_obj_set_pos(stand, (col_w - stand_w) / 2, stand_y);
-    lv_obj_set_style_bg_color(stand, COL_BASE3, 0);
-    lv_obj_set_style_border_color(stand, COL_BD, 0);
-    lv_obj_set_style_border_width(stand, 1, 0);
-    lv_obj_set_style_radius(stand, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(stand, 0, 0);
-    lv_obj_set_style_shadow_width(stand, 0, 0);
-    lv_obj_clear_flag(stand, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // ── Label button (name + status badge) → drill into tank overview ─────────
-    lv_obj_t *label_btn = lv_obj_create(col);
-    lv_obj_set_size(label_btn, col_w, 40);
+    /* Label button (name + status badge) */
+    lv_coord_t lbl_y = TANK_TOTAL_H + LABEL_BTN_GAP;
+    lv_obj_t *label_btn = lv_obj_create(cont);
+    lv_obj_set_size(label_btn, col_w, LABEL_BTN_H);
     lv_obj_set_pos(label_btn, 0, lbl_y);
     lv_obj_set_style_bg_color(label_btn, COL_BASE, 0);
     lv_obj_set_style_border_color(label_btn, COL_BD, 0);
@@ -273,8 +407,8 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_obj_set_style_shadow_width(label_btn, 0, 0);
     lv_obj_clear_flag(label_btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(label_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_flex_flow(label_btn, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(label_btn, LV_FLEX_ALIGN_SPACE_BETWEEN,
+    lv_obj_set_flex_flow(label_btn, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(label_btn, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_event_cb(label_btn, label_btn_cb, LV_EVENT_SHORT_CLICKED,
                         (void *)(intptr_t)idx);
@@ -288,7 +422,7 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_label_set_text(badge_lbl, status_text(pct));
     lv_obj_set_style_text_font(badge_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(badge_lbl, status_color(pct), 0);
-    s_status_badges[idx] = badge_lbl;
+    col->badge_label = badge_lbl;
 }
 
 // ─── Public ────────────────────────────────────────────────────────────────────
@@ -311,6 +445,12 @@ void ui_tanks_create(lv_obj_t *parent) {
 
     for (int i = 0; i < TANK_COUNT; i++) {
         build_tank_col(s_screen, i);
+    }
+
+    /* Force layout so lv_obj_get_width on labels returns correct values */
+    lv_obj_update_layout(s_screen);
+    for (int i = 0; i < TANK_COUNT; i++) {
+        position_tick_labels(i);
     }
 
     s_refresh_timer = lv_timer_create(refresh_timer_cb, 500, NULL);
