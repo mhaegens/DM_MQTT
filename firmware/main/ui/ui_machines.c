@@ -11,8 +11,26 @@
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+#include <math.h>
 
 static const char *TAG = "machines";
+
+// ─── String helpers ───────────────────────────────────────────────────────────
+static void to_upper_str(const char *src, char *dst, size_t max) {
+    if (!src || !dst || max == 0) return;
+    size_t i;
+    for (i = 0; i < max - 1 && src[i]; i++)
+        dst[i] = toupper((unsigned char)src[i]);
+    dst[i] = 0;
+}
+
+static void fmt_value(float v, char *buf, size_t n) {
+    if (fabsf(v - roundf(v)) < 0.05f)
+        snprintf(buf, n, "%.0f", v);
+    else
+        snprintf(buf, n, "%.1f", v);
+}
 
 // ─── Grid geometry ────────────────────────────────────────────────────────────
 // Content area: CONTENT_W × CONTENT_H (720 × 584)
@@ -27,9 +45,9 @@ static const char *TAG = "machines";
 #define FTR_H      52    // footer row height
 #define BODY_H     (CARD_H - HDR_H - FTR_H - 2) // 2px border lines
 #define DOT_D      14    // status dot diameter
-#define ARC_W      72
-#define ARC_H      50
-#define SPARK_H    32
+#define ARC_W      88
+#define ARC_H      60
+#define SPARK_H    40
 
 // ─── Persistent widget references (for refresh / pulse) ───────────────────────
 static lv_obj_t *s_screen                  = NULL;
@@ -129,20 +147,28 @@ static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_obj_set_style_pad_gap(tile, 2, 0);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Key label
+    // Key label (uppercase)
+    char up_key[32];
+    to_upper_str(m->label, up_key, 32);
     lv_obj_t *key_lbl = lv_label_create(tile);
-    lv_label_set_text(key_lbl, m->label);
+    lv_label_set_text(key_lbl, up_key);
     lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
 
-    // Combined value + unit label (larger font, threshold-colored)
+    // Value label (smart decimal, threshold color)
     lv_color_t val_col = lv_color_hex(metric_color(m));
     lv_obj_t *val_lbl = lv_label_create(tile);
     char val_str[32];
-    snprintf(val_str, sizeof(val_str), "%.1f %s", m->value, m->unit);
+    fmt_value(m->value, val_str, sizeof(val_str));
     lv_label_set_text(val_lbl, val_str);
     lv_obj_set_style_text_font(val_lbl, FONT_SANS_SM, 0);
     lv_obj_set_style_text_color(val_lbl, val_col, 0);
+
+    // Unit label (small gray, separate line)
+    lv_obj_t *unit_lbl = lv_label_create(tile);
+    lv_label_set_text(unit_lbl, m->unit);
+    lv_obj_set_style_text_font(unit_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(unit_lbl, COL_TX3, 0);
 
     // Tap to open detail
     lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
@@ -157,23 +183,21 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_color_t arc_col = lv_color_hex(metric_color(m));
 
     lv_obj_t *cont = lv_obj_create(parent);
-    lv_obj_set_size(cont, ARC_W + 4, ARC_H + 18);  // key(16) + gap(2) + arc(50) = 68
-    lv_obj_set_style_bg_opa(cont, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(cont, 0, 0);
-    lv_obj_set_style_pad_all(cont, 0, 0);
+    lv_obj_set_height(cont, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(cont, COL_BASE2, 0);
+    lv_obj_set_style_border_width(cont, 1, 0);
+    lv_obj_set_style_border_color(cont, COL_BD, 0);
+    lv_obj_set_style_radius(cont, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(cont, 6, 0);
     lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(cont, 2, 0);
     lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Key label above arc — first word only (fits in ARC_W)
-    char abbrev[16];
-    strncpy(abbrev, m->label, 15);
-    abbrev[15] = 0;
-    for (int ci = 0; abbrev[ci]; ci++) {
-        if (abbrev[ci] == ' ') { abbrev[ci] = 0; break; }
-    }
+    // Key label above arc — full label, uppercase
+    char abbrev[32];
+    to_upper_str(m->label, abbrev, 32);
     lv_obj_t *key_lbl = lv_label_create(cont);
     lv_label_set_text(key_lbl, abbrev);
     lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
@@ -200,10 +224,10 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
 
     lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
 
-    // Value label centered inside the arc
+    // Value label centered inside the arc (no unit)
     lv_obj_t *val_lbl = lv_label_create(arc);
     char val_str[24];
-    snprintf(val_str, sizeof(val_str), "%.0f %s", m->value, m->unit);
+    snprintf(val_str, sizeof(val_str), "%.0f", m->value);
     lv_label_set_text(val_lbl, val_str);
     lv_obj_set_style_text_font(val_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(val_lbl, arc_col, 0);
@@ -313,22 +337,48 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         Metric *sm = &mc->metrics[spark_idx];
         lv_color_t spark_col = sm->color ? lv_color_hex(sm->color) : COL_HI;
 
-        // Sparkline row: chart + current value label
-        lv_obj_t *spark_row = lv_obj_create(body);
-        lv_obj_set_size(spark_row, LV_PCT(100), SPARK_H + 4);
-        lv_obj_set_style_bg_opa(spark_row, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(spark_row, 0, 0);
-        lv_obj_set_style_pad_all(spark_row, 0, 0);
-        lv_obj_set_flex_flow(spark_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(spark_row, LV_FLEX_ALIGN_START,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(spark_row, 6, 0);
-        lv_obj_clear_flag(spark_row, LV_OBJ_FLAG_SCROLLABLE);
+        // spark_box: column container with card background
+        lv_obj_t *spark_box = lv_obj_create(body);
+        lv_obj_set_width(spark_box, LV_PCT(100));
+        lv_obj_set_height(spark_box, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(spark_box, COL_BASE2, 0);
+        lv_obj_set_style_border_width(spark_box, 1, 0);
+        lv_obj_set_style_border_color(spark_box, COL_BD, 0);
+        lv_obj_set_style_radius(spark_box, SZ_RADIUS_SM, 0);
+        lv_obj_set_style_pad_hor(spark_box, 8, 0);
+        lv_obj_set_style_pad_ver(spark_box, 4, 0);
+        lv_obj_set_flex_flow(spark_box, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(spark_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(spark_box, 2, 0);
+        lv_obj_clear_flag(spark_box, LV_OBJ_FLAG_SCROLLABLE);
 
-        // Chart fills the rest of the row
-        lv_obj_t *chart = lv_chart_create(spark_row);
-        lv_obj_set_flex_grow(chart, 1);
-        lv_obj_set_height(chart, SPARK_H);
+        // Header row: label left + current value right
+        lv_obj_t *spark_hdr = lv_obj_create(spark_box);
+        lv_obj_set_size(spark_hdr, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(spark_hdr, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(spark_hdr, 0, 0);
+        lv_obj_set_style_pad_all(spark_hdr, 0, 0);
+        lv_obj_set_flex_flow(spark_hdr, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(spark_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(spark_hdr, LV_OBJ_FLAG_SCROLLABLE);
+
+        char spark_key_up[32];
+        to_upper_str(sm->label, spark_key_up, 32);
+        lv_obj_t *key_lbl = lv_label_create(spark_hdr);
+        lv_label_set_text(key_lbl, spark_key_up);
+        lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
+        lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
+
+        lv_obj_t *cur_lbl = lv_label_create(spark_hdr);
+        char val_str[20];
+        snprintf(val_str, sizeof(val_str), "%.0f", sm->value);
+        lv_label_set_text(cur_lbl, val_str);
+        lv_obj_set_style_text_font(cur_lbl, FONT_SANS_SM, 0);
+        lv_obj_set_style_text_color(cur_lbl, spark_col, 0);
+
+        // Chart — full width, fixed height
+        lv_obj_t *chart = lv_chart_create(spark_box);
+        lv_obj_set_size(chart, LV_PCT(100), SPARK_H);
         lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
         lv_chart_set_point_count(chart, HISTORY_LEN);
         lv_chart_set_div_line_count(chart, 0, 0);
@@ -336,11 +386,9 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_set_style_bg_opa(chart, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_pad_all(chart, 0, LV_PART_MAIN);
         lv_obj_remove_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
-        // No point markers
         lv_obj_set_style_size(chart, 0, 0, LV_PART_INDICATOR);
 
-        lv_chart_series_t *ser = lv_chart_add_series(chart, spark_col,
-                                                      LV_CHART_AXIS_PRIMARY_Y);
+        lv_chart_series_t *ser = lv_chart_add_series(chart, spark_col, LV_CHART_AXIS_PRIMARY_Y);
         for (int i = 0; i < sm->history_len; i++) {
             lv_chart_set_next_value(chart, ser, (lv_value_precise_t)sm->history[i]);
         }
@@ -349,20 +397,12 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         s_charts[idx] = chart;
         s_series[idx] = ser;
 
-        // Make chart tappable
-        lv_obj_add_flag(chart, LV_OBJ_FLAG_CLICKABLE);
+        // Make entire spark_box tappable (not just the chart)
+        lv_obj_add_flag(spark_box, LV_OBJ_FLAG_CLICKABLE);
         MetricCtx *ctx = malloc(sizeof(MetricCtx));
         ctx->machine = idx;
         ctx->metric  = spark_idx;
-        lv_obj_add_event_cb(chart, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
-
-        // Current value label on right
-        lv_obj_t *cur_lbl = lv_label_create(spark_row);
-        char val_str[20];
-        snprintf(val_str, sizeof(val_str), "%.0f", sm->value);
-        lv_label_set_text(cur_lbl, val_str);
-        lv_obj_set_style_text_font(cur_lbl, FONT_MONO_XXS, 0);
-        lv_obj_set_style_text_color(cur_lbl, spark_col, 0);
+        lv_obj_add_event_cb(spark_box, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
     }
 
     // ── Arc gauges row ────────────────────────────────────────────────────────
@@ -379,7 +419,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_set_style_border_width(arc_row, 0, 0);
         lv_obj_set_style_pad_all(arc_row, 0, 0);
         lv_obj_set_flex_flow(arc_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(arc_row, LV_FLEX_ALIGN_START,
+        lv_obj_set_flex_align(arc_row, LV_FLEX_ALIGN_SPACE_EVENLY,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_gap(arc_row, 8, 0);
         lv_obj_clear_flag(arc_row, LV_OBJ_FLAG_SCROLLABLE);
@@ -588,7 +628,6 @@ void ui_machines_pulse_first(void) {
                 lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, s_cards[i]);
                 lv_timer_set_repeat_count(t, 1);
             }
-            ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, g_machines[i].pulses);
             return;
         }
     }
