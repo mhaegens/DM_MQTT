@@ -436,6 +436,15 @@ void ui_tank_overview_create(lv_obj_t *parent) {
 void ui_tank_overview_activate(int tank_idx) {
     if (!s_screen) return;
     if (tank_idx < 0 || tank_idx >= TANK_COUNT) return;
+
+    // Cancel any in-progress animation from a previous visit
+    if (s_animating && s_anim_timer) {
+        lv_timer_pause(s_anim_timer);
+        s_animating = false;
+    }
+    if (s_fill_outer) lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
+    ovw_hide_target_line();
+
     s_tank_idx = tank_idx;
 
     Tank *t = &g_tanks[tank_idx];
@@ -459,15 +468,12 @@ void ui_tank_overview_activate(int tank_idx) {
         Metric *m = &t->metrics[k];
         uint32_t col = metric_color(m);
 
-        // Update dot color
         if (s_tile_dots[k])
             lv_obj_set_style_bg_color(s_tile_dots[k], lv_color_hex(col), 0);
 
-        // Update label text (child index 1 in the tile = the key label)
         lv_obj_t *key_lbl = lv_obj_get_child(s_tile_rows[k], 1);
         if (key_lbl) lv_label_set_text(key_lbl, m->label);
 
-        // Update value
         if (s_tile_vals[k]) {
             char val_str[24];
             snprintf(val_str, sizeof(val_str), "%.1f %s", m->value, m->unit);
@@ -475,4 +481,18 @@ void ui_tank_overview_activate(int tank_idx) {
             lv_obj_set_style_text_color(s_tile_vals[k], lv_color_hex(col), 0);
         }
     }
+
+    // Initialise control panel to current level
+    s_target_pct = pct;
+    if (s_slider)  lv_slider_set_value(s_slider, (int)pct, LV_ANIM_OFF);
+    update_action_btn();
+}
+
+void ui_tank_overview_deactivate(void) {
+    if (s_animating && s_anim_timer) {
+        lv_timer_pause(s_anim_timer);
+        s_animating = false;
+    }
+    if (s_fill_outer) lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
+    ovw_hide_target_line();
 }
