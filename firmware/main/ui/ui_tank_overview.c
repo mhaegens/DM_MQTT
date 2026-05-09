@@ -9,9 +9,9 @@
 
 static const char *TAG = "tank_ovw";
 
-#define OVW_FILL_H  180
+#define OVW_FILL_H  120
 #define OVW_FILL_W  400
-#define TILE_H       44
+#define TILE_H       40
 #define OVW_PAD     SZ_GAP
 
 static lv_obj_t *s_screen          = NULL;
