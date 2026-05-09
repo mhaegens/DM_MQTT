@@ -42,9 +42,13 @@ CONFIG_LV_FONT_MONTSERRAT_18=y
 CONFIG_LV_FONT_MONTSERRAT_22=y
 CONFIG_LV_FONT_MONTSERRAT_24=y
 
-# Logging
-CONFIG_LOG_DEFAULT_LEVEL_INFO=y
-CONFIG_LOG_COLORS=y
+# Console — UART0 (Waveshare ESP32-P4 uses external CH343 USB-UART bridge on UART0)
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG is not set
+CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
 
-# Task Watchdog — extend timeout so LVGL render task (CPU 1) doesn't false-trigger IDLE0 checks
-CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+# Newlib — LF-only stdout so binary pixel data is not corrupted by CRLF translation
+CONFIG_NEWLIB_STDOUT_LINE_ENDING_LF=y
+
+# LVGL snapshot API (used by screenshot tool)
+CONFIG_LV_USE_SNAPSHOT=y

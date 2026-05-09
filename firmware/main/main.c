@@ -6,6 +6,7 @@
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
 #include "ui/ui_main.h"
+#include "ui/ui_screenshot.h"
 #include "config.h"
 
 static const char *TAG = "main";
@@ -44,6 +45,17 @@ static void btn_task(void *arg) {
     }
 }
 
+static void console_task(void *arg) {
+    (void)arg;
+    while (1) {
+        int ch = getchar();
+        if (ch == 'S' || ch == 's') {
+            ui_screenshot_take();
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
 
@@ -68,6 +80,7 @@ void app_main(void) {
     bsp_display_unlock();
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(console_task, "con", 8192, NULL, 3, NULL, 0);
 
     while(1) vTaskDelay(pdMS_TO_TICKS(1000));
 }
