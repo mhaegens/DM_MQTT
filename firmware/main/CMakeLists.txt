@@ -11,6 +11,7 @@ idf_component_register(
         "ui/ui_tank_overview.c"
         "ui/ui_screenshot.c"
         "ui/ui_wifi_setup.c"
+        "ui/ui_mqtt_detail.c"
         "ui/data.c"
         "ui/assets/sap_logo.c"
         "ui/assets/tank_icon.c"

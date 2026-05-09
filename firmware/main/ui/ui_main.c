@@ -13,6 +13,7 @@
 #include "data.h"
 #include "esp_log.h"
 #include "ui_wifi_setup.h"
+#include "ui_mqtt_detail.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -118,6 +119,7 @@ static lv_obj_t *create_status_pill(lv_obj_t *parent,
 
 // ─── Shell bar ────────────────────────────────────────────────────────────────
 static void wifi_pill_cb(lv_event_t *e) { (void)e; ui_push_wifi_setup(); }
+static void mqtt_pill_cb(lv_event_t *e) { (void)e; ui_push_mqtt_detail(); }
 
 static void build_shell_bar(void)
 {
@@ -204,8 +206,10 @@ static void build_shell_bar(void)
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(right_group, 8, LV_PART_MAIN);
 
-    create_status_pill(right_group, "MQTT",
+    lv_obj_t *s_mqtt_pill = create_status_pill(right_group, "MQTT",
                        COL_OK, &s_mqtt_dot, &s_mqtt_lbl);
+    lv_obj_add_flag(s_mqtt_pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_mqtt_pill, mqtt_pill_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_t *s_wifi_pill = create_status_pill(right_group, "WiFi",
                        COL_OK, &s_wifi_dot, &s_wifi_lbl);
     lv_obj_add_flag(s_wifi_pill, LV_OBJ_FLAG_CLICKABLE);
@@ -440,6 +444,7 @@ void ui_main_init(void)
     ui_detail_create(g_content);
     ui_tank_overview_create(g_content);
     ui_wifi_setup_create(g_content);
+    ui_mqtt_detail_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -549,6 +554,19 @@ void ui_push_wifi_setup(void)
     if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
     if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
     g_current_view = VIEW_WIFI_SETUP;
+}
+
+void ui_push_mqtt_detail(void)
+{
+    if (g_current_view == VIEW_MQTT_DETAIL) return;
+    g_prev_view = g_current_view;
+    for (int i = 0; i < VIEW_COUNT; i++)
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_screens[VIEW_MQTT_DETAIL], LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, "MQTT Connection");
+    if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    g_current_view = VIEW_MQTT_DETAIL;
+    ui_mqtt_detail_refresh();
 }
 
 // ─── Status pill helpers ──────────────────────────────────────────────────────
