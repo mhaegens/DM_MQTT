@@ -252,15 +252,18 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_set_style_text_color(s_badge_lbl, COL_OK, 0);
     lv_obj_center(s_badge_lbl);
 
-    // ── Fill bar wrapper (centers OVW_FILL_W inside full content width) ────────
-    lv_obj_t *fill_wrap = lv_obj_create(s_screen);
-    lv_obj_remove_style_all(fill_wrap);
-    lv_obj_set_size(fill_wrap, CONTENT_W - OVW_PAD * 2, OVW_FILL_H);
-    lv_obj_clear_flag(fill_wrap, LV_OBJ_FLAG_SCROLLABLE);
+    // ── Two-column body row ─────────────────────────────────────────────────────
+    lv_obj_t *body_row = lv_obj_create(s_screen);
+    lv_obj_remove_style_all(body_row);
+    lv_obj_set_size(body_row, CONTENT_W - OVW_PAD * 2, OVW_FILL_H);
+    lv_obj_set_flex_flow(body_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body_row, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(body_row, SZ_GAP, 0);
+    lv_obj_clear_flag(body_row, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_fill_outer = lv_obj_create(fill_wrap);
+    s_fill_outer = lv_obj_create(body_row);
     lv_obj_set_size(s_fill_outer, OVW_FILL_W, OVW_FILL_H);
-    lv_obj_align(s_fill_outer, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(s_fill_outer, COL_BASE2, 0);
     lv_obj_set_style_border_color(s_fill_outer, COL_BD_STR, 0);
     lv_obj_set_style_border_width(s_fill_outer, 1, 0);
