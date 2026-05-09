@@ -45,8 +45,8 @@ static void fmt_value(float v, char *buf, size_t n) {
 #define FTR_H      52    // footer row height
 #define BODY_H     (CARD_H - HDR_H - FTR_H - 2) // 2px border lines
 #define DOT_D      14    // status dot diameter
-#define ARC_W      88
 #define ARC_H      60
+#define ARC_W      ARC_H   // must be square: LVGL pins circle at (x1+r, y1+r), not widget center
 #define SPARK_H    40
 
 // ─── Persistent widget references (for refresh / pulse) ───────────────────────
@@ -213,6 +213,7 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
 
     lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(arc, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
     lv_obj_set_style_arc_color(arc, lv_color_hex(0xE0E4EF), LV_PART_MAIN);
     lv_obj_set_style_arc_width(arc, 7, LV_PART_MAIN);
 
