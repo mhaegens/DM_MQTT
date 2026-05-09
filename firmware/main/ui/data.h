@@ -13,6 +13,9 @@
 #define COL_WARN_BD  0xF8C07E
 #define COL_ERR_BD   0xFFAAAA
 
+// ─── Simulation profile ────────────────────────────────────────────────────
+typedef enum { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP } SimProfile;
+
 // ─── Viz/input types ───────────────────────────────────────────────────────
 typedef enum { VIZ_SPARK=0, VIZ_ARC, VIZ_THERMO, VIZ_PH, VIZ_TANK, VIZ_BULLET } VizType;
 typedef enum { INPUT_STEP=0, INPUT_SLIDER } InputType;
@@ -22,68 +25,85 @@ typedef struct { float limit; uint32_t color; } Thr;
 
 // ─── Metric definition (const) and runtime state (mutable) ─────────────────
 typedef struct {
-    const char *key;
-    const char *label;
-    const char *unit;
-    float       init_val;
-    float       min_val, max_val, step;
-    float       rand_min, rand_max;
-    VizType     viz;
-    InputType   input;
-    Thr         thr[3];
-    int         thr_count;
-    uint32_t    color;
+    char      key[32];
+    char      label[48];
+    char      unit[16];
+    float     init_val;
+    float     min_val, max_val, step;
+    float     rand_min, rand_max;
+    VizType   viz;
+    InputType input;
+    Thr       thr[3];
+    int       thr_count;
+    uint32_t  color;
     // runtime
-    float       value;
-    float       history[HISTORY_LEN];
-    int         history_len;
+    float     value;
+    float     history[HISTORY_LEN];
+    int       history_len;
+    // simulation
+    SimProfile sim_profile;
+    float      sim_amplitude;
+    float      sim_period_s;
+    float      sim_offset;
+    float      sim_phase_acc;
 } Metric;
 
 // ─── Machine ───────────────────────────────────────────────────────────────
-#define MAX_MACH_METRICS 5
+#define MAX_MACHINES     8
+#define MAX_TANKS        3
+#define MAX_BADGES       12
+#define MAX_MACH_METRICS 8
+#define MAX_TANK_METRICS 8
+#define MAX_CERTS        6
+
 typedef struct {
-    const char *id, *name, *type, *topic;
-    bool        running;
-    int         pulses;
-    Metric      metrics[MAX_MACH_METRICS];
-    int         metric_count;
+    char  id[16];
+    char  name[32];
+    char  type[48];
+    bool  running;
+    int   pulses;
+    Metric metrics[MAX_MACH_METRICS];
+    int    metric_count;
 } Machine;
 
 // ─── Tank ──────────────────────────────────────────────────────────────────
-#define MAX_TANK_METRICS 5
 typedef struct {
-    const char *id, *name, *topic;
-    Metric      metrics[MAX_TANK_METRICS];
-    int         metric_count;
-    float       phase;   // wave animation phase (updated by timer)
-    float       slosh;   // slosh offset
+    char  id[16];
+    char  name[32];
+    Metric metrics[MAX_TANK_METRICS];
+    int    metric_count;
+    float  phase;   // wave animation phase (updated by timer)
+    float  slosh;   // slosh offset
 } Tank;
 
 // ─── Badge (operator) ──────────────────────────────────────────────────────
-#define MAX_CERTS 3
 typedef struct {
-    const char *id, *name, *role, *role_key, *dept, *plant, *uid;
-    const char *certs[MAX_CERTS];
-    int         cert_count;
-    uint32_t    avatar_color;
+    char     id[16];
+    char     name[48];
+    char     role[48];
+    char     role_key[16];
+    char     dept[32];
+    char     uid[24];
+    char     certs[MAX_CERTS][32];
+    int      cert_count;
+    uint32_t avatar_color;
 } Badge;
 
 // ─── Global data ───────────────────────────────────────────────────────────
-#define MACHINE_COUNT 4
-#define TANK_COUNT    3
-#define BADGE_COUNT   5
-
-// Runtime state (updated by wifi/mqtt tasks later; static placeholders for UI mockup)
-extern int  g_mqtt_msg_count;
-extern int  g_wifi_rssi;
-extern char g_device_ip[16];
-
-extern Machine g_machines[MACHINE_COUNT];
-extern Tank    g_tanks[TANK_COUNT];
-extern Badge   g_badges[BADGE_COUNT];
+extern Machine g_machines[MAX_MACHINES];
+extern Tank    g_tanks[MAX_TANKS];
+extern Badge   g_badges[MAX_BADGES];
+extern int     g_machine_count;
+extern int     g_tank_count;
+extern int     g_badge_count;
 extern int     g_active_badge;
 extern int     g_log_sec;
 extern bool    g_mqtt_connected;
+extern int     g_mqtt_msg_count;
+extern int     g_wifi_rssi;
+extern char    g_device_ip[16];
+
+void metric_push(Metric *m, float value);
 
 // Helper: get tank level (always metrics[0].value)
 static inline float tank_level(const Tank *t) { return t->metrics[0].value; }
