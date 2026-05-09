@@ -5,6 +5,8 @@
 #include "config.h"
 #include <stdio.h>
 
+static void wifi_kpi_cb(lv_event_t *e) { (void)e; ui_push_wifi_setup(); }
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  ui_home.c — Home screen: 2×2 KPI grid + 3 connection status rows.
 //  Refreshed on tab activation and on MQTT/WiFi events.
@@ -20,7 +22,7 @@ static lv_obj_t *s_ip_label       = NULL;
 // Creates a 140px tall card inside the grid container at position (idx%2, idx/2).
 // The accent color drives both the 4px top bar and the value label color.
 // s_kpi_val[idx] and s_kpi_meta[idx] are set for later updates.
-static void make_kpi_card(lv_obj_t *grid, int idx,
+static lv_obj_t *make_kpi_card(lv_obj_t *grid, int idx,
                            const char *label_text,
                            const char *val_text,
                            const char *meta_text,
@@ -78,6 +80,7 @@ static void make_kpi_card(lv_obj_t *grid, int idx,
     lv_label_set_text(s_kpi_meta[idx], meta_text);
     lv_obj_set_style_text_font(s_kpi_meta[idx], FONT_SANS_XXS, LV_PART_MAIN);
     lv_obj_set_style_text_color(s_kpi_meta[idx], COL_TX3, LV_PART_MAIN);
+    return card;
 }
 
 // ─── Badge pill ───────────────────────────────────────────────────────────────
@@ -207,9 +210,13 @@ void ui_home_create(lv_obj_t *parent)
     };
     lv_color_t acc[4] = { COL_HI, COL_HI, COL_WARN, COL_TEAL };
 
+    lv_obj_t *cards[4];
     for (int i = 0; i < 4; i++) {
-        make_kpi_card(grid, i, kpi[i].label, kpi[i].val, kpi[i].meta, acc[i]);
+        cards[i] = make_kpi_card(grid, i, kpi[i].label, kpi[i].val, kpi[i].meta, acc[i]);
     }
+    // WIFI RSSI card (index 3) opens the WiFi setup overlay
+    lv_obj_add_flag(cards[3], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(cards[3], wifi_kpi_cb, LV_EVENT_CLICKED, NULL);
 
     // ── Status rows column (8px gap) ─────────────────────────────────────────
     lv_obj_t *rows_col = lv_obj_create(s_screen);

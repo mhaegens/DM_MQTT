@@ -52,3 +52,6 @@ CONFIG_NEWLIB_STDOUT_LINE_ENDING_LF=y
 
 # LVGL snapshot API (used by screenshot tool)
 CONFIG_LV_USE_SNAPSHOT=y
+
+# LVGL QR code widget (used by WiFi setup screen)
+CONFIG_LV_USE_QRCODE=y

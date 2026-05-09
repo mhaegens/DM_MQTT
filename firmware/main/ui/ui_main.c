@@ -12,6 +12,7 @@
 #include "config.h"
 #include "data.h"
 #include "esp_log.h"
+#include "ui_wifi_setup.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -116,6 +117,8 @@ static lv_obj_t *create_status_pill(lv_obj_t *parent,
 }
 
 // ─── Shell bar ────────────────────────────────────────────────────────────────
+static void wifi_pill_cb(lv_event_t *e) { (void)e; ui_push_wifi_setup(); }
+
 static void build_shell_bar(void)
 {
     g_shell_bar = lv_obj_create(lv_scr_act());
@@ -203,8 +206,10 @@ static void build_shell_bar(void)
 
     create_status_pill(right_group, "MQTT",
                        COL_OK, &s_mqtt_dot, &s_mqtt_lbl);
-    create_status_pill(right_group, "WiFi",
+    lv_obj_t *s_wifi_pill = create_status_pill(right_group, "WiFi",
                        COL_OK, &s_wifi_dot, &s_wifi_lbl);
+    lv_obj_add_flag(s_wifi_pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_wifi_pill, wifi_pill_cb, LV_EVENT_CLICKED, NULL);
 }
 
 // ─── Crumb bar ────────────────────────────────────────────────────────────────
@@ -434,6 +439,7 @@ void ui_main_init(void)
     ui_nfc_create(g_content);
     ui_detail_create(g_content);
     ui_tank_overview_create(g_content);
+    ui_wifi_setup_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -492,6 +498,11 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
+    if (g_current_view == VIEW_WIFI_SETUP) {
+        if (g_crumb_bar) lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+        ui_switch_tab(g_prev_view);
+        return;
+    }
     if (g_prev_view == VIEW_TANK_OVW) {
         // Return from Detail → Tank Overview (not all the way to Tanks)
         for (int i = 0; i < VIEW_COUNT; i++) {
@@ -526,6 +537,18 @@ void ui_push_tank_ovw(int tank_idx)
 
     g_current_view = VIEW_TANK_OVW;
     ui_tank_overview_activate(tank_idx);
+}
+
+void ui_push_wifi_setup(void)
+{
+    if (g_current_view == VIEW_WIFI_SETUP) return;
+    g_prev_view = g_current_view;
+    for (int i = 0; i < VIEW_COUNT; i++)
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_screens[VIEW_WIFI_SETUP], LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
+    if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    g_current_view = VIEW_WIFI_SETUP;
 }
 
 // ─── Status pill helpers ──────────────────────────────────────────────────────

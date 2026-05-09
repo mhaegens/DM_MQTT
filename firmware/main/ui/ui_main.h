@@ -18,9 +18,10 @@ typedef enum {
     VIEW_TANKS    = 2,
     VIEW_DEBUG    = 3,
     VIEW_NFC      = 4,
-    VIEW_DETAIL   = 5,   // not a tab; pushed over any tab view
-    VIEW_TANK_OVW = 6,   // not a tab; pushed over Tanks tab
-    VIEW_COUNT    = 7,
+    VIEW_DETAIL    = 5,   // not a tab; pushed over any tab view
+    VIEW_TANK_OVW  = 6,   // not a tab; pushed over Tanks tab
+    VIEW_WIFI_SETUP = 7,  // not a tab; pushed over any tab via WiFi pill/card
+    VIEW_COUNT     = 8,
 } ViewId;
 
 // ─── Global LVGL objects (for use by screen modules) ─────────────────────────
@@ -39,6 +40,7 @@ void ui_switch_tab(ViewId v);
 void ui_push_detail(const char *back_label, const char *metric_label);
 void ui_pop_detail(void);
 void ui_push_tank_ovw(int tank_idx);
+void ui_push_wifi_setup(void);
 
 // ─── Status update callbacks (called from MQTT/WiFi event handlers) ───────────
 void ui_notify_mqtt_status(bool connected);
