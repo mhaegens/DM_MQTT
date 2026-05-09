@@ -5,7 +5,8 @@
 #include "config.h"
 #include <stdio.h>
 
-static void wifi_kpi_cb(lv_event_t *e) { (void)e; ui_push_wifi_setup(); }
+static void wifi_kpi_cb(lv_event_t *e)  { (void)e; ui_push_wifi_setup(); }
+static void mqtt_kpi_cb(lv_event_t *e)  { (void)e; ui_push_mqtt_detail(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ui_home.c — Home screen: 2×2 KPI grid + 3 connection status rows.
@@ -214,6 +215,9 @@ void ui_home_create(lv_obj_t *parent)
     for (int i = 0; i < 4; i++) {
         cards[i] = make_kpi_card(grid, i, kpi[i].label, kpi[i].val, kpi[i].meta, acc[i]);
     }
+    // MQTT MSGS card (index 2) opens the MQTT detail overlay
+    lv_obj_add_flag(cards[2], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(cards[2], mqtt_kpi_cb, LV_EVENT_CLICKED, NULL);
     // WIFI RSSI card (index 3) opens the WiFi setup overlay
     lv_obj_add_flag(cards[3], LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(cards[3], wifi_kpi_cb, LV_EVENT_CLICKED, NULL);
@@ -236,6 +240,9 @@ void ui_home_create(lv_obj_t *parent)
                     "mqttfordm.haegens.be : 443",
                     COL_OK_LT, COL_OK, lv_color_hex(0x9ADDB8),
                     "CONNECTED");
+    lv_obj_t *mqtt_broker_row = lv_obj_get_child(rows_col, 0);
+    lv_obj_add_flag(mqtt_broker_row, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(mqtt_broker_row, mqtt_kpi_cb, LV_EVENT_CLICKED, NULL);
 
     // Row 1: Device IP (updated in refresh; badge = blue "DHCP")
     s_ip_label = make_status_row(rows_col,
