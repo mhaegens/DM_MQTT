@@ -291,6 +291,7 @@ static void build_tab_bar(void)
     lv_obj_set_style_border_side(g_tab_bar, LV_BORDER_SIDE_TOP, LV_PART_MAIN);
     lv_obj_set_style_radius(g_tab_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(g_tab_bar, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(g_tab_bar, 0, LV_PART_MAIN);
     lv_obj_remove_flag(g_tab_bar, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(g_tab_bar, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(g_tab_bar, LV_FLEX_FLOW_ROW);
