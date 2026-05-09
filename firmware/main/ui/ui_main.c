@@ -602,8 +602,10 @@ void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 // ─── Hardware button callbacks ────────────────────────────────────────────────
 void ui_btn_short_press(void)
 {
-    if (g_current_view == VIEW_DETAIL || g_current_view == VIEW_TANK_OVW)
+    if (g_current_view > VIEW_NFC)      // any overlay screen
         ui_pop_detail();
+    else if (g_current_view != VIEW_HOME)
+        ui_switch_tab(VIEW_HOME);
 }
 
 void ui_btn_long_press(void)

@@ -11,7 +11,7 @@
 
 static const char *TAG = "main";
 
-// GPIO 9 (BOOT button) polling: short press → back, long press → home
+// GPIO35 (BOOT button) polling: short press → back/home, long press → detail step
 static void btn_task(void *arg) {
     (void)arg;
     gpio_set_direction(GPIO_BOOT_BTN, GPIO_MODE_INPUT);
