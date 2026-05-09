@@ -64,7 +64,12 @@ void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
 
     // Network prerequisites — must come before WiFi init
-    ESP_ERROR_CHECK(nvs_flash_init());
+    esp_err_t nvs_ret = nvs_flash_init();
+    if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nvs_ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(nvs_ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     wifi_manager_init();
