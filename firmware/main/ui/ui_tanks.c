@@ -18,7 +18,8 @@ static const char *TAG = "tanks";
 #define TANK_TOTAL_H   460    // total tank widget height (px)
 #define TANK_UPPER_RATIO 70   // % of TANK_TOTAL_H = cylindrical section
 #define TANK_TIP_W      20    // flat base width at bottom of taper (px)
-#define TANK_RADIUS     12    // top-corner border radius
+#define TANK_RADIUS     20    // top-corner border radius
+#define TANK_TIP_RADIUS  6    // rounded corner radius at taper tip
 #define LABEL_BTN_H     48    // tank name / badge button height (2 rows)
 #define LABEL_BTN_GAP    6    // gap between tank widget and label button
 
@@ -82,28 +83,38 @@ static void draw_filled_rect(lv_layer_t *layer,
 }
 
 // Draw a trapezoid as two triangles (top_x1..top_x2 at top_y, narrowing to
-// bot_x1..bot_x2 at bot_y).
+// bot_x1..bot_x2 at bot_y). bot_radius > 0 adds rounded corners at the bottom.
 static void draw_taper(lv_layer_t *layer,
                         lv_coord_t top_x1, lv_coord_t top_x2,
                         lv_coord_t bot_x1, lv_coord_t bot_x2,
                         lv_coord_t top_y,  lv_coord_t bot_y,
-                        lv_color_t color,  lv_opa_t opa) {
+                        lv_color_t color,  lv_opa_t opa,
+                        int32_t bot_radius) {
     lv_draw_triangle_dsc_t dsc;
     lv_draw_triangle_dsc_init(&dsc);
     dsc.color = color;
     dsc.opa   = opa;
 
-    // Triangle 1: top-left, top-right, bottom-right
-    dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
-    dsc.p[1].x = top_x2; dsc.p[1].y = top_y;
-    dsc.p[2].x = bot_x2; dsc.p[2].y = bot_y;
-    lv_draw_triangle(layer, &dsc);
+    lv_coord_t tri_bot_y = (bot_radius > 0) ? bot_y - bot_radius : bot_y;
 
-    // Triangle 2: top-left, bottom-left, bottom-right
-    dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
-    dsc.p[1].x = bot_x1; dsc.p[1].y = bot_y;
-    dsc.p[2].x = bot_x2; dsc.p[2].y = bot_y;
-    lv_draw_triangle(layer, &dsc);
+    if (tri_bot_y > top_y) {
+        // Triangle 1: top-left, top-right, bottom-right
+        dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
+        dsc.p[1].x = top_x2; dsc.p[1].y = top_y;
+        dsc.p[2].x = bot_x2; dsc.p[2].y = tri_bot_y;
+        lv_draw_triangle(layer, &dsc);
+
+        // Triangle 2: top-left, bottom-left, bottom-right
+        dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
+        dsc.p[1].x = bot_x1; dsc.p[1].y = tri_bot_y;
+        dsc.p[2].x = bot_x2; dsc.p[2].y = tri_bot_y;
+        lv_draw_triangle(layer, &dsc);
+    }
+
+    if (bot_radius > 0) {
+        draw_filled_rect(layer, bot_x1, tri_bot_y, bot_x2, bot_y,
+                         color, opa, bot_radius);
+    }
 }
 
 // ─── Custom draw callback ──────────────────────────────────────────────────────
@@ -144,15 +155,44 @@ static void tank_draw_cb(lv_event_t *e) {
         dsc.border_width = 1;
         dsc.border_opa  = LV_OPA_COVER;
         dsc.radius      = TANK_RADIUS;
-        lv_area_t area = {ox, oy, ox + w - 1, jct_y};
+        lv_area_t area = {ox, oy, ox + w - 1, jct_y + TANK_RADIUS};
         lv_draw_rect(layer, &dsc, &area);
     }
 
     /* 2. Background: taper (covers the bottom border of the rect above) */
     draw_taper(layer, ox, ox + w, tip_x1, tip_x2, jct_y, bot_y,
-               COL_BASE2, LV_OPA_COVER);
+               COL_BASE2, LV_OPA_COVER, TANK_TIP_RADIUS);
 
-    /* 3. Taper outline: diagonal lines for the slanted edges */
+    /* 3. Fill */
+    lv_coord_t fill_px = (lv_coord_t)(pct * (float)h / 100.0f);
+    if (fill_px > 0) {
+        lv_coord_t waterline = oy + h - fill_px;
+
+        if (waterline >= jct_y) {
+            /* Fill only inside taper */
+            lv_coord_t fw   = hopper_width_at_fill(w, taper_h, fill_px);
+            lv_coord_t ftx1 = ox + (w - fw) / 2;
+            lv_coord_t ftx2 = ox + (w + fw) / 2;
+            draw_taper(layer, ftx1, ftx2, tip_x1, tip_x2,
+                       waterline, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
+        } else {
+            /* Fill spans rect + full taper */
+            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y,
+                             fc, LV_OPA_COVER, 0);
+            draw_taper(layer, ox, ox + w, tip_x1, tip_x2,
+                       jct_y, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
+        }
+
+        /* Shine strip on left side of fill */
+        lv_coord_t shine_y1 = waterline + 4;
+        lv_coord_t shine_y2 = bot_y - 6;
+        if (shine_y2 > shine_y1) {
+            draw_filled_rect(layer, ox + 3, shine_y1, ox + 9, shine_y2,
+                             lv_color_white(), LV_OPA_20, SZ_RADIUS_SM);
+        }
+    }
+
+    /* 4. Taper outline: diagonal lines for the slanted edges — drawn after fill */
     {
         lv_draw_line_dsc_t line;
         lv_draw_line_dsc_init(&line);
@@ -165,35 +205,6 @@ static void tank_draw_cb(lv_event_t *e) {
         line.p1.x = ox + w;   line.p1.y = jct_y;
         line.p2.x = tip_x2;   line.p2.y = bot_y;
         lv_draw_line(layer, &line);
-    }
-
-    /* 4. Fill */
-    lv_coord_t fill_px = (lv_coord_t)(pct * (float)h / 100.0f);
-    if (fill_px > 0) {
-        lv_coord_t waterline = oy + h - fill_px;
-
-        if (waterline >= jct_y) {
-            /* Fill only inside taper */
-            lv_coord_t fw   = hopper_width_at_fill(w, taper_h, fill_px);
-            lv_coord_t ftx1 = ox + (w - fw) / 2;
-            lv_coord_t ftx2 = ox + (w + fw) / 2;
-            draw_taper(layer, ftx1, ftx2, tip_x1, tip_x2,
-                       waterline, bot_y, fc, LV_OPA_COVER);
-        } else {
-            /* Fill spans rect + full taper */
-            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y,
-                             fc, LV_OPA_COVER, 0);
-            draw_taper(layer, ox, ox + w, tip_x1, tip_x2,
-                       jct_y, bot_y, fc, LV_OPA_COVER);
-        }
-
-        /* Shine strip on left side of fill */
-        lv_coord_t shine_y1 = waterline + 4;
-        lv_coord_t shine_y2 = bot_y - 6;
-        if (shine_y2 > shine_y1) {
-            draw_filled_rect(layer, ox + 3, shine_y1, ox + 9, shine_y2,
-                             lv_color_white(), LV_OPA_20, SZ_RADIUS_SM);
-        }
     }
 
     /* 5. Tick lines at 25%, 50%, 75% fill marks */
@@ -298,7 +309,7 @@ static void tank_event_cb(lv_event_t *e) {
         }
     } else if (code == LV_EVENT_SHORT_CLICKED) {
         if (!s_dragging[idx]) {
-            ui_detail_open_tank_level(idx);
+            ui_push_tank_ovw(idx);
         }
         s_dragging[idx] = false;
     } else if (code == LV_EVENT_RELEASED) {
