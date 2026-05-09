@@ -9,10 +9,11 @@
 
 static const char *TAG = "tank_ovw";
 
-#define OVW_FILL_H  120
-#define OVW_FILL_W  400
-#define TILE_H       40
+#define OVW_FILL_W  200
 #define OVW_PAD     SZ_GAP
+#define OVW_FILL_H  (DETAIL_H - OVW_PAD * 2 - 8 - 48)
+#define OVW_RIGHT_W (CONTENT_W - OVW_PAD * 2 - OVW_FILL_W - SZ_GAP)
+#define TILE_H       48
 
 static lv_obj_t *s_screen          = NULL;
 static lv_obj_t *s_name_lbl        = NULL;
@@ -251,15 +252,18 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_set_style_text_color(s_badge_lbl, COL_OK, 0);
     lv_obj_center(s_badge_lbl);
 
-    // ── Fill bar wrapper (centers OVW_FILL_W inside full content width) ────────
-    lv_obj_t *fill_wrap = lv_obj_create(s_screen);
-    lv_obj_remove_style_all(fill_wrap);
-    lv_obj_set_size(fill_wrap, CONTENT_W - OVW_PAD * 2, OVW_FILL_H);
-    lv_obj_clear_flag(fill_wrap, LV_OBJ_FLAG_SCROLLABLE);
+    // ── Two-column body row ─────────────────────────────────────────────────────
+    lv_obj_t *body_row = lv_obj_create(s_screen);
+    lv_obj_remove_style_all(body_row);
+    lv_obj_set_size(body_row, CONTENT_W - OVW_PAD * 2, OVW_FILL_H);
+    lv_obj_set_flex_flow(body_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(body_row, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(body_row, SZ_GAP, 0);
+    lv_obj_clear_flag(body_row, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_fill_outer = lv_obj_create(fill_wrap);
+    s_fill_outer = lv_obj_create(body_row);
     lv_obj_set_size(s_fill_outer, OVW_FILL_W, OVW_FILL_H);
-    lv_obj_align(s_fill_outer, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(s_fill_outer, COL_BASE2, 0);
     lv_obj_set_style_border_color(s_fill_outer, COL_BD_STR, 0);
     lv_obj_set_style_border_width(s_fill_outer, 1, 0);
@@ -328,10 +332,20 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_set_style_text_color(s_fill_pct_lbl, COL_BASE, 0);
     lv_obj_center(s_fill_pct_lbl);
 
+    // ── Right column (metrics + controls) ───────────────────────────────────────
+    lv_obj_t *right_col = lv_obj_create(body_row);
+    lv_obj_remove_style_all(right_col);
+    lv_obj_set_size(right_col, OVW_RIGHT_W, OVW_FILL_H);
+    lv_obj_set_flex_flow(right_col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(right_col, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(right_col, 8, 0);
+    lv_obj_clear_flag(right_col, LV_OBJ_FLAG_SCROLLABLE);
+
     // ── Metric tile list (all metrics, create MAX_TANK_METRICS rows) ───────────
     for (int k = 0; k < MAX_TANK_METRICS; k++) {
-        lv_obj_t *tile = lv_obj_create(s_screen);
-        lv_obj_set_size(tile, CONTENT_W - OVW_PAD * 2, TILE_H);
+        lv_obj_t *tile = lv_obj_create(right_col);
+        lv_obj_set_size(tile, OVW_RIGHT_W, TILE_H);
         lv_obj_set_style_bg_color(tile, COL_BASE, 0);
         lv_obj_set_style_border_color(tile, COL_BD, 0);
         lv_obj_set_style_border_width(tile, 1, 0);
@@ -378,9 +392,16 @@ void ui_tank_overview_create(lv_obj_t *parent) {
         lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
     }
 
+    // Spacer pushes ctrl panel to the bottom of right_col
+    lv_obj_t *spacer = lv_obj_create(right_col);
+    lv_obj_remove_style_all(spacer);
+    lv_obj_set_size(spacer, OVW_RIGHT_W, 1);
+    lv_obj_set_flex_grow(spacer, 1);
+    lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
     // ── Fill/Drain control panel ─────────────────────────────────────────────
-    s_ctrl_panel = lv_obj_create(s_screen);
-    lv_obj_set_size(s_ctrl_panel, CONTENT_W - OVW_PAD * 2, 96);
+    s_ctrl_panel = lv_obj_create(right_col);
+    lv_obj_set_size(s_ctrl_panel, OVW_RIGHT_W, 96);
     lv_obj_set_style_bg_color(s_ctrl_panel, COL_BASE, 0);
     lv_obj_set_style_border_color(s_ctrl_panel, COL_BD, 0);
     lv_obj_set_style_border_width(s_ctrl_panel, 1, 0);
@@ -399,7 +420,7 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_set_style_text_color(s_target_lbl, COL_TX2, 0);
 
     s_slider = lv_slider_create(s_ctrl_panel);
-    lv_obj_set_size(s_slider, CONTENT_W - OVW_PAD * 2 - 12, 28);
+    lv_obj_set_size(s_slider, OVW_RIGHT_W - 12, 28);
     lv_slider_set_range(s_slider, 0, 100);
     lv_slider_set_value(s_slider, 0, LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_slider, COL_BASE3, LV_PART_MAIN);
@@ -411,7 +432,7 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_add_event_cb(s_slider, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     s_action_btn = lv_obj_create(s_ctrl_panel);
-    lv_obj_set_size(s_action_btn, CONTENT_W - OVW_PAD * 2 - 12, 36);
+    lv_obj_set_size(s_action_btn, OVW_RIGHT_W - 12, 36);
     lv_obj_set_style_bg_color(s_action_btn, COL_BASE3, 0);
     lv_obj_set_style_border_width(s_action_btn, 0, 0);
     lv_obj_set_style_radius(s_action_btn, SZ_RADIUS_SM, 0);
