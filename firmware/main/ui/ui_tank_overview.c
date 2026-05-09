@@ -26,6 +26,17 @@ static lv_obj_t *s_tile_vals[MAX_TANK_METRICS]  = {NULL};
 
 static int s_tank_idx = 0;
 
+// ── Fill/Drain control panel ────────────────────────────────────────────────
+static lv_obj_t   *s_ctrl_panel   = NULL;
+static lv_obj_t   *s_target_lbl   = NULL;
+static lv_obj_t   *s_slider       = NULL;
+static lv_obj_t   *s_action_btn   = NULL;
+static lv_obj_t   *s_action_lbl   = NULL;
+static lv_obj_t   *s_target_line  = NULL;
+static float       s_target_pct   = 0.0f;
+static bool        s_animating    = false;
+static lv_timer_t *s_anim_timer   = NULL;
+
 static const char *ovw_status_text(float pct) {
     if (pct < 15.0f) return "Critical";
     if (pct < 40.0f) return "Low";
@@ -46,6 +57,34 @@ static void fill_tap_cb(lv_event_t *e) {
 static void tile_tap_cb(lv_event_t *e) {
     int k = (int)(intptr_t)lv_event_get_user_data(e);
     ui_detail_open_tank_metric(s_tank_idx, k);
+}
+
+static void ovw_refresh_fill(void) {
+    if (!s_fill_bar || !s_fill_outer || !s_fill_pct_lbl) return;
+    Tank *t = &g_tanks[s_tank_idx];
+    float pct = tank_level(t);
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 100.0f) pct = 100.0f;
+
+    int fill_h = (int)((OVW_FILL_H - 2) * pct / 100.0f);
+    if (fill_h < 0) fill_h = 0;
+    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
+    lv_obj_set_height(s_fill_bar, fill_h);
+    lv_obj_set_pos(s_fill_bar, 1, OVW_FILL_H - 2 - fill_h + 1);
+    lv_obj_set_style_bg_color(s_fill_bar, fc, 0);
+
+    lv_obj_t *shine = lv_obj_get_child(s_fill_bar, 0);
+    if (shine) {
+        int shine_h = fill_h > 12 ? fill_h - 6 : fill_h;
+        lv_obj_set_size(shine, (OVW_FILL_W - 2) / 3, shine_h);
+    }
+
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%d%%", (int)pct);
+    lv_label_set_text(s_fill_pct_lbl, buf);
+
+    lv_label_set_text(s_badge_lbl, ovw_status_text(pct));
+    lv_obj_set_style_text_color(s_badge_lbl, ovw_status_color(pct), 0);
 }
 
 void ui_tank_overview_create(lv_obj_t *parent) {
@@ -230,28 +269,9 @@ void ui_tank_overview_activate(int tank_idx) {
     if (pct < 0.0f) pct = 0.0f;
     if (pct > 100.0f) pct = 100.0f;
 
-    // Header
+    // Header — name only (badge updated by ovw_refresh_fill)
     lv_label_set_text(s_name_lbl, t->name);
-    lv_label_set_text(s_badge_lbl, ovw_status_text(pct));
-    lv_obj_set_style_text_color(s_badge_lbl, ovw_status_color(pct), 0);
-
-    // Fill bar
-    int fill_h = (int)((OVW_FILL_H - 2) * pct / 100.0f);
-    if (fill_h < 0) fill_h = 0;
-    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
-    lv_obj_set_height(s_fill_bar, fill_h);
-    lv_obj_set_pos(s_fill_bar, 1, OVW_FILL_H - 2 - fill_h + 1);
-    lv_obj_set_style_bg_color(s_fill_bar, fc, 0);
-
-    lv_obj_t *shine = lv_obj_get_child(s_fill_bar, 0);
-    if (shine) {
-        int shine_h = fill_h > 12 ? fill_h - 6 : fill_h;
-        lv_obj_set_size(shine, (OVW_FILL_W - 2) / 3, shine_h);
-    }
-
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d%%", (int)pct);
-    lv_label_set_text(s_fill_pct_lbl, buf);
+    ovw_refresh_fill();
 
     // Metric tiles — show only metrics that exist for this tank
     for (int k = 0; k < MAX_TANK_METRICS; k++) {
