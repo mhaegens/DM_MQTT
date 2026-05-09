@@ -87,6 +87,116 @@ static void ovw_refresh_fill(void) {
     lv_obj_set_style_text_color(s_badge_lbl, ovw_status_color(pct), 0);
 }
 
+static void ovw_show_target_line(float target_pct) {
+    if (!s_target_line) return;
+    int ty = (int)((OVW_FILL_H - 2) * (100.0f - target_pct) / 100.0f);
+    lv_obj_set_pos(s_target_line, 0, ty);
+    lv_obj_clear_flag(s_target_line, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void ovw_hide_target_line(void) {
+    if (s_target_line) lv_obj_add_flag(s_target_line, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void update_action_btn(void) {
+    if (!s_action_btn || !s_action_lbl || !s_target_lbl) return;
+    Tank *t = &g_tanks[s_tank_idx];
+    float cur = tank_level(t);
+
+    char lbl_buf[24];
+    snprintf(lbl_buf, sizeof(lbl_buf), "Target: %d%%", (int)s_target_pct);
+    lv_label_set_text(s_target_lbl, lbl_buf);
+
+    if (s_animating) {
+        lv_obj_set_style_bg_color(s_action_btn, COL_ERR, 0);
+        lv_label_set_text(s_action_lbl, "Stop");
+        lv_obj_set_style_text_color(s_action_lbl, COL_BASE, 0);
+        lv_obj_add_flag(s_action_btn, LV_OBJ_FLAG_CLICKABLE);
+    } else if ((int)s_target_pct == (int)cur) {
+        lv_obj_set_style_bg_color(s_action_btn, COL_BASE3, 0);
+        char buf[20];
+        snprintf(buf, sizeof(buf), "At %d%%", (int)cur);
+        lv_label_set_text(s_action_lbl, buf);
+        lv_obj_set_style_text_color(s_action_lbl, COL_TX3, 0);
+        lv_obj_clear_flag(s_action_btn, LV_OBJ_FLAG_CLICKABLE);
+    } else if (s_target_pct > cur) {
+        lv_obj_set_style_bg_color(s_action_btn, COL_HI, 0);
+        char buf[24];
+        snprintf(buf, sizeof(buf), "Fill to %d%%", (int)s_target_pct);
+        lv_label_set_text(s_action_lbl, buf);
+        lv_obj_set_style_text_color(s_action_lbl, COL_BASE, 0);
+        lv_obj_add_flag(s_action_btn, LV_OBJ_FLAG_CLICKABLE);
+    } else {
+        lv_obj_set_style_bg_color(s_action_btn, COL_ERR, 0);
+        char buf[24];
+        snprintf(buf, sizeof(buf), "Drain to %d%%", (int)s_target_pct);
+        lv_label_set_text(s_action_lbl, buf);
+        lv_obj_set_style_text_color(s_action_lbl, COL_BASE, 0);
+        lv_obj_add_flag(s_action_btn, LV_OBJ_FLAG_CLICKABLE);
+    }
+}
+
+static void slider_cb(lv_event_t *e) {
+    (void)e;
+    if (s_animating) return;
+    s_target_pct = (float)lv_slider_get_value(s_slider);
+    Tank *t = &g_tanks[s_tank_idx];
+    float cur = tank_level(t);
+    lv_color_t ind_col = (s_target_pct > cur) ? COL_HI : COL_ERR;
+    lv_obj_set_style_bg_color(s_slider, ind_col, LV_PART_INDICATOR);
+    lv_obj_set_style_border_color(s_slider, ind_col, LV_PART_KNOB);
+    ovw_show_target_line(s_target_pct);
+    update_action_btn();
+}
+
+static void action_btn_cb(lv_event_t *e) {
+    (void)e;
+    if (s_animating) {
+        lv_timer_pause(s_anim_timer);
+        s_animating = false;
+        lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
+        ovw_hide_target_line();
+        update_action_btn();
+    } else {
+        Tank *t = &g_tanks[s_tank_idx];
+        float cur = tank_level(t);
+        if ((int)s_target_pct == (int)cur) return;
+        s_animating = true;
+        lv_obj_clear_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
+        ovw_show_target_line(s_target_pct);
+        lv_timer_resume(s_anim_timer);
+        update_action_btn();
+    }
+}
+
+static void anim_timer_cb(lv_timer_t *tmr) {
+    (void)tmr;
+    if (!s_animating) return;
+
+    Tank *tk = &g_tanks[s_tank_idx];
+    float cur = tank_level(tk);
+    bool filling = (s_target_pct > cur);
+    float next = cur + (filling ? 1.2f : -1.2f);
+
+    if (filling  && next >= s_target_pct - 0.6f) next = s_target_pct;
+    if (!filling && next <= s_target_pct + 0.6f) next = s_target_pct;
+    if (next < 0.0f)   next = 0.0f;
+    if (next > 100.0f) next = 100.0f;
+
+    tk->metrics[0].value = next;
+    ovw_refresh_fill();
+
+    bool done = (filling && next >= s_target_pct) ||
+                (!filling && next <= s_target_pct);
+    if (done) {
+        lv_timer_pause(s_anim_timer);
+        s_animating = false;
+        lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
+        ovw_hide_target_line();
+        update_action_btn();
+    }
+}
+
 void ui_tank_overview_create(lv_obj_t *parent) {
     s_screen = lv_obj_create(parent);
     lv_obj_set_size(s_screen, CONTENT_W, DETAIL_H);
@@ -199,6 +309,18 @@ void ui_tank_overview_create(lv_obj_t *parent) {
         lv_obj_clear_flag(tick, LV_OBJ_FLAG_CLICKABLE);
     }
 
+    // Target level indicator line (hidden by default)
+    s_target_line = lv_obj_create(s_fill_outer);
+    lv_obj_set_size(s_target_line, OVW_FILL_W - 2, 2);
+    lv_obj_set_pos(s_target_line, 0, 0);
+    lv_obj_set_style_bg_color(s_target_line, lv_color_hex(0xFFFF80), 0);
+    lv_obj_set_style_bg_opa(s_target_line, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(s_target_line, 0, 0);
+    lv_obj_set_style_radius(s_target_line, 0, 0);
+    lv_obj_set_style_pad_all(s_target_line, 0, 0);
+    lv_obj_add_flag(s_target_line, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(s_target_line, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+
     // Pct label centered in fill bar container
     s_fill_pct_lbl = lv_label_create(s_fill_outer);
     lv_label_set_text(s_fill_pct_lbl, "—");
@@ -255,6 +377,58 @@ void ui_tank_overview_create(lv_obj_t *parent) {
         // hidden until activate() sets metric_count
         lv_obj_add_flag(tile, LV_OBJ_FLAG_HIDDEN);
     }
+
+    // ── Fill/Drain control panel ─────────────────────────────────────────────
+    s_ctrl_panel = lv_obj_create(s_screen);
+    lv_obj_set_size(s_ctrl_panel, CONTENT_W - OVW_PAD * 2, 96);
+    lv_obj_set_style_bg_color(s_ctrl_panel, COL_BASE, 0);
+    lv_obj_set_style_border_color(s_ctrl_panel, COL_BD, 0);
+    lv_obj_set_style_border_width(s_ctrl_panel, 1, 0);
+    lv_obj_set_style_radius(s_ctrl_panel, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(s_ctrl_panel, 6, 0);
+    lv_obj_set_style_pad_gap(s_ctrl_panel, 4, 0);
+    lv_obj_set_style_shadow_width(s_ctrl_panel, 0, 0);
+    lv_obj_clear_flag(s_ctrl_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_ctrl_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_ctrl_panel, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    s_target_lbl = lv_label_create(s_ctrl_panel);
+    lv_label_set_text(s_target_lbl, "Target: —");
+    lv_obj_set_style_text_font(s_target_lbl, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(s_target_lbl, COL_TX2, 0);
+
+    s_slider = lv_slider_create(s_ctrl_panel);
+    lv_obj_set_size(s_slider, CONTENT_W - OVW_PAD * 2 - 12, 28);
+    lv_slider_set_range(s_slider, 0, 100);
+    lv_slider_set_value(s_slider, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(s_slider, COL_BASE3, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_slider, COL_HI, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_slider, COL_BASE, LV_PART_KNOB);
+    lv_obj_set_style_border_color(s_slider, COL_HI, LV_PART_KNOB);
+    lv_obj_set_style_border_width(s_slider, 2, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(s_slider, 4, LV_PART_KNOB);
+    lv_obj_add_event_cb(s_slider, slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    s_action_btn = lv_obj_create(s_ctrl_panel);
+    lv_obj_set_size(s_action_btn, CONTENT_W - OVW_PAD * 2 - 12, 36);
+    lv_obj_set_style_bg_color(s_action_btn, COL_BASE3, 0);
+    lv_obj_set_style_border_width(s_action_btn, 0, 0);
+    lv_obj_set_style_radius(s_action_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(s_action_btn, 0, 0);
+    lv_obj_set_style_shadow_width(s_action_btn, 0, 0);
+    lv_obj_clear_flag(s_action_btn, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_action_btn, action_btn_cb, LV_EVENT_SHORT_CLICKED, NULL);
+
+    s_action_lbl = lv_label_create(s_action_btn);
+    lv_label_set_text(s_action_lbl, "At 0%");
+    lv_obj_set_style_text_font(s_action_lbl, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(s_action_lbl, COL_TX3, 0);
+    lv_obj_center(s_action_lbl);
+
+    // Animation timer — created once, kept paused until fill/drain triggered
+    s_anim_timer = lv_timer_create(anim_timer_cb, 100, NULL);
+    lv_timer_pause(s_anim_timer);
 
     ESP_LOGI(TAG, "Tank overview screen created");
 }
