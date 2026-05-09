@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CARD_W  340
-#define CARD_H  180
-#define CAR_H   (CARD_H + 60)   // carousel container height (overflow for scaled cards)
+#define CARD_W  440
+#define CARD_H  260
+#define CAR_H   (CARD_H + 50)   // carousel container height (overflow for scaled cards)
 #define RING_OUTER 150
 #define RING_INNER  80
 
@@ -71,9 +71,9 @@ static void update_carousel(void) {
 
             int scale, opa, x, y;
             switch (rel) {
-                case  0: scale=256; opa=255; x=180;  y=20; break;
-                case -1: scale=230; opa=220; x=-100; y=30; break;
-                case  1: scale=230; opa=220; x=520;  y=30; break;
+                case  0: scale=256; opa=255; x=130;  y=25; break;
+                case -1: scale=230; opa=220; x=-320; y=30; break;
+                case  1: scale=230; opa=220; x=598;  y=30; break;
                 default: scale=256; opa=255; x=180;  y=20; break;
             }
             lv_obj_set_pos(s_badge_cards[i], x, y);
@@ -495,15 +495,15 @@ void ui_nfc_create(lv_obj_t *parent)
 
     // ── Virtual mode panel ────────────────────────────────────────────────────
     s_virt_panel = lv_obj_create(s_screen);
-    lv_obj_set_size(s_virt_panel, CONTENT_W - SZ_GAP * 2, LV_SIZE_CONTENT);
+    lv_obj_set_size(s_virt_panel, CONTENT_W - SZ_GAP * 2, 506);
     lv_obj_set_style_bg_opa(s_virt_panel, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(s_virt_panel, 0, 0);
     lv_obj_set_style_pad_all(s_virt_panel, 0, 0);
-    lv_obj_set_style_pad_gap(s_virt_panel, 12, 0);
+    lv_obj_set_style_pad_gap(s_virt_panel, 8, 0);
     lv_obj_set_style_shadow_width(s_virt_panel, 0, 0);
     lv_obj_clear_flag(s_virt_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(s_virt_panel, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(s_virt_panel, LV_FLEX_ALIGN_START,
+    lv_obj_set_flex_align(s_virt_panel, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_add_flag(s_virt_panel, LV_OBJ_FLAG_HIDDEN);
 
@@ -537,7 +537,7 @@ void ui_nfc_create(lv_obj_t *parent)
     // Dots row
     lv_obj_t *dots_row = lv_obj_create(s_virt_panel);
     lv_obj_remove_style_all(dots_row);
-    lv_obj_set_size(dots_row, LV_SIZE_CONTENT, 20);
+    lv_obj_set_size(dots_row, LV_SIZE_CONTENT, 16);
     lv_obj_clear_flag(dots_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(dots_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(dots_row, LV_FLEX_ALIGN_CENTER,
@@ -564,7 +564,7 @@ void ui_nfc_create(lv_obj_t *parent)
 
     // Select Operator button
     s_select_btn = lv_btn_create(s_virt_panel);
-    lv_obj_set_size(s_select_btn, CONTENT_W - SZ_GAP * 2, 72);
+    lv_obj_set_size(s_select_btn, CONTENT_W - SZ_GAP * 2, 60);
     lv_obj_set_style_bg_color(s_select_btn, COL_HI, LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_select_btn, COL_HI_DK, LV_STATE_PRESSED);
     lv_obj_set_style_border_width(s_select_btn, 0, 0);
