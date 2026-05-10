@@ -54,7 +54,7 @@
         "heap_caps_get_free_size(MALLOC_CAP_INTERNAL) shows >= 100 KB free after all init"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Check whether bsp_display_start() already allocates frame buffers in PSRAM before implementing. If it does, Tier 1 is verification only."
     },
     {
