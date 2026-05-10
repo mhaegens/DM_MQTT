@@ -3,6 +3,7 @@
 #include "ui/data.h"
 #include "config.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_spiffs.h"
 #include "driver/sdmmc_host.h"
 #include "sdmmc_cmd.h"
@@ -15,6 +16,11 @@
 static const char *TAG = "cfg";
 
 #define JSON_BUF_SIZE (32 * 1024)
+
+// ─── cJSON SPIRAM allocator ───────────────────────────────────────────────────
+static void *psram_malloc(size_t sz) {
+    return heap_caps_malloc(sz, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
 
 const char *config_result_str(ConfigResult r) {
     switch (r) {
@@ -180,7 +186,15 @@ static void populate_from_json(const cJSON *root) {
 }
 
 static ConfigResult parse_and_populate(const char *json_str) {
+    // Route cJSON tree allocations to SPIRAM for duration of parse
+    cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
+    cJSON_InitHooks(&hooks);
+
     cJSON *root = cJSON_Parse(json_str);
+
+    // Restore default cJSON allocator before any early return
+    cJSON_InitHooks(NULL);
+
     if (!root) {
         ESP_LOGE(TAG, "cJSON parse failed: %s", cJSON_GetErrorPtr());
         return CONFIG_PARSE_ERROR;

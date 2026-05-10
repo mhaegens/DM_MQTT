@@ -1,12 +1,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "driver/gpio.h"
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
 #include "ui/ui_main.h"
 #include "ui/ui_screenshot.h"
+#include "ui/data.h"
 #include "config.h"
 #include "config_loader.h"
 #include "wifi_manager.h"
@@ -76,6 +78,9 @@ void app_main(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+    // Allocate entity arrays in SPIRAM before any other init
+    data_init_psram();
+
     // Load config from SD (or fall back to embedded defaults)
     ConfigResult cr = config_load();
     ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
@@ -86,7 +91,7 @@ void app_main(void) {
         .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
         .flags = {
             .buff_dma    = true,
-            .buff_spiram = false,
+            .buff_spiram = true,   // allocate LVGL draw buffer(s) in SPIRAM
             .sw_rotate   = false,
         }
     };
@@ -107,6 +112,15 @@ void app_main(void) {
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(console_task, "con", 8192, NULL, 3, NULL, 0);
+
+    // Memory diagnostics — log SPIRAM and internal SRAM state after all init
+    heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
+    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+    size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    ESP_LOGI(TAG, "Internal SRAM free: %u bytes", (unsigned)free_internal);
+    if (free_internal < 100 * 1024) {
+        ESP_LOGW(TAG, "Warning: internal SRAM below 100 KB threshold");
+    }
 
     while(1) vTaskDelay(pdMS_TO_TICKS(1000));
 }

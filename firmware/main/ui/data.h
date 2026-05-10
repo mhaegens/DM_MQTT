@@ -96,9 +96,9 @@ typedef struct {
 } Badge;
 
 // ─── Global data ───────────────────────────────────────────────────────────
-extern Machine g_machines[MAX_MACHINES];
-extern Tank    g_tanks[MAX_TANKS];
-extern Badge   g_badges[MAX_BADGES];
+extern Machine *g_machines;
+extern Tank    *g_tanks;
+extern Badge   *g_badges;
 extern int     g_machine_count;
 extern int     g_tank_count;
 extern int     g_badge_count;
@@ -112,6 +112,7 @@ extern int     g_wifi_rssi;
 extern char    g_device_ip[16];
 
 void metric_push(Metric *m, float value);
+void data_init_psram(void);
 
 // Helper: get tank level (always metrics[0].value)
 static inline float tank_level(const Tank *t) { return t->metrics[0].value; }
