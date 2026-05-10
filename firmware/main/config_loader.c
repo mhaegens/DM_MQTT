@@ -209,7 +209,7 @@ ConfigResult config_load(void) {
 
     char *buf = malloc(JSON_BUF_SIZE);
     if (!buf) {
-        esp_vfs_fat_sdmmc_unmount("/sdcard", card);
+        esp_vfs_fat_sdcard_unmount("/sdcard", card);
         parse_and_populate(DEFAULT_CONFIG_JSON);
         return CONFIG_PARSE_ERROR;
     }
@@ -218,7 +218,7 @@ ConfigResult config_load(void) {
     if (!f) {
         ESP_LOGW(TAG, "sapdm_config.json not found — using default config");
         free(buf);
-        esp_vfs_fat_sdmmc_unmount("/sdcard", card);
+        esp_vfs_fat_sdcard_unmount("/sdcard", card);
         parse_and_populate(DEFAULT_CONFIG_JSON);
         return CONFIG_FILE_NOT_FOUND;
     }
@@ -226,7 +226,7 @@ ConfigResult config_load(void) {
     size_t n = fread(buf, 1, JSON_BUF_SIZE - 1, f);
     buf[n] = '\0';
     fclose(f);
-    esp_vfs_fat_sdmmc_unmount("/sdcard", card);
+    esp_vfs_fat_sdcard_unmount("/sdcard", card);
 
     ConfigResult r = parse_and_populate(buf);
     free(buf);

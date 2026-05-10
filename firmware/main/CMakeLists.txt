@@ -1,8 +1,13 @@
 idf_component_register(
     SRCS
         "main.c"
+        "config_loader.c"
+        "default_config.c"
         "wifi_manager.c"
         "wifi_portal.c"
+        "wifi_simple.c"
+        "mqtt_task.c"
+        "sim_task.c"
         "ui/ui_main.c"
         "ui/ui_home.c"
         "ui/ui_machines.c"
@@ -34,6 +39,9 @@ idf_component_register(
         esp_netif
         esp_event
         esp_http_server
+        fatfs
+        sdmmc
+        json
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)

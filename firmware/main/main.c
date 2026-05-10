@@ -8,10 +8,13 @@
 #include "ui/ui_main.h"
 #include "ui/ui_screenshot.h"
 #include "config.h"
+#include "config_loader.h"
+#include "wifi_simple.h"
+#include "mqtt_task.h"
+#include "sim_task.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
 #include "esp_event.h"
-#include "wifi_manager.h"
 
 static const char *TAG = "main";
 
@@ -63,6 +66,10 @@ static void console_task(void *arg) {
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
 
+    // Load config from SD (or fall back to embedded defaults)
+    ConfigResult cr = config_load();
+    ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
+
     // Network prerequisites — must come before WiFi init
     esp_err_t nvs_ret = nvs_flash_init();
     if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -72,7 +79,6 @@ void app_main(void) {
     ESP_ERROR_CHECK(nvs_ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    wifi_manager_init();
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
@@ -93,6 +99,11 @@ void app_main(void) {
     bsp_display_lock(0);
     ui_main_init();
     bsp_display_unlock();
+
+    // Start networking and simulation tasks
+    wifi_simple_init();
+    mqtt_task_start();
+    sim_task_start();
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(console_task, "con", 8192, NULL, 3, NULL, 0);
