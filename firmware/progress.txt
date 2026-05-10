@@ -1,0 +1,23 @@
+## Codebase Patterns
+- Entity globals are in `ui/data.h` + `ui/data.c` (Badge, Machine, Tank, g_badges, g_machines, g_tanks, g_badge_count, etc.) — data_model.h/c are legacy files not in CMakeLists.txt
+- JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
+- `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
+- The build environment requires proper IDF PATH setup to run `idf.py build`; individual object files can be compiled via `make -C firmware/build <target>.obj` after initial CMake configure
+- Pre-existing CMake issue: `gdbinit.cmake:40` fails with "exactly three arguments" error in the ESP-IDF environment; this does not affect actual compilation, only CMake reconfigure step
+- JSON config key for operators is `"people"` (not "operators"); config_loader looks for `cJSON_GetObjectItem(root, "people")`
+
+---
+
+## 2026-05-11 - US-001
+- Renamed JSON key from `"operators"` to `"people"` in config_loader.c and default_config.c
+- Added `plant` field parsing in config_loader.c badge population (BS macro)
+- Added `"plant":"Plant BE01"` to all 5 demo operators in default_config.c embedded JSON
+- Added ESP_LOGW when `people` array size exceeds MAX_BADGES
+- Gutted data_model.c/h (not compiled; legacy files left as minimal stubs)
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c, firmware/main/data_model.c, firmware/main/data_model.h
+- **Learnings for future iterations:**
+  - `data_model.c` is NOT in CMakeLists.txt — changes to it have no compile effect
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - The gdbinit.cmake error is pre-existing and does not block compilation of individual .obj files
+  - US-001 last criterion (UART boot log verification) requires flashing to hardware — mark as hardware-verify-pending
+---
