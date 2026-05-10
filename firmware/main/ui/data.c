@@ -13,6 +13,8 @@ int     g_active_badge  = -1;
 int     g_log_sec       = 0;
 bool    g_mqtt_connected = false;
 int     g_mqtt_msg_count = 0;
+bool    g_wifi_connected = false;
+char    g_wifi_ssid[33]  = "";
 int     g_wifi_rssi      = -99;
 char    g_device_ip[16]  = "0.0.0.0";
 

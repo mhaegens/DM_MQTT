@@ -106,6 +106,8 @@ extern int     g_active_badge;
 extern int     g_log_sec;
 extern bool    g_mqtt_connected;
 extern int     g_mqtt_msg_count;
+extern bool    g_wifi_connected;
+extern char    g_wifi_ssid[33];   // currently connected SSID, "" when disconnected
 extern int     g_wifi_rssi;
 extern char    g_device_ip[16];
 

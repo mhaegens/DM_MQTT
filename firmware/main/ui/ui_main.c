@@ -595,8 +595,13 @@ void ui_notify_mqtt_status(bool connected)
 void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 {
     set_pill_connected(s_wifi_dot, s_wifi_lbl, connected);
+    g_wifi_connected = connected;
     g_wifi_rssi = rssi;
-    if (ip) strncpy(g_device_ip, ip, sizeof(g_device_ip) - 1);
+    if (connected && ip) {
+        strncpy(g_device_ip, ip, sizeof(g_device_ip) - 1);
+    } else if (!connected) {
+        strncpy(g_device_ip, "0.0.0.0", sizeof(g_device_ip) - 1);
+    }
 }
 
 // ─── Hardware button callbacks ────────────────────────────────────────────────
