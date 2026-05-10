@@ -9,7 +9,7 @@
 #include "ui/ui_screenshot.h"
 #include "config.h"
 #include "config_loader.h"
-#include "wifi_simple.h"
+#include "wifi_manager.h"
 #include "mqtt_task.h"
 #include "sim_task.h"
 #include "nvs_flash.h"
@@ -101,7 +101,7 @@ void app_main(void) {
     bsp_display_unlock();
 
     // Start networking and simulation tasks
-    wifi_simple_init();
+    wifi_manager_init();
     mqtt_task_start();
     sim_task_start();
 

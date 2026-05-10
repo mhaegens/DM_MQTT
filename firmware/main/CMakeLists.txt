@@ -5,7 +5,6 @@ idf_component_register(
         "default_config.c"
         "wifi_manager.c"
         "wifi_portal.c"
-        "wifi_simple.c"
         "mqtt_task.c"
         "sim_task.c"
         "ui/ui_main.c"
