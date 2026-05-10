@@ -158,6 +158,22 @@
   - Screenshot AC requires hardware flash; mark as hardware-verify-pending
 ---
 
+## 2026-05-11 - US-010
+- Added `#include "../mqtt_task.h"` to ui_tanks.c (same pattern as ui_machines.c and ui_nfc.c)
+- Added `s_last_pub_ms[MAX_TANKS]` static array and `DRAG_PUB_INTERVAL_MS 400` constant for throttle
+- During LV_EVENT_PRESSING: when dragging, publishes `mqtt_pub_tank_metric(t->id, t->metrics[0].key, new_pct)` at most once per 400ms using `lv_tick_get()` diff
+- On LV_EVENT_RELEASED: always publishes final value `t->metrics[0].value` if drag was active (clears s_dragging after), ensuring the exact released level is delivered even if < 400ms from last throttled publish
+- g_tank_drag_active flag set/cleared was already correct; sim_task already skips metric[0] when flag is set — no changes needed there
+- Wave physics (slosh) is baked into the draw callback and responds to the updated metric value automatically — no structural change needed
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_tanks.c
+- **Learnings for future iterations:**
+  - `lv_tick_get()` returns milliseconds and is safe to call from the LVGL event handler (same task context); use it for throttling rapid UI events
+  - `uint32_t` wraps after ~49 days; the subtraction `now - s_last_pub_ms[idx] >= threshold` handles rollover correctly due to unsigned arithmetic
+  - Always publish a final value on RELEASED even if the throttle hasn't elapsed — last-write wins on the broker
+  - mqtt_pub_tank_metric uses metrics[0].key as the MQTT sub-topic key; this must match what config_loader set in metrics[0].key
+---
+
 ## 2026-05-11 - US-009
 - Added `#include "../mqtt_task.h"` to ui_machines.c (same pattern as ui_nfc.c)
 - toggle_cb now calls `mqtt_pub_machine_status(mc->id, mc->running)` immediately after toggling mc->running

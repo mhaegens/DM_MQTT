@@ -162,8 +162,8 @@
         "Build succeeds (idf.py build)"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Set drag_active flag on LV_EVENT_PRESSING and clear on LV_EVENT_RELEASED to block sim_task from overwriting the manually set level."
+      "passes": true,
+      "notes": "Added #include \"../mqtt_task.h\" + s_last_pub_ms[MAX_TANKS] throttle array + DRAG_PUB_INTERVAL_MS=400 to ui_tanks.c. During LV_EVENT_PRESSING: publishes mqtt_pub_tank_metric throttled to >=400ms intervals using lv_tick_get(). On LV_EVENT_RELEASED: always publishes final value if drag was active. g_tank_drag_active flag and sim_task skip already existed. Build: 0 errors."
     },
     {
       "id": "US-006",
