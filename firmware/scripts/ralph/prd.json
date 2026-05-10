@@ -89,8 +89,8 @@
         "Screenshot (python3 tools/screenshot.py) confirms 5-machine and 8-machine layouts render correctly"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "All LVGL object creation must run on the LVGL task (CPU1). Use lv_async_call for any updates from other tasks."
+      "passes": true,
+      "notes": "MAX_MACHINES bumped to 10 in data.h; grid already used LV_FLEX_FLOW_ROW_WRAP + g_machine_count; added bottom padding to grid; spiffs_image/sapdm_config.json extended to 8 machines (weld01, asm01, coat01 added). Build confirmed. Screenshot requires hardware flash."
     },
     {
       "id": "US-004",

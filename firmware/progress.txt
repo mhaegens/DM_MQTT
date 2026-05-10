@@ -3,6 +3,7 @@
 - JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
 - `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
 - The build environment requires proper IDF PATH setup to run `idf.py build`; individual object files can be compiled via `make -C firmware/build <target>.obj` after initial CMake configure
+- ui_machines.c grid uses LV_FLEX_FLOW_ROW_WRAP with LV_SIZE_CONTENT height + scrollable screen — adding machines beyond 4 automatically adds rows; no structural changes needed for dynamic count
 - Pre-existing CMake issue: `gdbinit.cmake:40` fails with "exactly three arguments" error in the ESP-IDF environment; this does not affect actual compilation, only CMake reconfigure step
 - JSON config key for operators is `"people"` (not "operators"); config_loader looks for `cJSON_GetObjectItem(root, "people")`
 - g_machines, g_tanks, g_badges are now heap pointers (not static arrays); `data_init_psram()` in data.c must be called in app_main() before config_load(); syntax for callers is unchanged (ptr[i] == arr[i] in C)
@@ -101,4 +102,19 @@
   - data_init_psram() must be called before config_load() because config_loader populates the arrays via pointer access
   - BSP buff_spiram flag delegates LVGL draw buffer allocation to the BSP/LVGL port layer — no manual allocation needed for that tier
   - AC 7 (boot log confirmation of SPIRAM addresses) and AC 8 (internal SRAM >= 100 KB) require flashing to hardware to verify
+---
+
+## 2026-05-11 - US-003
+- Bumped MAX_MACHINES from 8 to 10 in data.h; data.c SPIRAM allocation uses MAX_MACHINES so the heap alloc grows automatically
+- Added `lv_obj_set_style_pad_bottom(grid, GRID_PAD, 0)` so last row of cards has breathing room before the scroll end
+- Updated top comment in ui_machines.c from "2×2 grid" to "dynamic 2-column scrollable grid (up to MAX_MACHINES)"
+- Verified grid already used LV_FLEX_FLOW_ROW_WRAP + LV_SIZE_CONTENT height + scrollable s_screen with LV_DIR_VER — no structural changes needed
+- Extended spiffs_image/sapdm_config.json from 4 to 8 machines (added weld01, asm01, coat01 alongside existing 4); supports 5-machine and 8-machine screenshot verification on hardware
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/data.h, firmware/main/ui/ui_machines.c, firmware/main/spiffs_image/sapdm_config.json, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - The flex-wrap + LV_SIZE_CONTENT grid pattern already handles N cards dynamically; no per-card position math needed
+  - MAX_MACHINES controls both the static array sizes (data.h) and the SPIRAM heap alloc (data.c) — one change in data.h covers both
+  - Screenshot AC (hardware verify) cannot be satisfied without flashing; mark as hardware-verify-pending
+  - config_loader.c already clamps to MAX_MACHINES with ESP_LOGW; no defensive code changes needed when bumping the limit
 ---

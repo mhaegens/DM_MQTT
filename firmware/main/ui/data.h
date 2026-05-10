@@ -49,7 +49,7 @@ typedef struct {
 } Metric;
 
 // ─── Machine ───────────────────────────────────────────────────────────────
-#define MAX_MACHINES     8
+#define MAX_MACHINES     10
 #define MAX_TANKS        3
 #define MAX_BADGES       12
 #define MAX_MACH_METRICS 8

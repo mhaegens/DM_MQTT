@@ -1,4 +1,4 @@
-// ui_machines.c — 2×2 machine card grid.
+// ui_machines.c — dynamic 2-column scrollable machine card grid (up to MAX_MACHINES).
 // Each card: header (name + type + status dot), body (sparkline, arc gauges,
 // metric tiles), footer (Start/Stop + Pulse buttons).
 // Tapping any metric opens ui_push_detail(machine.name, metric.label).
@@ -555,16 +555,17 @@ void ui_machines_create(lv_obj_t *parent) {
     lv_obj_set_scroll_dir(s_screen, LV_DIR_VER);
     g_screens[VIEW_MACHINES] = s_screen;
 
-    // 2×2 grid container
+    // Scrollable 2-column grid (up to MAX_MACHINES cards, flex-wrap rows)
     lv_obj_t *grid = lv_obj_create(s_screen);
     lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, LV_SIZE_CONTENT);
     lv_obj_set_pos(grid, GRID_PAD, GRID_PAD);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
+    lv_obj_set_style_pad_bottom(grid, GRID_PAD, 0);  // breathing room after last row
     lv_obj_set_style_pad_gap(grid, 0, 0);
 
-    // Use flex wrap for 2-column layout
+    // Flex wrap: cards flow left-to-right, wrap to new row every 2 cards
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
