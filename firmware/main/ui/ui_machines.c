@@ -51,12 +51,12 @@ static void fmt_value(float v, char *buf, size_t n) {
 
 // ─── Persistent widget references (for refresh / pulse) ───────────────────────
 static lv_obj_t *s_screen                  = NULL;
-static lv_obj_t *s_cards[MACHINE_COUNT]    = {NULL};
-static lv_obj_t *s_dots[MACHINE_COUNT]     = {NULL};  // status dot
-static lv_obj_t *s_toggle_btns[MACHINE_COUNT] = {NULL}; // Start/Stop button
-static lv_obj_t *s_toggle_lbls[MACHINE_COUNT] = {NULL}; // button label
-static lv_obj_t *s_charts[MACHINE_COUNT]   = {NULL};  // sparkline chart
-static lv_chart_series_t *s_series[MACHINE_COUNT] = {NULL};
+static lv_obj_t *s_cards[MAX_MACHINES]    = {NULL};
+static lv_obj_t *s_dots[MAX_MACHINES]     = {NULL};  // status dot
+static lv_obj_t *s_toggle_btns[MAX_MACHINES] = {NULL}; // Start/Stop button
+static lv_obj_t *s_toggle_lbls[MAX_MACHINES] = {NULL}; // button label
+static lv_obj_t *s_charts[MAX_MACHINES]   = {NULL};  // sparkline chart
+static lv_chart_series_t *s_series[MAX_MACHINES] = {NULL};
 
 // ─── Event callback context types ─────────────────────────────────────────────
 typedef struct { int machine; int metric; } MetricCtx;
@@ -535,6 +535,12 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_add_event_cb(pulse_btn, pulse_cb, LV_EVENT_SHORT_CLICKED, mctx2);
 }
 
+// ─── Periodic refresh timer callback ─────────────────────────────────────────
+static void machines_refresh_cb(lv_timer_t *t) {
+    (void)t;
+    ui_machines_refresh();
+}
+
 // ─── Public: create machines screen ──────────────────────────────────────────
 void ui_machines_create(lv_obj_t *parent) {
     s_screen = lv_obj_create(parent);
@@ -545,18 +551,18 @@ void ui_machines_create(lv_obj_t *parent) {
     lv_obj_set_style_radius(s_screen, 0, 0);
     lv_obj_set_style_pad_all(s_screen, 0, 0);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(s_screen, LV_DIR_VER);
     g_screens[VIEW_MACHINES] = s_screen;
 
     // 2×2 grid container
     lv_obj_t *grid = lv_obj_create(s_screen);
-    lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, CONTENT_H - 2 * GRID_PAD);
+    lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, LV_SIZE_CONTENT);
     lv_obj_set_pos(grid, GRID_PAD, GRID_PAD);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
     lv_obj_set_style_pad_gap(grid, 0, 0);
-    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
 
     // Use flex wrap for 2-column layout
     lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
@@ -564,9 +570,11 @@ void ui_machines_create(lv_obj_t *parent) {
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(grid, GRID_GAP, 0);
 
-    for (int i = 0; i < MACHINE_COUNT; i++) {
+    for (int i = 0; i < g_machine_count; i++) {
         build_machine_card(grid, i);
     }
+
+    lv_timer_create(machines_refresh_cb, 1500, NULL);
 }
 
 // ─── Public: refresh all arc / tile values from g_machines ───────────────────
@@ -575,7 +583,7 @@ void ui_machines_create(lv_obj_t *parent) {
 // visible label text and chart data.
 void ui_machines_refresh(void) {
     // Refresh status dots and toggle button labels / colors to match current state
-    for (int i = 0; i < MACHINE_COUNT; i++) {
+    for (int i = 0; i < g_machine_count; i++) {
         Machine *mc = &g_machines[i];
         if (!s_dots[i] || !s_toggle_btns[i]) continue;
 
@@ -618,7 +626,7 @@ void ui_machines_refresh(void) {
 
 // ─── Public: pulse the first running machine ──────────────────────────────────
 void ui_machines_pulse_first(void) {
-    for (int i = 0; i < MACHINE_COUNT; i++) {
+    for (int i = 0; i < g_machine_count; i++) {
         if (g_machines[i].running) {
             g_machines[i].pulses++;
             ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, g_machines[i].pulses);
