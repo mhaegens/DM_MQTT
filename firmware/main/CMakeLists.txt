@@ -41,6 +41,11 @@ idf_component_register(
         fatfs
         sdmmc
         json
+        spiffs
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)
+
+# Package spiffs_image/ directory into a SPIFFS image for the 'spiffs' partition.
+# FLASH_IN_PROJECT means 'idf.py flash' flashes both firmware and SPIFFS image.
+spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)

@@ -1,0 +1,250 @@
+{
+  "project": "DM-MQTT-Firmware",
+  "branchName": "ralph/full-functional-firmware",
+  "description": "Full Functional Firmware — wire every UI element, make all entities dynamic from JSON config, PSRAM memory architecture, offline-first operation",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Operators in JSON Config",
+      "description": "As a developer, I need operators/people defined in the JSON config alongside machines and tanks so the device renders them dynamically without hardcoded data.",
+      "acceptanceCriteria": [
+        "JSON schema extended with a 'people' array at the top level",
+        "Each person object has: id, name, role, role_key, dept, plant, uid, avatar_color, and a certs string array",
+        "config_loader.c parses the people array and populates g_badges[]",
+        "data_model.c hardcoded operator init is removed; no operator data in C source",
+        "default_config.c embedded fallback JSON includes the 5 demo operators with correct field names",
+        "MAX_BADGES respected; excess entries silently skipped with an ESP_LOGW",
+        "Build succeeds (idf.py build)",
+        "UART log confirms g_badges is populated correctly at boot"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented on claude/firmware-bsp-st7703-fonts; branch merged into ralph/full-functional-firmware"
+    },
+    {
+      "id": "US-002",
+      "title": "SPIFFS Partition for JSON Config",
+      "description": "As a user, I want the device to store sapdm_config.json in internal flash so it survives reboots and can be updated without reflashing firmware.",
+      "acceptanceCriteria": [
+        "partitions.csv includes a spiffs partition of at least 256 KB labelled storage",
+        "config_loader.c checks SPIFFS for /spiffs/sapdm_config.json first, then SD card, then falls back to embedded default",
+        "SPIFFS is mounted read-only at boot using esp_vfs_spiffs_register",
+        "CMakeLists.txt step packages default_config.json into the SPIFFS image",
+        "idf.py flash flashes both firmware and SPIFFS image in one command",
+        "If SPIFFS file is missing or corrupt the fallback chain still works",
+        "Build succeeds (idf.py build)",
+        "UART log confirms which config source was used (SPIFFS / SD / embedded) at boot"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "SPIFFS partition already existed in partitions.csv. Added esp_vfs_spiffs_register in config_loader.c, spiffs_create_partition_image in CMakeLists.txt, and spiffs_image/sapdm_config.json. Build confirmed spiffs.bin generated at 0x410000."
+    },
+    {
+      "id": "US-013",
+      "title": "PSRAM Memory Architecture",
+      "description": "As a developer, I want large allocations to live in PSRAM so internal SRAM stays available for the WiFi stack, FreeRTOS, and time-critical code.",
+      "acceptanceCriteria": [
+        "LVGL draw buffer(s) are allocated with MALLOC_CAP_SPIRAM; confirmed in boot log",
+        "g_machines[], g_tanks[], g_badges[] are heap-allocated via heap_caps_malloc(..., MALLOC_CAP_SPIRAM) at boot rather than being static globals",
+        "All existing code references to these arrays remain valid (same pointer interface)",
+        "default_config.c embedded JSON string lives in flash (.rodata); does not occupy RAM",
+        "cJSON uses a custom allocator calling heap_caps_malloc(..., MALLOC_CAP_SPIRAM) during config parse; cJSON tree freed after parse",
+        "Build succeeds (idf.py build)",
+        "UART boot log shows heap_caps_print_heap_info confirming LVGL buffers and entity arrays are in SPIRAM",
+        "heap_caps_get_free_size(MALLOC_CAP_INTERNAL) shows >= 100 KB free after all init"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Check whether bsp_display_start() already allocates frame buffers in PSRAM before implementing. If it does, Tier 1 is verification only."
+    },
+    {
+      "id": "US-011",
+      "title": "Simulation and MQTT Publish from Dynamic Config",
+      "description": "As a developer, I need the sim_task and mqtt_task to iterate over config-loaded entity arrays so adding or removing entities in JSON automatically changes what gets simulated and published.",
+      "acceptanceCriteria": [
+        "sim_task loops over g_machines[0..g_machine_count-1] and g_tanks[0..g_tank_count-1]; no hardcoded machine IDs or counts",
+        "mqtt_task (or sim_task publish path) publishes all metrics for all loaded entities each tick",
+        "Removing an entity from JSON config stops its simulation and publishing on next boot",
+        "Adding a new entity with a custom metric key publishes to factory/{type}/{id}/{metric_key} using the key field from JSON",
+        "Operator login publish uses g_badges[g_active_badge] data (uid, name, role, plant) as JSON payload",
+        "Publish path handles disconnected state gracefully (drop silently if MQTT queue full)",
+        "Build succeeds (idf.py build)",
+        "UART log shows publish topics matching loaded entity IDs"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Dynamic Machines Screen — Vertical Scroll, Up to 10",
+      "description": "As a user, I want the Machines screen to show all machines from the loaded config in a scrollable 2-column grid so I can run demos with any number of machines.",
+      "acceptanceCriteria": [
+        "Machines screen reads g_machine_count from config; renders exactly that many cards",
+        "Cards arranged 2 per row with vertical scroll enabled; scroll is free (no snap)",
+        "With 4 machines the layout is identical to current 2x2; with 5-10 machines additional rows appear",
+        "Card content (name, type, metrics, Start/Stop, Pulse buttons) populates from g_machines[i]; no hardcoded machine IDs in UI code",
+        "Cards for machines beyond index 3 render correctly with no off-screen clipping or LVGL allocation failure",
+        "Build succeeds (idf.py build)",
+        "Screenshot (python3 tools/screenshot.py) confirms 5-machine and 8-machine layouts render correctly"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "All LVGL object creation must run on the LVGL task (CPU1). Use lv_async_call for any updates from other tasks."
+    },
+    {
+      "id": "US-004",
+      "title": "Dynamic Tanks Layout — 1 to 3 Tanks, Even Distribution",
+      "description": "As a user, I want the Tanks screen to distribute however many tanks are in the config evenly across the screen width so the layout always looks intentional.",
+      "acceptanceCriteria": [
+        "Tanks screen reads g_tank_count from config; renders that many tanks",
+        "1 tank: centered, full width with equal side margins",
+        "2 tanks: side by side with equal spacing, each roughly half the width",
+        "3 tanks: equal thirds as in the current layout",
+        "Tank width and hopper proportions scale to available width per tank",
+        "Sub-metric chips below each tank remain correctly positioned",
+        "Build succeeds (idf.py build)",
+        "Screenshot (python3 tools/screenshot.py) confirms 1-tank, 2-tank, and 3-tank layouts"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "People Tab — Operator List and Simulate Scan",
+      "description": "As a demo operator, I want the People tab to show all configured operators and let me simulate a badge scan that publishes to MQTT.",
+      "acceptanceCriteria": [
+        "NFC ring animation and 'Tap Badge' instruction text removed",
+        "Tab renders a vertically scrollable list of operator cards; one card per entry in g_badges[]",
+        "Each card shows: avatar circle (role initial + avatar_color), full name, role label, department, plant, certifications as chips",
+        "A 'Simulate Scan' button is always visible (full-width or prominent at bottom)",
+        "Tapping Simulate Scan cycles to the next operator in g_badges[] (wraps), highlights that card as active, and publishes factory/operators/login JSON payload: {uid, name, role, plant, ts}",
+        "g_active_badge global is updated so the Home screen Active Operator KPI reflects the scan",
+        "Scans today counter increments on each simulate press and displays on screen",
+        "Tab icon and label updated to reflect operators (person icon, label People)",
+        "Build succeeds (idf.py build)",
+        "Screenshot (python3 tools/screenshot.py) confirms operator list renders"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Use esp_timer_get_time() / 1000 for the ts field (monotonic ms). MQTT publish must fire regardless of connection state."
+    },
+    {
+      "id": "US-009",
+      "title": "Start/Stop and Pulse Buttons Wired to MQTT",
+      "description": "As a demo operator, I want the machine card Start/Stop and Pulse buttons to immediately update state and publish to MQTT so the broker reflects button presses in real time.",
+      "acceptanceCriteria": [
+        "Start/Stop button toggles g_machines[i].running",
+        "On toggle, immediately publishes factory/machines/{id}/status = 'RUNNING' or 'STOPPED'",
+        "Button label and status dot on the card update synchronously on press",
+        "Pulse button increments g_machines[i].pulses by 1",
+        "On press, immediately publishes factory/machines/{id}/pulse = current pulse count as string",
+        "Both actions work regardless of current sim tick timing (not blocked by sim_task mutex)",
+        "If MQTT is disconnected the state updates locally; publish is queued or dropped; no crash",
+        "Build succeeds (idf.py build)"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Tank Drag Gesture Wired to MQTT",
+      "description": "As a demo operator, I want dragging a tank level to immediately publish to MQTT so the broker reflects manual level adjustments in real time.",
+      "acceptanceCriteria": [
+        "Vertical drag on a tank body updates the level metric value in real time",
+        "Publishes factory/tanks/{id}/level throttled to at most once per 400 ms during active drag",
+        "Publishes a final value on drag release (even if < 400 ms since last throttled publish)",
+        "Wave physics (slosh) responds to drag direction as before",
+        "Sim task does not overwrite the manually set level during drag (per-tank drag_active flag; sim skips level for that tank while flag is set; cleared on LV_EVENT_RELEASED)",
+        "No LVGL event handler blocking or watchdog timeout on long drag",
+        "Build succeeds (idf.py build)"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Set drag_active flag on LV_EVENT_PRESSING and clear on LV_EVENT_RELEASED to block sim_task from overwriting the manually set level."
+    },
+    {
+      "id": "US-006",
+      "title": "WiFi Screen — Full Backend Audit and Fix",
+      "description": "As a user, I want every action on the WiFi screen to actually work so I can connect the device to any network during a demo without touching the firmware.",
+      "acceptanceCriteria": [
+        "Scan button triggers wifi_manager_scan(); SSID list populates from scan results within 3 s",
+        "Tapping an SSID navigates to the password entry overlay (ui_wifi_password)",
+        "Submitting a password calls wifi_manager_connect(ssid, pass, cb)",
+        "Connection callback updates g_wifi_connected, g_wifi_rssi, g_device_ip, g_wifi_ssid",
+        "Shell bar WiFi pill updates colour and label immediately after callback fires (via lv_async_call)",
+        "Credentials persisted to NVS; device reconnects automatically on next boot",
+        "Failed password / wrong SSID shows error toast on WiFi screen",
+        "Toggling to 'Setup via Phone' calls wifi_manager_start_ap() and starts captive portal HTTP server",
+        "AP SSID SAP-DM-Setup becomes visible on a phone within 5 s of toggle",
+        "Phone connecting and submitting credentials via captive portal triggers STA connect and stops the AP",
+        "Switching back from AP mode to Scan & Join stops AP cleanly",
+        "WiFi overlay Close / back navigation stops any in-progress scan or AP without crashing",
+        "All state transitions logged to UART",
+        "Build succeeds (idf.py build)"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "wifi_manager_connect_cb fires from a WiFi event handler (not LVGL task); all UI updates from it must use lv_async_call."
+    },
+    {
+      "id": "US-007",
+      "title": "Home Screen — Live Data Wiring",
+      "description": "As a demo operator, I want the Home screen KPI tiles and connection rows to always show accurate live data so I can glance at the device to confirm system state.",
+      "acceptanceCriteria": [
+        "Machines Running KPI counts g_machines[i].running == true across g_machine_count; updates each sim tick",
+        "Pulses Today KPI sums all g_machines[i].pulses; updates each sim tick",
+        "MQTT Messages KPI shows g_mqtt_msg_count; updates on every MQTT_EVENT_PUBLISHED",
+        "WiFi RSSI KPI shows g_wifi_rssi in dBm (dash when disconnected); updates every 5 s",
+        "MQTT status row shows broker hostname + green/red dot + Connected / Disconnected",
+        "WiFi status row shows SSID + IP address when connected, Not connected when disconnected",
+        "Active Operator row shows g_badges[g_active_badge].name + role; updates when g_active_badge changes",
+        "Uptime counter increments live displayed as HH:MM:SS",
+        "All label updates dispatched via lv_async_call or within the LVGL task",
+        "Build succeeds (idf.py build)",
+        "Screenshot (python3 tools/screenshot.py) confirms KPI tiles show live values"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "MQTT Detail Screen — Live Data Wiring",
+      "description": "As a developer or demo operator, I want the MQTT detail overlay to show real broker connection information so I can quickly verify connectivity during a demo.",
+      "acceptanceCriteria": [
+        "Broker URL row shows MQTT_BROKER_URI from config (not a hardcoded string)",
+        "Connection state shows Connected (green) / Reconnecting (orange) / Disconnected (red) from g_mqtt_connected",
+        "Client ID row shows the active client ID string",
+        "Message count row shows g_mqtt_msg_count, updates live while overlay is open",
+        "Last publish topic row shows the topic of the most recent publish (stored in a global updated from mqtt_task)",
+        "Reconnect button calls mqtt_task_reconnect() or equivalent; button disabled when already connected",
+        "Build succeeds (idf.py build)"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Offline-First Operation Validation",
+      "description": "As a demo operator, I want the device to fully function with no WiFi and no MQTT broker available so I can run a local-only demonstration.",
+      "acceptanceCriteria": [
+        "Device boots and reaches the Home screen within 10 s regardless of WiFi state",
+        "With no WiFi configured: simulation runs, UI updates, all screens are navigable",
+        "Shell bar WiFi pill shows red dot + No WiFi; MQTT pill shows red dot + Offline",
+        "Home screen KPI tiles and status rows reflect disconnected state clearly (no stale connected labels)",
+        "WiFi connect attempt has a timeout of <= 15 s with clear failure feedback on the WiFi screen",
+        "MQTT reconnect loop uses exponential backoff (5 s -> 10 s -> 30 s); does not block UI",
+        "When WiFi connects mid-demo, MQTT reconnects automatically and pills turn green without reboot",
+        "Build succeeds (idf.py build)",
+        "UART log confirms boot-to-Home time and disconnected state labels"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "This is a validation/integration story. Most logic should already exist from earlier stories. Focus on end-to-end flow testing and fixing any gaps."
+    }
+  ]
+}

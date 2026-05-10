@@ -3,6 +3,7 @@
 #include "ui/data.h"
 #include "config.h"
 #include "esp_log.h"
+#include "esp_spiffs.h"
 #include "driver/sdmmc_host.h"
 #include "sdmmc_cmd.h"
 #include "esp_vfs_fat.h"
@@ -18,6 +19,7 @@ static const char *TAG = "cfg";
 const char *config_result_str(ConfigResult r) {
     switch (r) {
     case CONFIG_OK:             return "SD card loaded";
+    case CONFIG_SPIFFS_OK:      return "SPIFFS loaded";
     case CONFIG_SD_NOT_FOUND:   return "SD card not found — using default";
     case CONFIG_FILE_NOT_FOUND: return "sapdm_config.json not found — using default";
     case CONFIG_PARSE_ERROR:    return "JSON parse error — using default";
@@ -189,6 +191,40 @@ static ConfigResult parse_and_populate(const char *json_str) {
 }
 
 ConfigResult config_load(void) {
+    // --- Try SPIFFS first ---
+    esp_vfs_spiffs_conf_t spiffs_conf = {
+        .base_path = "/spiffs",
+        .partition_label = "spiffs",
+        .max_files = 4,
+        .format_if_mount_failed = false,
+    };
+    esp_err_t sp_err = esp_vfs_spiffs_register(&spiffs_conf);
+    if (sp_err == ESP_OK || sp_err == ESP_ERR_INVALID_STATE) {
+        // ESP_ERR_INVALID_STATE means already mounted — still usable
+        char *buf = malloc(JSON_BUF_SIZE);
+        if (buf) {
+            FILE *f = fopen("/spiffs/sapdm_config.json", "r");
+            if (f) {
+                size_t n = fread(buf, 1, JSON_BUF_SIZE - 1, f);
+                buf[n] = '\0';
+                fclose(f);
+                ConfigResult r = parse_and_populate(buf);
+                free(buf);
+                if (r == CONFIG_OK) {
+                    ESP_LOGI(TAG, "config source: SPIFFS (/spiffs/sapdm_config.json)");
+                    return CONFIG_SPIFFS_OK;
+                }
+                ESP_LOGW(TAG, "SPIFFS JSON parse failed — trying SD card");
+            } else {
+                ESP_LOGW(TAG, "SPIFFS: /spiffs/sapdm_config.json not found — trying SD card");
+                free(buf);
+            }
+        }
+    } else {
+        ESP_LOGW(TAG, "SPIFFS mount failed (%s) — trying SD card", esp_err_to_name(sp_err));
+    }
+
+    // --- Try SD card ---
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;
@@ -208,7 +244,7 @@ ConfigResult config_load(void) {
     sdmmc_card_t *card = NULL;
     esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &mount_cfg, &card);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "SD mount failed (%s) — using default config", esp_err_to_name(err));
+        ESP_LOGW(TAG, "SD mount failed (%s) — config source: embedded default", esp_err_to_name(err));
         parse_and_populate(DEFAULT_CONFIG_JSON);
         return CONFIG_SD_NOT_FOUND;
     }
@@ -216,13 +252,14 @@ ConfigResult config_load(void) {
     char *buf = malloc(JSON_BUF_SIZE);
     if (!buf) {
         esp_vfs_fat_sdcard_unmount("/sdcard", card);
+        ESP_LOGW(TAG, "alloc failed — config source: embedded default");
         parse_and_populate(DEFAULT_CONFIG_JSON);
         return CONFIG_PARSE_ERROR;
     }
 
     FILE *f = fopen("/sdcard/sapdm_config.json", "r");
     if (!f) {
-        ESP_LOGW(TAG, "sapdm_config.json not found — using default config");
+        ESP_LOGW(TAG, "sapdm_config.json not found on SD — config source: embedded default");
         free(buf);
         esp_vfs_fat_sdcard_unmount("/sdcard", card);
         parse_and_populate(DEFAULT_CONFIG_JSON);
@@ -237,8 +274,10 @@ ConfigResult config_load(void) {
     ConfigResult r = parse_and_populate(buf);
     free(buf);
     if (r != CONFIG_OK) {
+        ESP_LOGW(TAG, "SD JSON parse failed — config source: embedded default");
         parse_and_populate(DEFAULT_CONFIG_JSON);
         return CONFIG_USING_DEFAULT;
     }
+    ESP_LOGI(TAG, "config source: SD card (/sdcard/sapdm_config.json)");
     return CONFIG_OK;
 }

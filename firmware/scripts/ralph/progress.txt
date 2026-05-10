@@ -1,0 +1,40 @@
+# Ralph Progress Log
+Started: 2026-05-11
+
+## Codebase Patterns
+- Entity globals are in `ui/data.h` + `ui/data.c` (Badge, Machine, Tank, g_badges, g_machines, g_tanks, g_badge_count, etc.) — data_model.h/c are legacy files not in CMakeLists.txt
+- JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
+- `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
+- The build environment requires IDF_PATH setup; source /Users/I584748/esp/esp-idf/export.sh before idf.py
+- Pre-existing CMake issue: `gdbinit.cmake:40` fails with "exactly three arguments" error; does not affect compilation
+- JSON config key for operators is `"people"` (not "operators")
+- SPIFFS: use `spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)` in main/CMakeLists.txt; partition label must match partitions.csv 'Name' column; source files go in main/spiffs_image/
+- Config load order: SPIFFS (/spiffs/sapdm_config.json) -> SD card (/sdcard/sapdm_config.json) -> embedded DEFAULT_CONFIG_JSON
+- `esp_vfs_spiffs_register` returns `ESP_ERR_INVALID_STATE` if already mounted -- treat same as `ESP_OK`
+
+---
+
+## 2026-05-11 - US-001
+- Already implemented on claude/firmware-bsp-st7703-fonts branch (commit f45d130)
+- Renamed JSON key from "operators" to "people"; added plant field; added ESP_LOGW for MAX_BADGES overflow
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c
+- **Learnings for future iterations:**
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - UART boot log verification requires flashing to hardware
+---
+
+## 2026-05-11 - US-002
+- Added `esp_spiffs.h` include and SPIFFS mount logic to config_loader.c; SPIFFS checked before SD card
+- Added `CONFIG_SPIFFS_OK` to ConfigResult enum in config_loader.h
+- Added `spiffs` to REQUIRES in main/CMakeLists.txt
+- Added `spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)` to main/CMakeLists.txt
+- Created main/spiffs_image/sapdm_config.json with same data as embedded default (proper JSON, not C string)
+- partitions.csv already had spiffs partition at 0x410000 (0x7F0000 bytes) -- no change needed
+- Build confirmed: spiffs.bin (8 MB) generated; flash command shows 0x410000 address
+- Files changed: firmware/main/config_loader.c, firmware/main/config_loader.h, firmware/main/CMakeLists.txt, firmware/main/spiffs_image/sapdm_config.json
+- **Learnings for future iterations:**
+  - `spiffs_create_partition_image(LABEL DIR FLASH_IN_PROJECT)` -- LABEL must exactly match partitions.csv 'Name' column
+  - SPIFFS mount with `format_if_mount_failed=false` is the correct read-only boot pattern
+  - The config fallback chain ensures robustness: SPIFFS -> SD -> embedded; each step logs its outcome
+  - UART log criterion requires hardware flashing -- verified by build log instead
+---

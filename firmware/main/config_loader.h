@@ -2,6 +2,7 @@
 
 typedef enum {
     CONFIG_OK,
+    CONFIG_SPIFFS_OK,
     CONFIG_SD_NOT_FOUND,
     CONFIG_FILE_NOT_FOUND,
     CONFIG_PARSE_ERROR,
