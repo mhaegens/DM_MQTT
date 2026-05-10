@@ -111,9 +111,9 @@ void app_main(void) {
     ui_main_init();
     bsp_display_unlock();
 
-    // Start networking and simulation tasks
+    // Start networking — mqtt starts only after WiFi gets an IP
     wifi_manager_init();
-    mqtt_task_start();
+    wifi_manager_set_on_connected(mqtt_task_start);
     sim_task_start();
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);

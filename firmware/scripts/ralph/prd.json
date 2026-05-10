@@ -186,8 +186,8 @@
         "Build succeeds (idf.py build)"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "wifi_manager_connect_cb fires from a WiFi event handler (not LVGL task); all UI updates from it must use lv_async_call."
+      "passes": true,
+      "notes": "Full WiFi backend already implemented: wifi_manager.c (NVS, scan, connect, AP mode), ui_wifi_setup.c (Scan & Join + Setup via Phone), ui_wifi_password.c (keyboard entry), wifi_portal.c (captive portal). All UI updates via lv_async_call. Credentials saved to NVS namespace 'wifi'. Captive portal auto-stops AP 1.5s after form submit. Build binary at build/sapdm_simulator.bin (May 11). sdkconfig.defaults updated with MQTT task core pinning."
     },
     {
       "id": "US-007",

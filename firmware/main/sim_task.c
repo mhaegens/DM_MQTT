@@ -93,5 +93,5 @@ static void sim_task_fn(void *arg) {
 }
 
 void sim_task_start(void) {
-    xTaskCreatePinnedToCore(sim_task_fn, "sim", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(sim_task_fn, "sim", 8192, NULL, 5, NULL, 0);
 }
