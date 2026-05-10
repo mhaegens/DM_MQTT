@@ -101,6 +101,12 @@ void app_main(void) {
     bsp_display_backlight_on();
     bsp_display_brightness_set(80);
 
+    // Set root screen background before UI builds to prevent teal flash on first frame
+    bsp_display_lock(0);
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xF2F4FA), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, LV_PART_MAIN);
+    bsp_display_unlock();
+
     bsp_display_lock(0);
     ui_main_init();
     bsp_display_unlock();

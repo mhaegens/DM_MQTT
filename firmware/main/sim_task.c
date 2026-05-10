@@ -56,8 +56,10 @@ static void sim_tick(void) {
     }
     for (int i = 0; i < g_tank_count; i++) {
         Tank *t = &g_tanks[i];
-        for (int k = 0; k < t->metric_count; k++)
+        for (int k = 0; k < t->metric_count; k++) {
+            if (k == 0 && g_tank_drag_active[i]) continue;  // don't overwrite manual drag
             sim_metric(&t->metrics[k]);
+        }
     }
 }
 
