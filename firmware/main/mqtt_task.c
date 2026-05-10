@@ -3,6 +3,7 @@
 #include "config.h"
 #include "ui/ui_main.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "mqtt_client.h"
 #include <stdio.h>
 #include <string.h>
@@ -101,9 +102,11 @@ void mqtt_pub_tank_metric(const char *id, const char *key, float value) {
 void mqtt_pub_operator(const char *uid, const char *name,
                        const char *role, const char *plant) {
     char topic[64], payload[256];
-    snprintf(topic, sizeof(topic), "%s/nfc/badge", TOPIC_PREFIX);
+    int64_t ts_ms = esp_timer_get_time() / 1000;
+    snprintf(topic, sizeof(topic), "%s/operators/login", TOPIC_PREFIX);
     snprintf(payload, sizeof(payload),
-             "{\"uid\":\"%s\",\"name\":\"%s\",\"role\":\"%s\",\"plant\":\"%s\"}",
-             uid, name, role, plant);
+             "{\"uid\":\"%s\",\"name\":\"%s\",\"role\":\"%s\",\"plant\":\"%s\",\"ts\":%lld}",
+             uid, name, role, plant, ts_ms);
+    ESP_LOGI(TAG, "pub %s", topic);
     pub(topic, payload);
 }

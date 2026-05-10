@@ -73,11 +73,16 @@ static void publish_all(void) {
         for (int k = 0; k < t->metric_count; k++)
             mqtt_pub_tank_metric(t->id, t->metrics[k].key, t->metrics[k].value);
     }
+    ESP_LOGD(TAG, "published %d machines, %d tanks", g_machine_count, g_tank_count);
 }
 
 static void sim_task_fn(void *arg) {
     memset(s_pulse_tick, 0, sizeof(s_pulse_tick));
     ESP_LOGI(TAG, "started — %d machines, %d tanks", g_machine_count, g_tank_count);
+    for (int i = 0; i < g_machine_count; i++)
+        ESP_LOGI(TAG, "  machine[%d] id=%s", i, g_machines[i].id);
+    for (int i = 0; i < g_tank_count; i++)
+        ESP_LOGI(TAG, "  tank[%d] id=%s", i, g_tanks[i].id);
     while (1) {
         sim_tick();
         if (mqtt_is_connected()) publish_all();

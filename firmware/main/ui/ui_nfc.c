@@ -4,6 +4,7 @@
 #include "ui_theme.h"
 #include "ui_home.h"
 #include "data.h"
+#include "../mqtt_task.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -141,13 +142,17 @@ static void select_btn_cb(lv_event_t *e) {
     if (s_select_btn) lv_obj_set_style_bg_color(s_select_btn, COL_OK, 0);
     if (s_select_lbl) lv_label_set_text(s_select_lbl, "Operator Selected");
     lv_timer_create(restore_select_cb, 1500, NULL);
+    Badge *b = &g_badges[g_active_badge];
+    mqtt_pub_operator(b->uid, b->name, b->role, b->plant);
     ui_home_refresh();
 }
 
 // ─── Physical mode: Simulate Tap ─────────────────────────────────────────────
 static void sim_tap_cb(lv_event_t *e) {
     (void)e;
-    g_active_badge = (g_active_badge + 1) % BADGE_COUNT;
+    if (g_badge_count <= 0) return;
+    int next = (g_active_badge + 1) % g_badge_count;
+    g_active_badge = next;
     Badge *b = &g_badges[g_active_badge];
 
     if (s_result_name) lv_label_set_text(s_result_name, b->name);
@@ -158,6 +163,7 @@ static void sim_tap_cb(lv_event_t *e) {
         lv_obj_clear_flag(s_result_card, LV_OBJ_FLAG_HIDDEN);
         lv_obj_fade_in(s_result_card, 300, 0);
     }
+    mqtt_pub_operator(b->uid, b->name, b->role, b->plant);
     ui_home_refresh();
 }
 

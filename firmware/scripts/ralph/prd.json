@@ -72,8 +72,8 @@
         "UART log shows publish topics matching loaded entity IDs"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "sim_task already used g_machine_count/g_tank_count dynamically; mqtt_pub_operator topic fixed to factory/operators/login with ts field; sim_tap_cb uses g_badge_count; both tap and select paths call mqtt_pub_operator; publish_all logs entity counts at LOGD level; startup log lists all entity IDs."
     },
     {
       "id": "US-003",

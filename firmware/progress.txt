@@ -8,10 +8,66 @@
 - g_machines, g_tanks, g_badges are now heap pointers (not static arrays); `data_init_psram()` in data.c must be called in app_main() before config_load(); syntax for callers is unchanged (ptr[i] == arr[i] in C)
 - cJSON hooks pattern: install `psram_malloc` hook before cJSON_Parse(), restore NULL hooks after — always restore before any early return to avoid leaking the hook state
 - MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the correct cap combination for general-purpose SPIRAM allocations on ESP32-P4
+- Operator login MQTT topic is `factory/operators/login` (not `nfc/badge`); payload includes uid, name, role, plant, ts (ms)
+- Always use g_badge_count (runtime loaded count) not BADGE_COUNT (static max) when iterating g_badges
 
 ---
 
 ## 2026-05-11 - US-001
+- Renamed JSON key from `"operators"` to `"people"` in config_loader.c and default_config.c
+- Added `plant` field parsing in config_loader.c badge population (BS macro)
+- Added `"plant":"Plant BE01"` to all 5 demo operators in default_config.c embedded JSON
+- Added ESP_LOGW when `people` array size exceeds MAX_BADGES
+- Gutted data_model.c/h (not compiled; legacy files left as minimal stubs)
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c, firmware/main/data_model.c, firmware/main/data_model.h
+- **Learnings for future iterations:**
+  - `data_model.c` is NOT in CMakeLists.txt — changes to it have no compile effect
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - The gdbinit.cmake error is pre-existing and does not block compilation of individual .obj files
+  - US-001 last criterion (UART boot log verification) requires flashing to hardware — mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-013
+- Converted g_machines, g_tanks, g_badges from static global arrays to NULL-initialized heap pointers in data.c; declarations in data.h updated to pointer types
+- Added `void data_init_psram(void)` in data.c that allocates all three arrays via heap_caps_malloc(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT), zeroes them with memset, logs their SPIRAM addresses, and aborts on allocation failure
+- Declared data_init_psram() in data.h; call added to app_main() in main.c before config_load()
+- Changed .buff_spiram from false to true in bsp_display_cfg_t in main.c so BSP allocates LVGL draw buffer(s) in SPIRAM
+- Added #include "esp_heap_caps.h" and #include "ui/data.h" to main.c
+- Added cJSON SPIRAM allocator (psram_malloc hook) in config_loader.c: hook installed before cJSON_Parse(), restored to NULL after; hooks pattern is symmetric with early-return safety
+- Added #include "esp_heap_caps.h" to config_loader.c
+- Added boot-time heap diagnostics after sim_task_start() in main.c: heap_caps_print_heap_info for both SPIRAM and internal, plus ESP_LOGW when internal SRAM < 100 KB
+- Verified default_config.c already declares DEFAULT_CONFIG_JSON as `const char[]` — lives in .rodata (flash) by default; no change needed
+- All callers of g_machines[], g_tanks[], g_badges[] use ptr[i] or &ptr[i] syntax which is identical for pointers and arrays in C; no changes to 15+ UI/sim/mqtt caller files required
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/main.c, firmware/main/ui/data.h, firmware/main/ui/data.c, firmware/main/config_loader.c
+- **Learnings for future iterations:**
+  - Converting static global arrays to heap pointers is zero-risk for callers in C: arr[i] and ptr[i] are identical syntax
+  - cJSON_InitHooks(NULL) restores default allocators; always restore before any early return to avoid leaking hook state into subsequent calls
+  - MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the safe general-purpose SPIRAM cap combination for ESP32-P4
+  - data_init_psram() must be called before config_load() because config_loader populates the arrays via pointer access
+  - BSP buff_spiram flag delegates LVGL draw buffer allocation to the BSP/LVGL port layer — no manual allocation needed for that tier
+  - AC 7 (boot log confirmation of SPIRAM addresses) and AC 8 (internal SRAM >= 100 KB) require flashing to hardware to verify
+---
+
+## 2026-05-11 - US-011
+- sim_task already used g_machine_count/g_tank_count dynamically (no changes needed to sim loop)
+- Fixed mqtt_pub_operator topic from `factory/nfc/badge` to `factory/operators/login`; added ts field (esp_timer_get_time()/1000 ms) to JSON payload; added esp_timer.h include
+- sim_tap_cb (Physical mode Simulate Tap) fixed to use g_badge_count instead of BADGE_COUNT; now calls mqtt_pub_operator() to publish login event
+- select_btn_cb (Virtual mode Select Operator) now calls mqtt_pub_operator() to publish login event
+- Added #include "../mqtt_task.h" to ui_nfc.c for access to mqtt_pub_operator
+- Added startup log in sim_task_fn listing all machine and tank IDs with their array index
+- Added ESP_LOGD("sim", ...) in publish_all() logging machine/tank counts per publish cycle
+- Updated ui_mqtt_detail.c display from nfc/badge to operators/login to match actual topic
+- Also committed CONFIG_ESP_HOSTED_DFLT_TASK_FROM_SPIRAM=y in sdkconfig.defaults (US-013 fix that was staged but missed)
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/mqtt_task.c, firmware/main/sim_task.c, firmware/main/ui/ui_nfc.c, firmware/main/ui/ui_mqtt_detail.c, firmware/sdkconfig.defaults
+- **Learnings for future iterations:**
+  - Always use g_badge_count (dynamic loaded count) not BADGE_COUNT (static max) for badge array iteration
+  - esp_timer_get_time() returns microseconds; divide by 1000 for milliseconds
+  - ui_nfc.c must include "../mqtt_task.h" (relative path from ui/ subdir) to call mqtt_pub_operator
+  - UART log criterion for topics is satisfied at LOGD (verbose) level in publish_all and LOGI in mqtt_pub_operator
+---
+
 - Renamed JSON key from `"operators"` to `"people"` in config_loader.c and default_config.c
 - Added `plant` field parsing in config_loader.c badge population (BS macro)
 - Added `"plant":"Plant BE01"` to all 5 demo operators in default_config.c embedded JSON

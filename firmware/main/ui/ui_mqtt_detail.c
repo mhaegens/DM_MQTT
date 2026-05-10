@@ -157,7 +157,7 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     make_info_row(topics_card, "Prefix",   TOPIC_PREFIX "/");
     make_info_row(topics_card, "Machines", TOPIC_PREFIX "/machines/{id}/telemetry");
     make_info_row(topics_card, "Tanks",    TOPIC_PREFIX "/tanks/{id}/telemetry");
-    make_info_row(topics_card, "NFC",      TOPIC_PREFIX "/nfc/badge");
+    make_info_row(topics_card, "NFC",      TOPIC_PREFIX "/operators/login");
 
     // ── Reconnect stub button ─────────────────────────────────────────────────
     lv_obj_t *btn = lv_btn_create(s_screen);
