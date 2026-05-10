@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "ui_wifi_setup.h"
 #include "ui_mqtt_detail.h"
+#include "ui_wifi_password.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -446,6 +447,7 @@ void ui_main_init(void)
     ui_tank_overview_create(g_content);
     ui_wifi_setup_create(g_content);
     ui_mqtt_detail_create(g_content);
+    ui_wifi_password_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -504,6 +506,15 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
+    if (g_current_view == VIEW_WIFI_PASSWORD) {
+        for (int i = 0; i < VIEW_COUNT; i++)
+            if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_screens[VIEW_WIFI_SETUP], LV_OBJ_FLAG_HIDDEN);
+        if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
+        if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+        g_current_view = VIEW_WIFI_SETUP;
+        return;
+    }
     if (g_current_view == VIEW_TANK_OVW) {
         ui_tank_overview_deactivate();
     }
@@ -559,6 +570,7 @@ void ui_push_wifi_setup(void)
     if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
     if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
     g_current_view = VIEW_WIFI_SETUP;
+    ui_wifi_setup_activate();
 }
 
 void ui_push_mqtt_detail(void)
@@ -572,6 +584,19 @@ void ui_push_mqtt_detail(void)
     if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
     g_current_view = VIEW_MQTT_DETAIL;
     ui_mqtt_detail_refresh();
+}
+
+void ui_push_wifi_password(const char *ssid)
+{
+    if (g_current_view == VIEW_WIFI_PASSWORD) return;
+    g_prev_view = g_current_view;
+    for (int i = 0; i < VIEW_COUNT; i++)
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_screens[VIEW_WIFI_PASSWORD], LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, ssid);
+    if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    g_current_view = VIEW_WIFI_PASSWORD;
+    ui_wifi_password_activate(ssid);
 }
 
 // ─── Status pill helpers ──────────────────────────────────────────────────────

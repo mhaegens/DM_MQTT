@@ -66,11 +66,7 @@ static void console_task(void *arg) {
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
 
-    // Load config from SD (or fall back to embedded defaults)
-    ConfigResult cr = config_load();
-    ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
-
-    // Network prerequisites — must come before WiFi init
+    // Network prerequisites — must come before WiFi and SD card init
     esp_err_t nvs_ret = nvs_flash_init();
     if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -79,6 +75,10 @@ void app_main(void) {
     ESP_ERROR_CHECK(nvs_ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Load config from SD (or fall back to embedded defaults)
+    ConfigResult cr = config_load();
+    ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
