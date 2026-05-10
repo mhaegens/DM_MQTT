@@ -145,8 +145,8 @@
         "Build succeeds (idf.py build)"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added #include \"../mqtt_task.h\" to ui_machines.c. toggle_cb now calls mqtt_pub_machine_status(mc->id, mc->running) immediately after toggling. pulse_cb now calls mqtt_pub_machine_pulse(mc->id, mc->pulses) immediately after incrementing. Both functions already existed in mqtt_task.c; pub() silently drops if MQTT disconnected. sim_task has no mutex on machine fields — ESP-IDF dual-core approach is safe for simple bool/int writes in this demo context. Build succeeded: 0 errors, 0 warnings."
     },
     {
       "id": "US-010",

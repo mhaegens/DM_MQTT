@@ -157,3 +157,17 @@
   - lv_obj_set_size(obj, LV_FLEX_GROW(1), ...) is invalid syntax; use lv_obj_set_size(obj, 0, ...) + lv_obj_set_flex_grow(obj, 1)
   - Screenshot AC requires hardware flash; mark as hardware-verify-pending
 ---
+
+## 2026-05-11 - US-009
+- Added `#include "../mqtt_task.h"` to ui_machines.c (same pattern as ui_nfc.c)
+- toggle_cb now calls `mqtt_pub_machine_status(mc->id, mc->running)` immediately after toggling mc->running
+- pulse_cb now calls `mqtt_pub_machine_pulse(mc->id, mc->pulses)` immediately after incrementing mc->pulses
+- Both MQTT publish functions already existed and were fully implemented in mqtt_task.c
+- `pub()` helper silently drops if MQTT disconnected; no crash on offline state
+- Build succeeded: make, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_machines.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - mqtt_pub_machine_status and mqtt_pub_machine_pulse are in mqtt_task.h/c — include "../mqtt_task.h" from ui/ subdir
+  - The `pub()` helper in mqtt_task.c handles disconnect gracefully (drops silently); no extra guard needed in callers
+  - UI callbacks (LVGL task, core 0) write to Machine.running/pulses; sim_task (core 1) reads them; no mutex needed for simple scalar ops in this demo
+---

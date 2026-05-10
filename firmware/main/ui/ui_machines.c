@@ -8,6 +8,7 @@
 #include "ui_theme.h"
 #include "ui_detail.h"
 #include "data.h"
+#include "../mqtt_task.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
@@ -58,6 +59,11 @@ static lv_obj_t *s_toggle_lbls[MAX_MACHINES] = {NULL}; // button label
 static lv_obj_t *s_charts[MAX_MACHINES]   = {NULL};  // sparkline chart
 static lv_chart_series_t *s_series[MAX_MACHINES] = {NULL};
 
+// Per-machine, per-metric value labels for tile and arc widgets (for live refresh)
+#define MAX_METRICS_PER_MACHINE 16
+static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_METRICS_PER_MACHINE] = {{NULL}};
+static lv_obj_t *s_metric_arcs[MAX_MACHINES][MAX_METRICS_PER_MACHINE]     = {{NULL}};
+
 // ─── Event callback context types ─────────────────────────────────────────────
 typedef struct { int machine; int metric; } MetricCtx;
 typedef struct { int machine; }             MachCtx;
@@ -81,6 +87,7 @@ static void toggle_cb(lv_event_t *e) {
 
     mc->running = !mc->running;
     ESP_LOGI(TAG, "Toggle: %s -> %s", mc->id, mc->running ? "running" : "stopped");
+    mqtt_pub_machine_status(mc->id, mc->running);
 
     // Update button appearance
     if (mc->running) {
@@ -110,6 +117,7 @@ static void pulse_cb(lv_event_t *e) {
 
     mc->pulses++;
     ESP_LOGI(TAG, "Pulse: %s pulses=%d", mc->id, mc->pulses);
+    mqtt_pub_machine_pulse(mc->id, mc->pulses);
 
     // Brief visual flash: temporarily brighten card bg, restore after 200ms
     lv_obj_set_style_bg_color(s_cards[idx], COL_HI_LT, 0);
@@ -176,6 +184,10 @@ static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     ctx->machine = midx;
     ctx->metric  = kidx;
     lv_obj_add_event_cb(tile, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
+
+    // Store val_lbl for live refresh (child index 1 = val_lbl after key_lbl)
+    if (midx < MAX_MACHINES && kidx < MAX_METRICS_PER_MACHINE)
+        s_metric_val_lbls[midx][kidx] = val_lbl;
 }
 
 // ─── Build arc gauge widget for one VIZ_ARC metric ───────────────────────────
@@ -240,6 +252,12 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     ctx->machine = midx;
     ctx->metric  = kidx;
     lv_obj_add_event_cb(cont, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
+
+    // Store arc widget and val_lbl for live refresh
+    if (midx < MAX_MACHINES && kidx < MAX_METRICS_PER_MACHINE) {
+        s_metric_arcs[midx][kidx]     = arc;
+        s_metric_val_lbls[midx][kidx] = val_lbl;
+    }
 }
 
 // ─── Build one machine card ────────────────────────────────────────────────────
@@ -620,6 +638,22 @@ void ui_machines_refresh(void) {
                 lv_chart_set_next_value(s_charts[i], s_series[i],
                     (lv_value_precise_t)mc->metrics[spark_idx].value);
                 lv_chart_refresh(s_charts[i]);
+            }
+        }
+
+        // Update tile val labels and arc widgets for all metrics
+        for (int k = 0; k < mc->metric_count && k < MAX_METRICS_PER_MACHINE; k++) {
+            Metric *m = &mc->metrics[k];
+            lv_obj_t *vlbl = s_metric_val_lbls[i][k];
+            if (vlbl) {
+                char val_str[32];
+                fmt_value(m->value, val_str, sizeof(val_str));
+                lv_label_set_text(vlbl, val_str);
+                lv_obj_set_style_text_color(vlbl, lv_color_hex(metric_color(m)), 0);
+            }
+            lv_obj_t *arc = s_metric_arcs[i][k];
+            if (arc) {
+                lv_arc_set_value(arc, (int16_t)m->value);
             }
         }
     }
