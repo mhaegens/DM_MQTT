@@ -91,7 +91,7 @@ void app_main(void) {
         .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
         .flags = {
             .buff_dma    = true,
-            .buff_spiram = true,   // allocate LVGL draw buffer(s) in SPIRAM
+            .buff_spiram = false,  // draw buffer must stay in internal DMA-capable SRAM
             .sw_rotate   = false,
         }
     };
