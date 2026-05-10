@@ -931,7 +931,7 @@ static void open_context(const char *entity, Metric *m,
 // ─── Public: open from tanks ──────────────────────────────────────────────────
 void ui_detail_open_tank_level(int tank_idx)
 {
-    if (tank_idx < 0 || tank_idx >= TANK_COUNT) return;
+    if (tank_idx < 0 || tank_idx >= g_tank_count) return;
     Tank *t = &g_tanks[tank_idx];
     open_context(t->name, &t->metrics[0], tank_idx, -1, 0);
     ui_push_detail(t->name, t->metrics[0].label);
@@ -939,7 +939,7 @@ void ui_detail_open_tank_level(int tank_idx)
 
 void ui_detail_open_tank_metric(int tank_idx, int metric_idx)
 {
-    if (tank_idx < 0 || tank_idx >= TANK_COUNT) return;
+    if (tank_idx < 0 || tank_idx >= g_tank_count) return;
     Tank *t = &g_tanks[tank_idx];
     if (metric_idx < 0 || metric_idx >= t->metric_count) return;
     open_context(t->name, &t->metrics[metric_idx], tank_idx, -1, metric_idx);

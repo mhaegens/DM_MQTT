@@ -107,8 +107,8 @@
         "Screenshot (python3 tools/screenshot.py) confirms 1-tank, 2-tank, and 3-tank layouts"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Layout code was already fully dynamic: col_w = (CONTENT_W - COL_GAP*(g_tank_count+1)) / g_tank_count; LV_FLEX_ALIGN_SPACE_EVENLY centers 1-tank layout with equal margins; 2-tank gives ~half width each; 3-tank gives equal thirds. Fixed TANK_COUNT→g_tank_count in ui_tank_overview.c and ui_detail.c bounds checks. Screenshot AC requires hardware flash."
     },
     {
       "id": "US-005",

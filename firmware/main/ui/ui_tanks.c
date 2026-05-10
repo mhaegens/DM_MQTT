@@ -1,4 +1,4 @@
-// ui_tanks.c — Three hopper-shaped tanks: cylindrical top + tapered bottom.
+// ui_tanks.c — Dynamic hopper-shaped tanks (1–3): cylindrical top + tapered bottom.
 // Rendered via LV_EVENT_DRAW_MAIN with lv_draw_rect and lv_draw_triangle.
 #include "ui_tanks.h"
 #include "ui_main.h"

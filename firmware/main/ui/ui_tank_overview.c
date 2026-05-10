@@ -456,7 +456,7 @@ void ui_tank_overview_create(lv_obj_t *parent) {
 
 void ui_tank_overview_activate(int tank_idx) {
     if (!s_screen) return;
-    if (tank_idx < 0 || tank_idx >= TANK_COUNT) return;
+    if (tank_idx < 0 || tank_idx >= g_tank_count) return;
 
     // Cancel any in-progress animation from a previous visit
     if (s_animating && s_anim_timer) {
