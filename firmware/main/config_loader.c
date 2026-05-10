@@ -137,10 +137,15 @@ static void populate_from_json(const cJSON *root) {
         g_tank_count++;
     }
 
-    arr = cJSON_GetObjectItem(root, "operators");
+    arr = cJSON_GetObjectItem(root, "people");
     g_badge_count = 0;
+    int badge_total = cJSON_GetArraySize(arr);
     cJSON_ArrayForEach(item, arr) {
-        if (g_badge_count >= MAX_BADGES) break;
+        if (g_badge_count >= MAX_BADGES) {
+            ESP_LOGW(TAG, "people array has %d entries — MAX_BADGES=%d, extras ignored",
+                     badge_total, MAX_BADGES);
+            break;
+        }
         Badge *b = &g_badges[g_badge_count];
         memset(b, 0, sizeof(Badge));
         const cJSON *v;
@@ -152,6 +157,7 @@ static void populate_from_json(const cJSON *root) {
         BS("role",     b->role,     sizeof(b->role));
         BS("role_key", b->role_key, sizeof(b->role_key));
         BS("dept",     b->dept,     sizeof(b->dept));
+        BS("plant",    b->plant,    sizeof(b->plant));
         BS("uid",      b->uid,      sizeof(b->uid));
         #undef BS
         if ((v = cJSON_GetObjectItem(item, "avatar_color")) && cJSON_IsString(v))
