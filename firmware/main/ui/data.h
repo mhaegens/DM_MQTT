@@ -56,6 +56,11 @@ typedef struct {
 #define MAX_TANK_METRICS 8
 #define MAX_CERTS        6
 
+// Compat aliases for callers that used the old names
+#define MACHINE_COUNT MAX_MACHINES
+#define TANK_COUNT    MAX_TANKS
+#define BADGE_COUNT   MAX_BADGES
+
 typedef struct {
     char  id[16];
     char  name[32];
@@ -83,6 +88,7 @@ typedef struct {
     char     role[48];
     char     role_key[16];
     char     dept[32];
+    char     plant[32];
     char     uid[24];
     char     certs[MAX_CERTS][32];
     int      cert_count;
