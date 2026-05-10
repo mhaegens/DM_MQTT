@@ -1,114 +1,90 @@
-#include "data_model.h"
+#include "sim_task.h"
+#include "ui/data.h"
 #include "mqtt_task.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_random.h"
 #include <math.h>
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  sim_task.c — Telemetry simulation: random-walk on all machine metrics.
-//  Fires every 1500 ms (matches HTML dashboard behaviour).
-//  All running machines have their metrics updated and published to MQTT.
-// ─────────────────────────────────────────────────────────────────────────────
+#include <string.h>
 
 static const char *TAG = "sim";
 
-// Clamp float to [lo, hi]
 static inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// Random float in [-1, 1]
 static inline float randf(void) {
     return ((float)(esp_random() & 0xFFFF) / 32768.0f) - 1.0f;
 }
 
-static void sim_machine(Machine *m) {
-    if (!m->running) return;
-
-    switch (m->type) {
-    case MACH_CNC:
-        metric_push(&m->rpm,
-            clampf(m->rpm.v + randf() * 120, 0, 8000));
-        metric_push(&m->spindle_load,
-            clampf(m->spindle_load.v + randf() * 3, 0, 100));
-        metric_push(&m->tool_wear,
-            clampf(m->tool_wear.v + randf() * 0.4f, 0, 100));
-        metric_push(&m->feed_rate,
-            clampf(m->feed_rate.v + randf() * 15, 0, 600));
-        metric_push(&m->mach_temp,
-            clampf(m->mach_temp.v + randf() * 0.3f, 15, 80));
-        break;
-
-    case MACH_FILL:
-        metric_push(&m->flow_rate,
-            clampf(m->flow_rate.v + randf() * 0.5f, 0, 25));
-        metric_push(&m->fill_pres,
-            clampf(m->fill_pres.v + randf() * 0.05f, 0, 5));
-        metric_push(&m->mach_temp,
-            clampf(m->mach_temp.v + randf() * 0.2f, 15, 80));
-        break;
-
-    case MACH_PACK:
-        metric_push(&m->line_speed,
-            clampf(m->line_speed.v + randf() * 2, 0, 80));
-        metric_push(&m->oee,
-            clampf(m->oee.v + randf() * 0.5f, 0, 100));
-        metric_push(&m->mach_temp,
-            clampf(m->mach_temp.v + randf() * 0.2f, 15, 80));
+static void sim_metric(Metric *m) {
+    float next = m->value;
+    switch (m->sim_profile) {
+    case SIM_RANDOM_WALK: {
+        float lo = m->rand_min > 0.0f ? m->rand_min : m->min_val;
+        float hi = m->rand_max > 0.0f ? m->rand_max : m->max_val;
+        next = clampf(m->value + randf() * m->step, lo, hi);
         break;
     }
+    case SIM_SINE:
+        m->sim_phase_acc += (2.0f * (float)M_PI / m->sim_period_s) * 1.5f;
+        next = clampf(m->sim_offset + m->sim_amplitude * sinf(m->sim_phase_acc),
+                      m->min_val, m->max_val);
+        break;
+    case SIM_RAMP:
+        next = m->value + m->step;
+        if (next > m->max_val) next = m->min_val;
+        break;
+    }
+    metric_push(m, next);
+}
 
-    // Auto-pulse every 5 ticks (~7.5 s) when running
-    static int tick[MACH_COUNT] = {0};
-    for (int i = 0; i < MACH_COUNT; i++) {
-        if (&g_machines[i] == m) {
-            if (++tick[i] >= 5) {
-                tick[i] = 0;
-                m->pulses++;
-                mqtt_pub_machine_pulse(m->id, m->pulses);
-            }
-            break;
+static int s_pulse_tick[MAX_MACHINES];
+
+static void sim_tick(void) {
+    for (int i = 0; i < g_machine_count; i++) {
+        Machine *mc = &g_machines[i];
+        if (!mc->running) continue;
+        for (int k = 0; k < mc->metric_count; k++)
+            sim_metric(&mc->metrics[k]);
+        if (++s_pulse_tick[i] >= 5) {
+            s_pulse_tick[i] = 0;
+            mc->pulses++;
+            mqtt_pub_machine_pulse(mc->id, mc->pulses);
         }
+    }
+    for (int i = 0; i < g_tank_count; i++) {
+        Tank *t = &g_tanks[i];
+        for (int k = 0; k < t->metric_count; k++)
+            sim_metric(&t->metrics[k]);
     }
 }
 
-// Publish all current machine metrics to MQTT (called once per sim tick)
 static void publish_all(void) {
-    for (int i = 0; i < MACH_COUNT; i++) {
-        Machine *m = &g_machines[i];
-        switch (m->type) {
-        case MACH_CNC:
-            mqtt_pub_machine_metric(m->id, "rpm",          m->rpm.v);
-            mqtt_pub_machine_metric(m->id, "spindle_load", m->spindle_load.v);
-            mqtt_pub_machine_metric(m->id, "tool_wear",    m->tool_wear.v);
-            mqtt_pub_machine_metric(m->id, "feed_rate",    m->feed_rate.v);
-            mqtt_pub_machine_metric(m->id, "temperature",  m->mach_temp.v);
-            break;
-        case MACH_FILL:
-            mqtt_pub_machine_metric(m->id, "flow_rate",    m->flow_rate.v);
-            mqtt_pub_machine_metric(m->id, "fill_pressure",m->fill_pres.v);
-            mqtt_pub_machine_metric(m->id, "temperature",  m->mach_temp.v);
-            break;
-        case MACH_PACK:
-            mqtt_pub_machine_metric(m->id, "line_speed",   m->line_speed.v);
-            mqtt_pub_machine_metric(m->id, "oee",          m->oee.v);
-            mqtt_pub_machine_metric(m->id, "temperature",  m->mach_temp.v);
-            break;
-        }
+    for (int i = 0; i < g_machine_count; i++) {
+        Machine *mc = &g_machines[i];
+        mqtt_pub_machine_status(mc->id, mc->running);
+        for (int k = 0; k < mc->metric_count; k++)
+            mqtt_pub_machine_metric(mc->id, mc->metrics[k].key, mc->metrics[k].value);
+    }
+    for (int i = 0; i < g_tank_count; i++) {
+        Tank *t = &g_tanks[i];
+        for (int k = 0; k < t->metric_count; k++)
+            mqtt_pub_tank_metric(t->id, t->metrics[k].key, t->metrics[k].value);
     }
 }
 
 static void sim_task_fn(void *arg) {
-    ESP_LOGI(TAG, "simulation task started");
+    memset(s_pulse_tick, 0, sizeof(s_pulse_tick));
+    ESP_LOGI(TAG, "started — %d machines, %d tanks", g_machine_count, g_tank_count);
     while (1) {
-        for (int i = 0; i < MACH_COUNT; i++) sim_machine(&g_machines[i]);
+        sim_tick();
         if (mqtt_is_connected()) publish_all();
         vTaskDelay(pdMS_TO_TICKS(1500));
     }
 }
 
 void sim_task_start(void) {
-    xTaskCreatePinnedToCore(sim_task_fn, "sim", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(sim_task_fn, "sim", 8192, NULL, 5, NULL, 1);
 }
