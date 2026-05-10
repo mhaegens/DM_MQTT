@@ -5,6 +5,7 @@
 #include "ui_theme.h"
 #include "ui_detail.h"
 #include "data.h"
+#include "../mqtt_task.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,9 @@ static lv_timer_t *s_refresh_timer = NULL;
 static int16_t s_press_y[MAX_TANKS];
 static float   s_press_pct[MAX_TANKS];
 static bool    s_dragging[MAX_TANKS];
+static uint32_t s_last_pub_ms[MAX_TANKS];  // lv_tick_get() at last throttled publish
+
+#define DRAG_PUB_INTERVAL_MS 400
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 static const char *status_text(float pct) {
@@ -300,6 +304,7 @@ static void tank_event_cb(lv_event_t *e) {
         int dy = s_press_y[idx] - pt.y;
         if (dy > 8 || dy < -8) s_dragging[idx] = true;
         if (s_dragging[idx]) {
+            g_tank_drag_active[idx] = true;
             lv_obj_t *widget = lv_event_get_target(e);
             int h = lv_obj_get_height(widget);
             if (h <= 0) return;
@@ -308,6 +313,11 @@ static void tank_event_cb(lv_event_t *e) {
             if (new_pct > 100.0f) new_pct = 100.0f;
             t->metrics[0].value = new_pct;
             refresh_tank(idx);
+            uint32_t now = lv_tick_get();
+            if (now - s_last_pub_ms[idx] >= DRAG_PUB_INTERVAL_MS) {
+                s_last_pub_ms[idx] = now;
+                mqtt_pub_tank_metric(t->id, t->metrics[0].key, new_pct);
+            }
         }
     } else if (code == LV_EVENT_SHORT_CLICKED) {
         if (!s_dragging[idx]) {
@@ -315,6 +325,10 @@ static void tank_event_cb(lv_event_t *e) {
         }
         s_dragging[idx] = false;
     } else if (code == LV_EVENT_RELEASED) {
+        if (s_dragging[idx]) {
+            mqtt_pub_tank_metric(t->id, t->metrics[0].key, t->metrics[0].value);
+        }
+        g_tank_drag_active[idx] = false;
         s_dragging[idx] = false;
     }
 }
