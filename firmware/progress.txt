@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Entity globals are in `ui/data.h` + `ui/data.c` (Badge, Machine, Tank, g_badges, g_machines, g_tanks, g_badge_count, etc.) — data_model.h/c are legacy files not in CMakeLists.txt
+- Always use `g_tank_count` (runtime loaded count) not `TANK_COUNT` / `MAX_TANKS` for bounds checks in tank UI code; same pattern applies to machines (g_machine_count) and badges (g_badge_count)
 - JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
 - `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
 - The build environment requires proper IDF PATH setup to run `idf.py build`; individual object files can be compiled via `make -C firmware/build <target>.obj` after initial CMake configure
@@ -11,6 +12,10 @@
 - MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the correct cap combination for general-purpose SPIRAM allocations on ESP32-P4
 - Operator login MQTT topic is `factory/operators/login` (not `nfc/badge`); payload includes uid, name, role, plant, ts (ms)
 - Always use g_badge_count (runtime loaded count) not BADGE_COUNT (static max) when iterating g_badges
+- LVGL symbol set: LV_SYMBOL_USER does not exist in this version; use LV_SYMBOL_CALL for person/badge tab icon
+- LVGL flex API: lv_obj_set_flex_shrink() does not exist; use lv_obj_set_flex_grow() on the expanding sibling only
+- LVGL flex sizing: lv_obj_set_size(obj, LV_FLEX_GROW(1), h) is invalid; use lv_obj_set_size(obj, 0, h) + lv_obj_set_flex_grow(obj, 1)
+- format-truncation is -Werror in this build; snprintf buffers must cover worst-case field sizes (dept 32 + plant 32 + decoration = 80+ bytes)
 
 ---
 
@@ -117,4 +122,38 @@
   - MAX_MACHINES controls both the static array sizes (data.h) and the SPIRAM heap alloc (data.c) — one change in data.h covers both
   - Screenshot AC (hardware verify) cannot be satisfied without flashing; mark as hardware-verify-pending
   - config_loader.c already clamps to MAX_MACHINES with ESP_LOGW; no defensive code changes needed when bumping the limit
+---
+
+## 2026-05-11 - US-004
+- Layout was already fully dynamic: col_w = (CONTENT_W - COL_GAP*(g_tank_count+1)) / g_tank_count; LV_FLEX_ALIGN_SPACE_EVENLY in ui_tanks_create handles even distribution for 1/2/3 tanks
+- 1 tank: col_w = (720 - 16) / 1 = 704px, centered with equal ~8px margins — matches "full width with equal side margins"
+- 2 tanks: col_w = (720 - 24) / 2 = 348px each — side-by-side half-width
+- 3 tanks: col_w = (720 - 32) / 3 = 229px each — equal thirds
+- Fixed TANK_COUNT → g_tank_count in ui_tank_overview.c:459 and ui_detail.c:934,942 bounds checks
+- Updated comment in ui_tanks.c from "Three hopper-shaped tanks" to "Dynamic hopper-shaped tanks (1–3)"
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_tanks.c, firmware/main/ui/ui_tank_overview.c, firmware/main/ui/ui_detail.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - Bounds checks using TANK_COUNT/MAX_TANKS are a latent bug if g_tank_count < MAX_TANKS — always use the runtime count variable
+  - The flex-wrap + SPACE_EVENLY combination already handles 1–N layout centering; no explicit per-count CSS-like rules needed
+  - Screenshot AC requires hardware flash; mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-005
+- Replaced NFC ring animation + badge carousel entirely with a vertically scrollable operator list
+- build_operator_card() renders avatar circle (initials + avatar_color), full name, role pill (blue), dept+plant row, cert chips for each g_badges[i]
+- Scrollable list sized to fill content area minus button + counter rows; vertical scroll with active scrollbar
+- Simulate Scan button (full-width, COL_HI blue, always visible) cycles g_active_badge, calls mqtt_pub_operator, calls ui_home_refresh, increments scans_today counter
+- highlight_cards() marks active card with COL_HI_LT bg + COL_HI border + border_width=2; all others COL_BASE + COL_BD + border_width=1
+- Button flashes COL_OK (green) → "Scanned!" for 1200ms on press, restored by timer callback
+- Tab icon changed from LV_SYMBOL_WIFI to LV_SYMBOL_CALL (LV_SYMBOL_USER does not exist in this LVGL version); label changed from "NFC" to "People"
+- ui_nfc_on_badge_scanned() updated to use g_badge_count guard and call highlight_cards()
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_nfc.c, firmware/main/ui/ui_main.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - LV_SYMBOL_USER does not exist in this project's LVGL version; use LV_SYMBOL_CALL as the closest person/badge substitute
+  - lv_obj_set_flex_shrink() does not exist in this LVGL version; simply omit it (flex_grow on sibling achieves same layout effect)
+  - format-truncation is -Werror here; always size snprintf buffers for worst-case: dept(32) + plant(32) + decoration needs >=80 bytes
+  - lv_obj_set_size(obj, LV_FLEX_GROW(1), ...) is invalid syntax; use lv_obj_set_size(obj, 0, ...) + lv_obj_set_flex_grow(obj, 1)
+  - Screenshot AC requires hardware flash; mark as hardware-verify-pending
 ---

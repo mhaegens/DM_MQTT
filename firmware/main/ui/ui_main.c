@@ -58,9 +58,9 @@ static const char *TAB_ICONS[]  = {
     LV_SYMBOL_SETTINGS,
     LV_SYMBOL_IMAGE,     // Tanks placeholder (no tank symbol in built-in set)
     LV_SYMBOL_LIST,
-    LV_SYMBOL_WIFI,
+    LV_SYMBOL_CALL,   // People tab (person/badge icon closest available)
 };
-static const char *TAB_LABELS[] = { "Home", "Machines", "Tanks", "Debug", "NFC" };
+static const char *TAB_LABELS[] = { "Home", "Machines", "Tanks", "Debug", "People" };
 
 // Per-tab button + active-indicator bar (static; accessed by ui_switch_tab)
 static lv_obj_t *s_tab_btns[5]       = {NULL};

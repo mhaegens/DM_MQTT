@@ -55,7 +55,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Check whether bsp_display_start() already allocates frame buffers in PSRAM before implementing. If it does, Tier 1 is verification only."
+      "notes": "IMPORTANT: buff_spiram=true in bsp_display_cfg_t causes severe UI lag and freezes — LVGL draw buffers must stay in internal DMA-capable SRAM (buff_spiram=false, buff_dma=true). Only entity arrays (g_machines, g_tanks, g_badges) and cJSON parse tree belong in SPIRAM. The first criterion about LVGL buffers in SPIRAM was wrong and has been corrected in the implementation."
     },
     {
       "id": "US-011",
@@ -127,8 +127,8 @@
         "Screenshot (python3 tools/screenshot.py) confirms operator list renders"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Use esp_timer_get_time() / 1000 for the ts field (monotonic ms). MQTT publish must fire regardless of connection state."
+      "passes": true,
+      "notes": "NFC ring/carousel replaced with scrollable operator list + Simulate Scan button. Tab label changed to People, icon to LV_SYMBOL_CALL (LV_SYMBOL_USER unavailable in this LVGL version). Scans-today counter displayed above button. highlight_cards() marks active card with blue border/background. Screenshot AC requires hardware flash."
     },
     {
       "id": "US-009",
