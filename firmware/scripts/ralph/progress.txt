@@ -71,3 +71,20 @@ Started: 2026-05-11
   - LVGL is pinned to CPU1; all other tasks (sim, mqtt, btn, console) should use CPU0 or auto
 ---
 
+## 2026-05-11 - US-007
+- Added 1500ms LVGL timer in ui_home_create() calling ui_home_refresh()
+- Fixed MACHINE_COUNT→g_machine_count, BADGE_COUNT→g_badge_count in ui_home_refresh()
+- KPI meta[1] now shows uptime HH:MM:SS via esp_timer_get_time()/1000000
+- MQTT badge dynamically shows OFFLINE (red) or CONNECTED (green) from g_mqtt_connected
+- WiFi status row shows "SSID · IP" when connected, "Not connected" otherwise
+- Operator row shows "name – role" from g_badges[g_active_badge]
+- RSSI KPI shows "--" when disconnected
+- Also: ui_debug.c expanded to 3-column grid with Int RAM + SPIRAM stats; 1s timer paused when not on Debug tab
+- Files changed: main/ui/ui_home.c, main/ui/ui_debug.c, main/ui/ui_main.c
+- **Learnings for future iterations:**
+  - make_badge/make_status_row are static helpers in ui_home.c; use out_pill/out_lbl params for dynamic badge update
+  - MACHINE_COUNT and BADGE_COUNT are deprecated static aliases; always use g_machine_count/g_badge_count
+  - lv_timer_pause/lv_timer_resume pattern for tab-specific timers (see ui_tanks_activate/deactivate)
+---
+
+
