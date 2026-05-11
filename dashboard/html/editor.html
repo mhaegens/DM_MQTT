@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM_MQTT Config Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF; --hi-mid:#C5DCFF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --warn:#E76500; --warn-lt:#FEF0E5; --warn-bd:#F8C07E;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --teal:#045B7A; --pur:#6A28C8;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --sh:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.05);
+  --sh-md:0 4px 20px rgba(0,0,0,.1);
+  --r:12px; --rsm:8px;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+  --ts:80px; --ts-sm:64px;
+  --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:var(--font);color:var(--tx);padding:20px}
+.container{max-width:1200px;margin:0 auto}
+.shell{background:var(--base);border-bottom:2px solid var(--hi);padding:20px;border-radius:var(--rsm);
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;box-shadow:var(--sh)}
+.shell-left{display:flex;align-items:center;gap:16px;flex:1}
+.sap-badge{width:48px;height:48px;background:var(--hi);border-radius:8px;display:flex;
+  align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px;flex-shrink:0}
+.shell-title{display:flex;flex-direction:column;gap:4px}
+.shell-h{font-size:var(--f-sm);font-weight:600}
+.shell-sub{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.05em}
+.shell-right{display:flex;align-items:center;gap:12px}
+.size-indicator{font-family:var(--mono);font-size:var(--f-xs);color:var(--tx2)}
+.btn{min-height:var(--ts);padding:0 20px;border-radius:var(--rsm);font:inherit;
+  font-size:var(--f-xs);font-weight:600;cursor:pointer;border:1.5px solid;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .12s;line-height:1}
+.btn.primary{background:var(--hi);border-color:var(--hi-dk);color:#fff}
+.btn.primary:hover{background:var(--hi-dk)}
+.btn.ghost{background:var(--base);border-color:var(--bd-str);color:var(--tx2)}
+.btn.ghost:hover{border-color:var(--hi);color:var(--hi);background:var(--hi-lt)}
+.btn.danger{background:var(--err-lt);border-color:var(--err-bd);color:var(--err)}
+.btn.danger:hover{background:var(--err);color:#fff;border-color:var(--err)}
+.btn.success{background:var(--ok-lt);border-color:var(--ok-bd);color:var(--ok)}
+.btn.sm{min-height:var(--ts-sm);font-size:var(--f-xxs);padding:0 12px}
+.tabs{display:flex;gap:2px;background:var(--base);border-radius:var(--rsm);padding:8px;
+  margin-bottom:20px;box-shadow:var(--sh)}
+.tab-btn{padding:12px 20px;background:transparent;border:none;cursor:pointer;color:var(--tx2);
+  font-size:var(--f-xs);font-weight:500;border-radius:6px;transition:all .12s;font-family:var(--font)}
+.tab-btn.active{background:var(--hi);color:#fff}
+.tab-btn:hover{background:var(--hi-lt);color:var(--hi)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:20px}
+.card{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:16px;box-shadow:var(--sh);transition:all .12s}
+.card:hover{border-color:var(--hi);box-shadow:var(--sh-md)}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:var(--f-sm);font-weight:600;flex:1}
+.card-status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:var(--f-xxs);
+  text-transform:uppercase;color:var(--tx2)}
+.card-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.card-status-dot.running{background:var(--ok)}
+.card-status-dot.stopped{background:var(--err)}
+.card-info{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3);margin:8px 0}
+.card-actions{display:flex;gap:8px;margin-top:12px}
+.card-actions .btn{flex:1}
+.form{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:24px;box-shadow:var(--sh);max-width:600px}
+.form-group{margin-bottom:20px}
+.form-label{display:block;font-size:var(--f-xs);font-weight:600;margin-bottom:8px;color:var(--tx)}
+.form-label.required::after{content:' *';color:var(--err)}
+input[type="text"],input[type="number"],input[type="email"],input[type="url"],
+input[type="color"],textarea,select{
+  width:100%;padding:12px;font-family:var(--font);font-size:var(--f-xs);
+  border:1px solid var(--bd);border-radius:var(--rsm);background:var(--base);color:var(--tx);
+  transition:border-color .12s}
+input[type="text"]:focus,input[type="number"]:focus,input[type="email"]:focus,
+input[type="url"]:focus,input[type="color"]:focus,textarea:focus,select:focus{
+  outline:none;border-color:var(--hi);box-shadow:0 0 0 3px var(--hi-lt)}
+textarea{resize:vertical;font-family:var(--mono);min-height:120px}
+input[type="color"]{height:56px;cursor:pointer}
+.form-help{font-family:var(--mono);font-size:11px;color:var(--tx3);margin-top:4px}
+.form-error{font-size:var(--f-xxs);color:var(--err);margin-top:6px;display:flex;align-items:center;gap:4px}
+.form-error::before{content:'⚠';font-weight:600}
+.form-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.toggle{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.toggle input[type="checkbox"]{width:44px;height:24px;cursor:pointer;accent-color:var(--hi)}
+.toggle-label{font-size:var(--f-xs);color:var(--tx)}
+.array-editor{display:flex;flex-direction:column;gap:8px}
+.array-item{display:flex;gap:8px;align-items:flex-end}
+.array-item input{flex:1}
+.array-item .btn.danger{min-height:44px;width:44px;padding:0}
+.btn-add{margin-top:8px}
+.divider{height:1px;background:var(--bd);margin:20px 0}
+.collapsible-section{border:1px solid var(--bd);border-radius:var(--rsm);margin-bottom:12px;overflow:hidden}
+.collapsible-header{background:var(--base2);padding:12px 16px;cursor:pointer;display:flex;
+  justify-content:space-between;align-items:center;user-select:none;transition:all .12s}
+.collapsible-header:hover{background:var(--hi-lt)}
+.collapsible-header.open{background:var(--base3)}
+.collapsible-title{font-weight:500;color:var(--tx)}
+.collapsible-icon{font-size:20px;transition:transform .2s}
+.collapsible-icon.open{transform:rotate(180deg)}
+.collapsible-content{display:none;padding:16px;background:var(--base)}
+.collapsible-content.open{display:block}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--base);border-radius:var(--rsm);box-shadow:var(--sh-md);
+  max-height:90vh;overflow-y:auto;max-width:700px;width:90%;padding:24px}
+.modal-header{font-size:var(--f-lg);font-weight:600;margin-bottom:20px;padding-bottom:16px;
+  border-bottom:1px solid var(--bd)}
+.modal-footer{display:flex;gap:12px;justify-content:flex-end;margin-top:24px;
+  padding-top:16px;border-top:1px solid var(--bd)}
+.json-textarea{font-family:var(--mono);font-size:14px;line-height:1.5}
+.validation-result{font-family:var(--mono);font-size:var(--f-xxs);padding:12px;
+  border-radius:var(--rsm);margin-top:12px}
+.validation-result.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.validation-result.err{background:var(--err-lt);color:var(--err);border:1px solid var(--err-bd)}
+.empty-state{text-align:center;padding:40px 20px;color:var(--tx3)}
+.empty-state-icon{font-size:48px;margin-bottom:12px}
+.empty-state-text{font-size:var(--f-xs);margin-bottom:20px}
+.section-controls{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="shell">
+    <div class="shell-left">
+      <div class="sap-badge">SAP</div>
+      <div class="shell-title">
+        <div class="shell-h">Config Editor</div>
+        <div class="shell-sub">DM_MQTT Plant Configuration</div>
+      </div>
+    </div>
+    <div class="shell-right">
+      <div class="size-indicator" id="sizeIndicator">0 bytes</div>
+      <button class="btn primary" onclick="importJSON()">Import JSON</button>
+      <button class="btn primary" onclick="exportJSON()">Export JSON</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('plant')">Plant Info</button>
+    <button class="tab-btn" onclick="switchTab('machines')">Machines</button>
+    <button class="tab-btn" onclick="switchTab('tanks')">Tanks</button>
+    <button class="tab-btn" onclick="switchTab('people')">People</button>
+    <button class="tab-btn" onclick="switchTab('json')">Raw JSON</button>
+  </div>
+
+  <!-- Plant Info Tab -->
+  <div id="plant" class="tab-content active">
+    <div class="form">
+      <h2 style="margin-bottom:20px;font-size:var(--f-lg)">Plant Configuration</h2>
+      <div class="form-group">
+        <label class="form-label required">Plant Name</label>
+        <input type="text" id="plantName" placeholder="e.g., Plant BE01" onchange="updatePlantName(this.value)">
+      </div>
+      <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--bd);color:var(--tx2);font-size:var(--f-xs)">
+        <strong>Configuration Status:</strong> <span id="plantStatus" style="color:var(--ok)">Ready</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Machines Tab -->
+  <div id="machines" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary" onclick="addMachine()">+ Add Machine</button>
+      <button class="btn ghost" onclick="loadSample()">Load Sample Config</button>
+    </div>
+    <div id="machinesList" class="card-grid"></div>
+  </div>
+
+  <!-- Tanks Tab -->
+  <div id="tanks" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary" onclick="addTank()">+ Add Tank</button>
+    </div>
+    <div id="tanksList" class="card-grid"></div>
+  </div>
+
+  <!-- People Tab -->
+  <div id="people" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary" onclick="addPerson()">+ Add Person</button>
+    </div>
+    <div id="peopleList" class="card-grid"></div>
+  </div>
+
+  <!-- Raw JSON Tab -->
+  <div id="json" class="tab-content">
+    <div class="form">
+      <h2 style="margin-bottom:20px;font-size:var(--f-lg)">Raw JSON</h2>
+      <div class="form-group">
+        <label class="form-label">JSON Content</label>
+        <textarea id="jsonRaw" class="json-textarea" onchange="parseRawJSON()"></textarea>
+        <div class="form-help">Paste or edit raw JSON. Changes are NOT auto-saved to the editor.</div>
+      </div>
+      <button class="btn primary" onclick="validateAndLoadJSON()">Load from JSON</button>
+      <button class="btn ghost" onclick="updateRawJSON()">Refresh from Editor</button>
+      <div id="jsonValidation"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Machine Edit Modal -->
+<div id="machineModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header" id="machineModalTitle">Edit Machine</div>
+    <div class="form-group">
+      <label class="form-label required">Machine ID</label>
+      <input type="text" id="machineId" placeholder="e.g., cnc01">
+    </div>
+    <div class="form-group">
+      <label class="form-label required">Machine Name</label>
+      <input type="text" id="machineName" placeholder="e.g., CNC-01">
+    </div>
+    <div class="form-group">
+      <label class="form-label required">Machine Type</label>
+      <input type="text" id="machineType" placeholder="e.g., CNC Machining">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Running</label>
+      <label class="toggle">
+        <input type="checkbox" id="machineRunning">
+        <span class="toggle-label">Machine is currently running</span>
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pulses</label>
+      <input type="number" id="machinePulses" value="0" min="0">
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:var(--f-sm);font-weight:600">Metrics</h3>
+      <button class="btn primary sm" onclick="addMetricToMachine()">+ Add Metric</button>
+    </div>
+    <div id="machineMetricsList"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closeMachineModal()">Cancel</button>
+      <button class="btn primary" onclick="saveMachine()">Save Machine</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tank Edit Modal -->
+<div id="tankModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header" id="tankModalTitle">Edit Tank</div>
+    <div class="form-group">
+      <label class="form-label required">Tank ID</label>
+      <input type="text" id="tankId" placeholder="e.g., raw">
+    </div>
+    <div class="form-group">
+      <label class="form-label required">Tank Name</label>
+      <input type="text" id="tankName" placeholder="e.g., Raw Material">
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:var(--f-sm);font-weight:600">Metrics</h3>
+      <button class="btn primary sm" onclick="addMetricToTank()">+ Add Metric</button>
+    </div>
+    <div id="tankMetricsList"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closeTankModal()">Cancel</button>
+      <button class="btn primary" onclick="saveTank()">Save Tank</button>
+    </div>
+  </div>
+</div>
+
+<!-- Metric Edit Modal -->
+<div id="metricModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">Edit Metric</div>
+
+    <div class="collapsible-section">
+      <div class="collapsible-header open" onclick="toggleCollapsible(this)">
+        <span class="collapsible-title">Basic Info</span>
+        <span class="collapsible-icon open">⌄</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="form-group">
+          <label class="form-label required">Key</label>
+          <input type="text" id="metricKey" placeholder="e.g., rpm">
+        </div>
+        <div class="form-group">
+          <label class="form-label required">Label</label>
+          <input type="text" id="metricLabel" placeholder="e.g., Spindle RPM">
+        </div>
+        <div class="form-group">
+          <label class="form-label required">Unit</label>
+          <input type="text" id="metricUnit" placeholder="e.g., RPM">
+        </div>
+        <div class="form-two-col">
+          <div class="form-group">
+            <label class="form-label required">Visualization</label>
+            <select id="metricViz" onchange="updateMetricFieldsVisibility()">
+              <option value="spark">Sparkline</option>
+              <option value="arc">Arc Gauge</option>
+              <option value="thermo">Thermometer</option>
+              <option value="tank">Tank Level</option>
+              <option value="bullet">Bullet Chart</option>
+              <option value="ph">pH Scale</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Input Type</label>
+            <select id="metricInput">
+              <option value="step">Step (+/-)</option>
+              <option value="slider">Slider</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="collapsible-section">
+      <div class="collapsible-header open" onclick="toggleCollapsible(this)">
+        <span class="collapsible-title">Range & Values</span>
+        <span class="collapsible-icon open">⌄</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="form-two-col">
+          <div class="form-group">
+            <label class="form-label required">Initial Value</label>
+            <input type="number" id="metricInitVal" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Min Value</label>
+            <input type="number" id="metricMinVal" step="0.01" placeholder="0">
+          </div>
+        </div>
+        <div class="form-two-col">
+          <div class="form-group">
+            <label class="form-label required">Max Value</label>
+            <input type="number" id="metricMaxVal" step="0.01" placeholder="100">
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Step</label>
+            <input type="number" id="metricStep" step="0.01" placeholder="1">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="collapsible-section" id="colorSection" style="display:none">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <span class="collapsible-title">Color</span>
+        <span class="collapsible-icon">⌄</span>
+      </div>
+      <div class="collapsible-content">
+        <div class="form-group">
+          <label class="form-label required">Color (Hex)</label>
+          <input type="color" id="metricColor">
+          <div class="form-help" id="colorValue">0x0070F2</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="collapsible-section" id="thresholdsSection" style="display:none">
+      <div class="collapsible-header" onclick="toggleCollapsible(this)">
+        <span class="collapsible-title">Thresholds</span>
+        <span class="collapsible-icon">⌄</span>
+      </div>
+      <div class="collapsible-content">
+        <div id="thresholdsList"></div>
+        <button class="btn primary sm btn-add" onclick="addThreshold()">+ Add Threshold</button>
+      </div>
+    </div>
+
+    <div class="collapsible-section">
+      <div class="collapsible-header open" onclick="toggleCollapsible(this)">
+        <span class="collapsible-title">Simulation</span>
+        <span class="collapsible-icon open">⌄</span>
+      </div>
+      <div class="collapsible-content open">
+        <div class="form-group">
+          <label class="form-label required">Simulation Profile</label>
+          <select id="simProfile" onchange="updateSimFieldsVisibility()">
+            <option value="random_walk">Random Walk</option>
+            <option value="sine">Sine Wave</option>
+            <option value="ramp">Ramp</option>
+          </select>
+        </div>
+        <div id="simFieldsContainer"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closeMetricModal()">Cancel</button>
+      <button class="btn primary" onclick="saveMetric()">Save Metric</button>
+    </div>
+  </div>
+</div>
+
+<!-- Person Edit Modal -->
+<div id="personModal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header" id="personModalTitle">Edit Person</div>
+    <div class="form-group">
+      <label class="form-label required">Employee ID</label>
+      <input type="text" id="personId" placeholder="e.g., EMP-0042">
+    </div>
+    <div class="form-group">
+      <label class="form-label required">Name</label>
+      <input type="text" id="personName" placeholder="e.g., John Doe">
+    </div>
+    <div class="form-two-col">
+      <div class="form-group">
+        <label class="form-label required">Role</label>
+        <input type="text" id="personRole" placeholder="e.g., CNC Operator">
+      </div>
+      <div class="form-group">
+        <label class="form-label required">Role Key</label>
+        <select id="personRoleKey">
+          <option value="operator">Operator</option>
+          <option value="lead">Shift Lead</option>
+          <option value="engineer">Engineer</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="quality">Quality Inspector</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-two-col">
+      <div class="form-group">
+        <label class="form-label required">Department</label>
+        <input type="text" id="personDept" placeholder="e.g., Machining">
+      </div>
+      <div class="form-group">
+        <label class="form-label required">Plant</label>
+        <input type="text" id="personPlant" placeholder="e.g., Plant BE01">
+      </div>
+    </div>
+    <div class="form-two-col">
+      <div class="form-group">
+        <label class="form-label required">UID</label>
+        <input type="text" id="personUid" placeholder="e.g., A3:F7:C2:91">
+      </div>
+      <div class="form-group">
+        <label class="form-label required">Avatar Color</label>
+        <input type="color" id="personAvatarColor">
+        <div class="form-help" id="avatarColorValue">0x0070F2</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:var(--f-sm);font-weight:600">Certifications</h3>
+      <button class="btn primary sm" onclick="addCertToPerson()">+ Add Cert</button>
+    </div>
+    <div id="personCertsList"></div>
+    <div class="modal-footer">
+      <button class="btn ghost" onclick="closePersonModal()">Cancel</button>
+      <button class="btn primary" onclick="savePerson()">Save Person</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// State
+let config = {
+  plant_name: '',
+  machines: [],
+  tanks: [],
+  people: []
+};
+
+let currentEditingMachine = null;
+let currentEditingTank = null;
+let currentEditingPerson = null;
+let currentEditingMetric = null;
+let currentMetricContext = null; // 'machine' or 'tank'
+
+// Initialization
+window.addEventListener('DOMContentLoaded', () => {
+  updateUI();
+});
+
+// UI Functions
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(tabName).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleCollapsible(header) {
+  header.classList.toggle('open');
+  header.nextElementSibling.classList.toggle('open');
+  const icon = header.querySelector('.collapsible-icon');
+  icon.classList.toggle('open');
+}
+
+// Plant Management
+function updatePlantName(value) {
+  config.plant_name = value;
+  updateUI();
+}
+
+// Machine Management
+function addMachine() {
+  const newMachine = {
+    id: 'mach' + Date.now(),
+    name: 'New Machine',
+    type: 'Machine Type',
+    running: true,
+    pulses: 0,
+    metrics: [{
+      key: 'value1',
+      label: 'Value 1',
+      unit: 'unit',
+      viz: 'spark',
+      input: 'step',
+      color: '0x0070F2',
+      init_val: 0,
+      min_val: 0,
+      max_val: 100,
+      step: 1,
+      sim: { profile: 'random_walk', rand_min: 0, rand_max: 100 }
+    }]
+  };
+  config.machines.push(newMachine);
+  openMachineModal(newMachine);
+}
+
+function openMachineModal(machine) {
+  currentEditingMachine = JSON.parse(JSON.stringify(machine));
+  document.getElementById('machineModalTitle').textContent = machine.name ? 'Edit Machine' : 'New Machine';
+  document.getElementById('machineId').value = currentEditingMachine.id;
+  document.getElementById('machineName').value = currentEditingMachine.name;
+  document.getElementById('machineType').value = currentEditingMachine.type;
+  document.getElementById('machineRunning').checked = currentEditingMachine.running;
+  document.getElementById('machinePulses').value = currentEditingMachine.pulses;
+  renderMachineMetrics();
+  document.getElementById('machineModal').classList.add('open');
+}
+
+function closeMachineModal() {
+  document.getElementById('machineModal').classList.remove('open');
+  currentEditingMachine = null;
+}
+
+function saveMachine() {
+  currentEditingMachine.id = document.getElementById('machineId').value;
+  currentEditingMachine.name = document.getElementById('machineName').value;
+  currentEditingMachine.type = document.getElementById('machineType').value;
+  currentEditingMachine.running = document.getElementById('machineRunning').checked;
+  currentEditingMachine.pulses = parseInt(document.getElementById('machinePulses').value) || 0;
+
+  const idx = config.machines.findIndex(m => m.id === currentEditingMachine.id);
+  if (idx >= 0) {
+    config.machines[idx] = currentEditingMachine;
+  }
+  closeMachineModal();
+  updateUI();
+}
+
+function deleteMachine(id) {
+  if (confirm('Delete this machine?')) {
+    config.machines = config.machines.filter(m => m.id !== id);
+    updateUI();
+  }
+}
+
+function renderMachineMetrics() {
+  const container = document.getElementById('machineMetricsList');
+  container.innerHTML = currentEditingMachine.metrics.map((m, idx) => `
+    <div style="background:var(--base2);padding:12px;border-radius:var(--rsm);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <strong>${m.label}</strong> (<span style="font-family:var(--mono);color:var(--tx3)">${m.key}</span>)
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn ghost sm" onclick="editMachineMetric(${idx})">Edit</button>
+        <button class="btn danger sm" onclick="removeMachineMetric(${idx})">Del</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addMetricToMachine() {
+  currentEditingMetric = {
+    key: 'metric' + Date.now(),
+    label: 'New Metric',
+    unit: 'unit',
+    viz: 'spark',
+    input: 'step',
+    color: '0x0070F2',
+    init_val: 0,
+    min_val: 0,
+    max_val: 100,
+    step: 1,
+    sim: { profile: 'random_walk', rand_min: 0, rand_max: 100 }
+  };
+  currentMetricContext = 'machine';
+  openMetricModal();
+}
+
+function editMachineMetric(idx) {
+  currentEditingMetric = JSON.parse(JSON.stringify(currentEditingMachine.metrics[idx]));
+  currentEditingMetric._index = idx;
+  currentMetricContext = 'machine';
+  openMetricModal();
+}
+
+function removeMachineMetric(idx) {
+  currentEditingMachine.metrics.splice(idx, 1);
+  renderMachineMetrics();
+}
+
+// Tank Management
+function addTank() {
+  const newTank = {
+    id: 'tank' + Date.now(),
+    name: 'New Tank',
+    metrics: [{
+      key: 'level',
+      label: 'Fill Level',
+      unit: '%',
+      viz: 'tank',
+      input: 'slider',
+      init_val: 50,
+      min_val: 0,
+      max_val: 100,
+      step: 1,
+      sim: { profile: 'random_walk', rand_min: 0, rand_max: 100 }
+    }]
+  };
+  config.tanks.push(newTank);
+  openTankModal(newTank);
+}
+
+function openTankModal(tank) {
+  currentEditingTank = JSON.parse(JSON.stringify(tank));
+  document.getElementById('tankModalTitle').textContent = tank.name ? 'Edit Tank' : 'New Tank';
+  document.getElementById('tankId').value = currentEditingTank.id;
+  document.getElementById('tankName').value = currentEditingTank.name;
+  renderTankMetrics();
+  document.getElementById('tankModal').classList.add('open');
+}
+
+function closeTankModal() {
+  document.getElementById('tankModal').classList.remove('open');
+  currentEditingTank = null;
+}
+
+function saveTank() {
+  currentEditingTank.id = document.getElementById('tankId').value;
+  currentEditingTank.name = document.getElementById('tankName').value;
+
+  const idx = config.tanks.findIndex(t => t.id === currentEditingTank.id);
+  if (idx >= 0) {
+    config.tanks[idx] = currentEditingTank;
+  }
+  closeTankModal();
+  updateUI();
+}
+
+function deleteTank(id) {
+  if (confirm('Delete this tank?')) {
+    config.tanks = config.tanks.filter(t => t.id !== id);
+    updateUI();
+  }
+}
+
+function renderTankMetrics() {
+  const container = document.getElementById('tankMetricsList');
+  container.innerHTML = currentEditingTank.metrics.map((m, idx) => `
+    <div style="background:var(--base2);padding:12px;border-radius:var(--rsm);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <strong>${m.label}</strong> (<span style="font-family:var(--mono);color:var(--tx3)">${m.key}</span>)
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn ghost sm" onclick="editTankMetric(${idx})">Edit</button>
+        <button class="btn danger sm" onclick="removeTankMetric(${idx})">Del</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addMetricToTank() {
+  currentEditingMetric = {
+    key: 'metric' + Date.now(),
+    label: 'New Metric',
+    unit: 'unit',
+    viz: 'spark',
+    input: 'step',
+    init_val: 0,
+    min_val: 0,
+    max_val: 100,
+    step: 1,
+    sim: { profile: 'random_walk', rand_min: 0, rand_max: 100 }
+  };
+  currentMetricContext = 'tank';
+  openMetricModal();
+}
+
+function editTankMetric(idx) {
+  currentEditingMetric = JSON.parse(JSON.stringify(currentEditingTank.metrics[idx]));
+  currentEditingMetric._index = idx;
+  currentMetricContext = 'tank';
+  openMetricModal();
+}
+
+function removeTankMetric(idx) {
+  currentEditingTank.metrics.splice(idx, 1);
+  renderTankMetrics();
+}
+
+// Metric Management
+function openMetricModal() {
+  document.getElementById('metricKey').value = currentEditingMetric.key;
+  document.getElementById('metricLabel').value = currentEditingMetric.label;
+  document.getElementById('metricUnit').value = currentEditingMetric.unit;
+  document.getElementById('metricViz').value = currentEditingMetric.viz;
+  document.getElementById('metricInput').value = currentEditingMetric.input;
+  document.getElementById('metricInitVal').value = currentEditingMetric.init_val;
+  document.getElementById('metricMinVal').value = currentEditingMetric.min_val;
+  document.getElementById('metricMaxVal').value = currentEditingMetric.max_val;
+  document.getElementById('metricStep').value = currentEditingMetric.step;
+
+  if (currentEditingMetric.color) {
+    document.getElementById('metricColor').value = hexToColor(currentEditingMetric.color);
+  }
+
+  document.getElementById('simProfile').value = currentEditingMetric.sim?.profile || 'random_walk';
+
+  updateMetricFieldsVisibility();
+  updateSimFieldsVisibility();
+  renderThresholds();
+
+  document.getElementById('metricModal').classList.add('open');
+}
+
+function closeMetricModal() {
+  document.getElementById('metricModal').classList.remove('open');
+  currentEditingMetric = null;
+}
+
+function saveMetric() {
+  currentEditingMetric.key = document.getElementById('metricKey').value;
+  currentEditingMetric.label = document.getElementById('metricLabel').value;
+  currentEditingMetric.unit = document.getElementById('metricUnit').value;
+  currentEditingMetric.viz = document.getElementById('metricViz').value;
+  currentEditingMetric.input = document.getElementById('metricInput').value;
+  currentEditingMetric.init_val = parseFloat(document.getElementById('metricInitVal').value);
+  currentEditingMetric.min_val = parseFloat(document.getElementById('metricMinVal').value);
+  currentEditingMetric.max_val = parseFloat(document.getElementById('metricMaxVal').value);
+  currentEditingMetric.step = parseFloat(document.getElementById('metricStep').value);
+
+  if (document.getElementById('colorSection').style.display !== 'none') {
+    currentEditingMetric.color = colorToHex(document.getElementById('metricColor').value);
+  }
+
+  currentEditingMetric.sim = buildSimObject();
+
+  if (currentEditingMetric._index !== undefined) {
+    if (currentMetricContext === 'machine') {
+      currentEditingMachine.metrics[currentEditingMetric._index] = currentEditingMetric;
+    } else {
+      currentEditingTank.metrics[currentEditingMetric._index] = currentEditingMetric;
+    }
+  } else {
+    if (currentMetricContext === 'machine') {
+      currentEditingMachine.metrics.push(currentEditingMetric);
+    } else {
+      currentEditingTank.metrics.push(currentEditingMetric);
+    }
+  }
+
+  closeMetricModal();
+  if (currentMetricContext === 'machine') {
+    renderMachineMetrics();
+  } else {
+    renderTankMetrics();
+  }
+}
+
+function updateMetricFieldsVisibility() {
+  const viz = document.getElementById('metricViz').value;
+  document.getElementById('colorSection').style.display = viz === 'spark' ? 'block' : 'none';
+  document.getElementById('thresholdsSection').style.display = ['arc', 'tank'].includes(viz) ? 'block' : 'none';
+}
+
+function renderThresholds() {
+  const container = document.getElementById('thresholdsList');
+  const thresholds = currentEditingMetric.thresholds || [];
+  container.innerHTML = thresholds.map((t, idx) => `
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:8px;align-items:flex-end">
+      <div>
+        <label style="font-size:11px;color:var(--tx3)">Limit</label>
+        <input type="number" value="${t.limit}" step="0.1" onchange="updateThreshold(${idx}, 'limit', this.value)">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--tx3)">Color</label>
+        <input type="color" value="${hexToColor(t.color)}" onchange="updateThreshold(${idx}, 'color', this.value)">
+      </div>
+      <button class="btn danger sm" onclick="removeThreshold(${idx})">Del</button>
+    </div>
+  `).join('');
+}
+
+function addThreshold() {
+  if (!currentEditingMetric.thresholds) {
+    currentEditingMetric.thresholds = [];
+  }
+  currentEditingMetric.thresholds.push({ limit: 100, color: '0x107E3E' });
+  renderThresholds();
+}
+
+function updateThreshold(idx, field, value) {
+  if (field === 'limit') {
+    currentEditingMetric.thresholds[idx].limit = parseFloat(value);
+  } else {
+    currentEditingMetric.thresholds[idx].color = colorToHex(value);
+  }
+}
+
+function removeThreshold(idx) {
+  currentEditingMetric.thresholds.splice(idx, 1);
+  renderThresholds();
+}
+
+function updateSimFieldsVisibility() {
+  const profile = document.getElementById('simProfile').value;
+  const container = document.getElementById('simFieldsContainer');
+
+  let html = '';
+  if (profile === 'random_walk') {
+    html = `
+      <div class="form-two-col">
+        <div class="form-group">
+          <label class="form-label">Random Min</label>
+          <input type="number" id="simRandMin" step="0.1" value="${currentEditingMetric.sim?.rand_min || 0}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Random Max</label>
+          <input type="number" id="simRandMax" step="0.1" value="${currentEditingMetric.sim?.rand_max || 100}">
+        </div>
+      </div>
+    `;
+  } else if (profile === 'sine') {
+    html = `
+      <div class="form-group">
+        <label class="form-label">Amplitude</label>
+        <input type="number" id="simAmplitude" step="0.01" value="${currentEditingMetric.sim?.amplitude || 1}">
+      </div>
+      <div class="form-two-col">
+        <div class="form-group">
+          <label class="form-label">Period (s)</label>
+          <input type="number" id="simPeriod" step="0.1" value="${currentEditingMetric.sim?.period_s || 60}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Offset</label>
+          <input type="number" id="simOffset" step="0.1" value="${currentEditingMetric.sim?.offset || 0}">
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function buildSimObject() {
+  const profile = document.getElementById('simProfile').value;
+  const sim = { profile };
+
+  if (profile === 'random_walk') {
+    sim.rand_min = parseFloat(document.getElementById('simRandMin')?.value || 0);
+    sim.rand_max = parseFloat(document.getElementById('simRandMax')?.value || 100);
+  } else if (profile === 'sine') {
+    sim.amplitude = parseFloat(document.getElementById('simAmplitude')?.value || 1);
+    sim.period_s = parseFloat(document.getElementById('simPeriod')?.value || 60);
+    sim.offset = parseFloat(document.getElementById('simOffset')?.value || 0);
+  }
+
+  return sim;
+}
+
+// Person Management
+function addPerson() {
+  const newPerson = {
+    id: 'EMP-' + String(10000 + config.people.length + 1).slice(-4),
+    name: 'New Person',
+    role: 'Operator',
+    role_key: 'operator',
+    dept: 'Operations',
+    plant: config.plant_name || 'Plant BE01',
+    uid: 'AA:BB:CC:DD',
+    avatar_color: '0x0070F2',
+    certs: []
+  };
+  config.people.push(newPerson);
+  openPersonModal(newPerson);
+}
+
+function openPersonModal(person) {
+  currentEditingPerson = JSON.parse(JSON.stringify(person));
+  document.getElementById('personModalTitle').textContent = person.name ? 'Edit Person' : 'New Person';
+  document.getElementById('personId').value = currentEditingPerson.id;
+  document.getElementById('personName').value = currentEditingPerson.name;
+  document.getElementById('personRole').value = currentEditingPerson.role;
+  document.getElementById('personRoleKey').value = currentEditingPerson.role_key;
+  document.getElementById('personDept').value = currentEditingPerson.dept;
+  document.getElementById('personPlant').value = currentEditingPerson.plant;
+  document.getElementById('personUid').value = currentEditingPerson.uid;
+  document.getElementById('personAvatarColor').value = hexToColor(currentEditingPerson.avatar_color);
+  renderPersonCerts();
+  document.getElementById('personModal').classList.add('open');
+}
+
+function closePersonModal() {
+  document.getElementById('personModal').classList.remove('open');
+  currentEditingPerson = null;
+}
+
+function savePerson() {
+  currentEditingPerson.id = document.getElementById('personId').value;
+  currentEditingPerson.name = document.getElementById('personName').value;
+  currentEditingPerson.role = document.getElementById('personRole').value;
+  currentEditingPerson.role_key = document.getElementById('personRoleKey').value;
+  currentEditingPerson.dept = document.getElementById('personDept').value;
+  currentEditingPerson.plant = document.getElementById('personPlant').value;
+  currentEditingPerson.uid = document.getElementById('personUid').value;
+  currentEditingPerson.avatar_color = colorToHex(document.getElementById('personAvatarColor').value);
+
+  const idx = config.people.findIndex(p => p.id === currentEditingPerson.id);
+  if (idx >= 0) {
+    config.people[idx] = currentEditingPerson;
+  }
+  closePersonModal();
+  updateUI();
+}
+
+function deletePerson(id) {
+  if (confirm('Delete this person?')) {
+    config.people = config.people.filter(p => p.id !== id);
+    updateUI();
+  }
+}
+
+function renderPersonCerts() {
+  const container = document.getElementById('personCertsList');
+  container.innerHTML = `
+    <div class="array-editor">
+      ${currentEditingPerson.certs.map((cert, idx) => `
+        <div class="array-item">
+          <input type="text" value="${cert}" onchange="updatePersonCert(${idx}, this.value)">
+          <button class="btn danger" onclick="removePersonCert(${idx})">Del</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function addCertToPerson() {
+  currentEditingPerson.certs.push('New Certification');
+  renderPersonCerts();
+}
+
+function updatePersonCert(idx, value) {
+  currentEditingPerson.certs[idx] = value;
+}
+
+function removePersonCert(idx) {
+  currentEditingPerson.certs.splice(idx, 1);
+  renderPersonCerts();
+}
+
+// Import/Export
+function importJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        config = json;
+        document.getElementById('plantName').value = config.plant_name;
+        updateUI();
+        alert('JSON loaded successfully!');
+      } catch (err) {
+        alert('Invalid JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function exportJSON() {
+  const json = JSON.stringify(config, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sapdm_config_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function updateRawJSON() {
+  document.getElementById('jsonRaw').value = JSON.stringify(config, null, 2);
+}
+
+function validateAndLoadJSON() {
+  try {
+    const json = JSON.parse(document.getElementById('jsonRaw').value);
+    config = json;
+    document.getElementById('plantName').value = config.plant_name;
+    document.getElementById('jsonValidation').innerHTML = '<div class="validation-result ok">✓ Valid JSON loaded successfully</div>';
+    updateUI();
+  } catch (err) {
+    document.getElementById('jsonValidation').innerHTML = `<div class="validation-result err">✗ Invalid JSON: ${err.message}</div>`;
+  }
+}
+
+function loadSample() {
+  config = {
+    plant_name: "Plant BE01",
+    machines: [
+      {
+        id: "cnc01", name: "CNC-01", type: "CNC Machining",
+        running: true, pulses: 347,
+        metrics: [
+          {key:"rpm",label:"Spindle RPM",unit:"RPM",viz:"spark",input:"step",color:"0x0070F2",init_val:4850,min_val:0,max_val:8000,step:50,sim:{profile:"random_walk",rand_min:2000,rand_max:7000}},
+          {key:"spindleLoad",label:"Spindle Load",unit:"%",viz:"arc",input:"slider",init_val:62,min_val:0,max_val:100,step:1,thresholds:[{limit:40,color:"0x107E3E"},{limit:70,color:"0xE76500"},{limit:100,color:"0xBB0000"}],sim:{profile:"random_walk",rand_min:20,rand_max:95}}
+        ]
+      }
+    ],
+    tanks: [
+      {
+        id: "raw", name: "Raw Material",
+        metrics: [
+          {key:"level",label:"Fill Level",unit:"%",viz:"tank",input:"slider",init_val:68,min_val:0,max_val:100,step:1,thresholds:[{limit:15,color:"0xBB0000"},{limit:40,color:"0xE76500"}],sim:{profile:"random_walk",rand_min:60,rand_max:80}}
+        ]
+      }
+    ],
+    people: [
+      {id:"EMP-0042",name:"Michiel Haegens",role:"Shift Lead",role_key:"lead",dept:"Production",plant:"Plant BE01",uid:"A3:F7:C2:91",avatar_color:"0x0050BE",certs:["ISO 9001","Lean","PLC Certified"]}
+    ]
+  };
+  document.getElementById('plantName').value = config.plant_name;
+  updateUI();
+  alert('Sample config loaded!');
+}
+
+// Helper Functions
+function hexToColor(hex) {
+  if (hex.startsWith('0x')) {
+    hex = hex.slice(2);
+  }
+  return '#' + hex.padStart(6, '0');
+}
+
+function colorToHex(color) {
+  return '0x' + color.slice(1).toUpperCase();
+}
+
+function updateColorDisplay(inputId, displayId) {
+  const color = document.getElementById(inputId).value;
+  document.getElementById(displayId).textContent = colorToHex(color);
+}
+
+// Update UI
+function updateUI() {
+  document.getElementById('plantName').value = config.plant_name;
+  updateSizeIndicator();
+  renderMachinesList();
+  renderTanksList();
+  renderPeopleList();
+  updateRawJSON();
+}
+
+function updateSizeIndicator() {
+  const json = JSON.stringify(config);
+  const bytes = new Blob([json]).size;
+  document.getElementById('sizeIndicator').textContent = bytes.toLocaleString() + ' bytes';
+}
+
+function renderMachinesList() {
+  const container = document.getElementById('machinesList');
+  if (config.machines.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">⚙️</div><div class="empty-state-text">No machines yet. Click "Add Machine" to create one.</div></div>';
+    return;
+  }
+
+  container.innerHTML = config.machines.map(m => `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${m.name}</div>
+          <div class="card-info">${m.type}</div>
+        </div>
+        <div class="card-status">
+          <div class="card-status-dot ${m.running ? 'running' : 'stopped'}"></div>
+          ${m.running ? 'Running' : 'Stopped'}
+        </div>
+      </div>
+      <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">${m.id}</code></div>
+      <div class="card-info">${m.metrics.length} metrics</div>
+      <div class="card-actions">
+        <button class="btn ghost" onclick="openMachineModal({...config.machines.find(x=>x.id==='${m.id}')})">Edit</button>
+        <button class="btn danger" onclick="deleteMachine('${m.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderTanksList() {
+  const container = document.getElementById('tanksList');
+  if (config.tanks.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🛢️</div><div class="empty-state-text">No tanks yet. Click "Add Tank" to create one.</div></div>';
+    return;
+  }
+
+  container.innerHTML = config.tanks.map(t => `
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${t.name}</div>
+      </div>
+      <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">${t.id}</code></div>
+      <div class="card-info">${t.metrics.length} metrics</div>
+      <div class="card-actions">
+        <button class="btn ghost" onclick="openTankModal({...config.tanks.find(x=>x.id==='${t.id}')})">Edit</button>
+        <button class="btn danger" onclick="deleteTank('${t.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPeopleList() {
+  const container = document.getElementById('peopleList');
+  if (config.people.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">👤</div><div class="empty-state-text">No people yet. Click "Add Person" to create one.</div></div>';
+    return;
+  }
+
+  container.innerHTML = config.people.map(p => `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${p.name}</div>
+          <div class="card-info">${p.role}</div>
+        </div>
+      </div>
+      <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">${p.id}</code></div>
+      <div class="card-info">Dept: ${p.dept} | ${p.certs.length} certs</div>
+      <div class="card-actions">
+        <button class="btn ghost" onclick="openPersonModal({...config.people.find(x=>x.id==='${p.id}')})">Edit</button>
+        <button class="btn danger" onclick="deletePerson('${p.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Fix color display updates
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'metricColor') {
+    document.getElementById('colorValue').textContent = colorToHex(e.target.value);
+  }
+  if (e.target.id === 'personAvatarColor') {
+    document.getElementById('avatarColorValue').textContent = colorToHex(e.target.value);
+  }
+});
+</script>
+
+</body>
+</html>
