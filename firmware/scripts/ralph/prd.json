@@ -224,8 +224,8 @@
         "Build succeeds (idf.py build)"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added g_last_pub_topic[128] to data.h/data.c. pub() in mqtt_task.c now strncpy's topic to g_last_pub_topic on every publish. Added mqtt_task_reconnect() calling esp_mqtt_client_reconnect(). ui_mqtt_detail.c: added Last Topic row to Runtime Status card, wired Reconnect button to mqtt_task_reconnect(), button disabled via LV_STATE_DISABLED when g_mqtt_connected==true."
     },
     {
       "id": "US-012",

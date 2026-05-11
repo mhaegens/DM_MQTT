@@ -87,4 +87,21 @@ Started: 2026-05-11
   - lv_timer_pause/lv_timer_resume pattern for tab-specific timers (see ui_tanks_activate/deactivate)
 ---
 
+## 2026-05-11 - US-008
+- Added `g_last_pub_topic[128]` extern to `ui/data.h`; definition in `ui/data.c` initialized to ""
+- `pub()` in `mqtt_task.c` now calls `strncpy(g_last_pub_topic, topic, sizeof(g_last_pub_topic)-1)` on every publish
+- Added `mqtt_task_reconnect()` to `mqtt_task.h` and `mqtt_task.c`; calls `esp_mqtt_client_reconnect(s_client)`
+- `ui_mqtt_detail.c`: added `#include "../mqtt_task.h"` (same pattern as ui_machines.c)
+- Added `s_last_topic_lbl` static ref; Last Topic row added to Runtime Status card in `ui_mqtt_detail_create()`
+- Added `s_reconnect_btn` static ref; Reconnect button now saved and wired to `mqtt_task_reconnect()`
+- Reconnect button has `LV_STATE_DISABLED` styles for bg/border/text; toggled in `ui_mqtt_detail_refresh()` based on `g_mqtt_connected`
+- Removed unused `TAG` + `esp_log.h` include from ui_mqtt_detail.c (no more log stub)
+- All 3 changed .c files verified via direct riscv gcc syntax check from compile_commands.json
+- Files changed: main/ui/data.h, main/ui/data.c, main/mqtt_task.h, main/mqtt_task.c, main/ui/ui_mqtt_detail.c
+- **Learnings for future iterations:**
+  - `esp_mqtt_client_reconnect()` is the correct API to force an immediate reconnect attempt; no stop/start needed
+  - `lv_obj_add_state(btn, LV_STATE_DISABLED)` / `lv_obj_clear_state(btn, LV_STATE_DISABLED)` to toggle button enable; style must be set with LV_STATE_DISABLED selector at creation time
+  - ui_mqtt_detail.c includes mqtt_task.h via `"../mqtt_task.h"` (one level up from ui/ subdir)
+  - Remove TAG + esp_log.h when removing the last ESP_LOG* call from a file to avoid -Wunused-variable
+---
 
