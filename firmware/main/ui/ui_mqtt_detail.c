@@ -4,18 +4,18 @@
 #include "ui_theme.h"
 #include "config.h"
 #include "data.h"
-#include "esp_log.h"
+#include "../mqtt_task.h"
 #include <stdio.h>
 
-static const char *TAG = "mqtt_detail";
-
-static lv_obj_t *s_screen     = NULL;
-static lv_obj_t *s_status_dot = NULL;
-static lv_obj_t *s_status_lbl = NULL;
-static lv_obj_t *s_msg_lbl    = NULL;
-static lv_obj_t *s_ip_lbl     = NULL;
-static lv_obj_t *s_rssi_lbl   = NULL;
-static lv_obj_t *s_wifi_lbl   = NULL;
+static lv_obj_t *s_screen          = NULL;
+static lv_obj_t *s_status_dot      = NULL;
+static lv_obj_t *s_status_lbl      = NULL;
+static lv_obj_t *s_msg_lbl         = NULL;
+static lv_obj_t *s_ip_lbl          = NULL;
+static lv_obj_t *s_rssi_lbl        = NULL;
+static lv_obj_t *s_wifi_lbl        = NULL;
+static lv_obj_t *s_last_topic_lbl  = NULL;
+static lv_obj_t *s_reconnect_btn   = NULL;
 
 // ─── Helper: bordered card container ─────────────────────────────────────────
 static lv_obj_t *make_card(lv_obj_t *parent)
@@ -73,11 +73,11 @@ static lv_obj_t *make_info_row(lv_obj_t *parent, const char *key, const char *va
     return val_lbl;
 }
 
-// ─── Reconnect stub ───────────────────────────────────────────────────────────
+// ─── Reconnect callback ───────────────────────────────────────────────────────
 static void reconnect_cb(lv_event_t *e)
 {
     (void)e;
-    ESP_LOGI(TAG, "reconnect stub — backend not wired yet");
+    mqtt_task_reconnect();
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -145,10 +145,11 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     make_section_label(s_screen, "RUNTIME STATUS");
 
     lv_obj_t *runtime_card = make_card(s_screen);
-    s_msg_lbl  = make_info_row(runtime_card, "Messages", "0");
-    s_ip_lbl   = make_info_row(runtime_card, "Device IP", "-");
-    s_rssi_lbl = make_info_row(runtime_card, "RSSI",      "-");
-    s_wifi_lbl = make_info_row(runtime_card, "WiFi",      "-");
+    s_msg_lbl         = make_info_row(runtime_card, "Messages",   "0");
+    s_ip_lbl          = make_info_row(runtime_card, "Device IP",  "-");
+    s_rssi_lbl        = make_info_row(runtime_card, "RSSI",       "-");
+    s_wifi_lbl        = make_info_row(runtime_card, "WiFi",       "-");
+    s_last_topic_lbl  = make_info_row(runtime_card, "Last topic", "-");
 
     // ── Topics ────────────────────────────────────────────────────────────────
     make_section_label(s_screen, "TOPICS");
@@ -159,21 +160,24 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     make_info_row(topics_card, "Tanks",    TOPIC_PREFIX "/tanks/{id}/telemetry");
     make_info_row(topics_card, "NFC",      TOPIC_PREFIX "/operators/login");
 
-    // ── Reconnect stub button ─────────────────────────────────────────────────
-    lv_obj_t *btn = lv_btn_create(s_screen);
-    lv_obj_set_size(btn, CONTENT_W - SZ_GAP * 2, 52);
-    lv_obj_set_style_bg_color(btn, COL_BASE, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(btn, COL_HI_LT, LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(btn, COL_HI, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(btn, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_shadow_width(btn, 0, 0);
-    lv_obj_add_event_cb(btn, reconnect_cb, LV_EVENT_CLICKED, NULL);
+    // ── Reconnect button ──────────────────────────────────────────────────────
+    s_reconnect_btn = lv_btn_create(s_screen);
+    lv_obj_set_size(s_reconnect_btn, CONTENT_W - SZ_GAP * 2, 52);
+    lv_obj_set_style_bg_color(s_reconnect_btn, COL_BASE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_reconnect_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(s_reconnect_btn, COL_BG, LV_STATE_DISABLED);
+    lv_obj_set_style_border_color(s_reconnect_btn, COL_HI, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s_reconnect_btn, COL_BD, LV_STATE_DISABLED);
+    lv_obj_set_style_border_width(s_reconnect_btn, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_reconnect_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(s_reconnect_btn, 0, 0);
+    lv_obj_add_event_cb(s_reconnect_btn, reconnect_cb, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *btn_lbl = lv_label_create(btn);
+    lv_obj_t *btn_lbl = lv_label_create(s_reconnect_btn);
     lv_label_set_text(btn_lbl, "Reconnect");
     lv_obj_set_style_text_font(btn_lbl, FONT_SANS_XXS, 0);
     lv_obj_set_style_text_color(btn_lbl, COL_HI, 0);
+    lv_obj_set_style_text_color(btn_lbl, COL_TX3, LV_STATE_DISABLED);
     lv_obj_center(btn_lbl);
 }
 
@@ -191,7 +195,7 @@ void ui_mqtt_detail_refresh(void)
         lv_obj_set_style_text_color(s_status_lbl, col, 0);
     }
 
-    char buf[32];
+    char buf[128];
 
     if (s_msg_lbl) {
         snprintf(buf, sizeof(buf), "%d", g_mqtt_msg_count);
@@ -208,4 +212,14 @@ void ui_mqtt_detail_refresh(void)
     }
     if (s_wifi_lbl)
         lv_label_set_text(s_wifi_lbl, g_device_ip[0] ? "Connected" : "Disconnected");
+
+    if (s_last_topic_lbl)
+        lv_label_set_text(s_last_topic_lbl, g_last_pub_topic[0] ? g_last_pub_topic : "-");
+
+    if (s_reconnect_btn) {
+        if (g_mqtt_connected)
+            lv_obj_add_state(s_reconnect_btn, LV_STATE_DISABLED);
+        else
+            lv_obj_clear_state(s_reconnect_btn, LV_STATE_DISABLED);
+    }
 }

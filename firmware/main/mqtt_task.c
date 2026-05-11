@@ -67,8 +67,15 @@ void mqtt_task_stop(void) {
 
 bool mqtt_is_connected(void) { return g_mqtt_connected; }
 
+void mqtt_task_reconnect(void) {
+    if (!s_client) return;
+    esp_mqtt_client_reconnect(s_client);
+    ESP_LOGI(TAG, "reconnect requested");
+}
+
 static void pub(const char *topic, const char *payload) {
     if (!g_mqtt_connected || !s_client) return;
+    strncpy(g_last_pub_topic, topic, sizeof(g_last_pub_topic) - 1);
     esp_mqtt_client_publish(s_client, topic, payload, 0, 0, 0);
 }
 
