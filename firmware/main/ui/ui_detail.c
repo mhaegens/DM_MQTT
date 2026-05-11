@@ -757,6 +757,20 @@ static void sim_panel_configure(Metric *m)
     }
 }
 
+static void sim_profile_cycle_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+    DATA_LOCK();
+    SimProfile next = m->sim_profile + 1;
+    if (next == SIM_STEADY) next = SIM_RANDOM_WALK;
+    m->sim_profile = next;
+    m->sim_phase_acc = 0.0f;
+    DATA_UNLOCK();
+    sim_panel_configure(m);
+}
+
 // ─── Screen create ────────────────────────────────────────────────────────────
 void ui_detail_create(lv_obj_t *parent)
 {
@@ -983,6 +997,9 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_shadow_width(pill, 0, 0);
     lv_obj_set_style_outline_width(pill, 0, 0);
     lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(pill, COL_HI_DK, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(pill, sim_profile_cycle_cb, LV_EVENT_CLICKED, NULL);
 
     s_sim_profile_lbl = lv_label_create(pill);
     lv_label_set_text(s_sim_profile_lbl, "—");
