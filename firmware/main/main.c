@@ -129,7 +129,7 @@ void app_main(void) {
     sim_task_start();
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(console_task, "con", 8192, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(console_task, "con", 2048, NULL, 3, NULL, 0);
 
     // Memory diagnostics — log SPIRAM and internal SRAM state after all init
     heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);

@@ -50,37 +50,59 @@ static void hw_stats_timer_cb(lv_timer_t *t) {
     ui_debug_refresh();
 }
 
+// ─── stat card ────────────────────────────────────────────────────────────────
+typedef struct { const char *key; lv_obj_t **out; } StatDef;
+
 void ui_debug_create(lv_obj_t *parent) {
     s_screen = lv_obj_create(parent);
     lv_obj_set_size(s_screen, SZ_SCREEN, CONTENT_H);
     lv_obj_set_pos(s_screen, 0, 0);
     lv_obj_set_style_bg_color(s_screen, COL_BG, 0);
+    lv_obj_set_style_bg_opa(s_screen, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_screen, 0, 0);
     lv_obj_set_style_radius(s_screen, 0, 0);
-    lv_obj_set_style_pad_all(s_screen, SZ_GAP, 0);
+    lv_obj_set_style_pad_all(s_screen, 0, 0);
+    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
     g_screens[VIEW_DEBUG] = s_screen;
 
-    // Stats grid — 3 columns × 2 rows: Broker, MQTT, IP, RSSI, Int RAM, SPI RAM
-    static const char *keys[] = {"Broker", "MQTT", "Device IP", "WiFi RSSI", "Internal RAM", "SPIRAM"};
-    lv_obj_t **vals[] = {&s_broker_val, &s_mqtt_val, &s_ip_val, &s_rssi_val, &s_int_ram_val, &s_spi_ram_val};
+    // ── 3×2 absolute-positioned stat card grid ────────────────────────────────
     int cols = 3;
-    int gw = (SZ_SCREEN - SZ_GAP * (cols + 1)) / cols;
+    int gw = (SZ_SCREEN - SZ_GAP * (cols + 1)) / cols;  // ≈226px per card
     int gh = 64;
+
+    static const StatDef defs[6] = {
+        {"Broker",       NULL},
+        {"MQTT",         NULL},
+        {"Device IP",    NULL},
+        {"WiFi RSSI",    NULL},
+        {"Internal RAM", NULL},
+        {"SPIRAM",       NULL},
+    };
+    lv_obj_t **vals[6] = {
+        &s_broker_val, &s_mqtt_val, &s_ip_val,
+        &s_rssi_val, &s_int_ram_val, &s_spi_ram_val
+    };
+
     for (int i = 0; i < 6; i++) {
-        int col = i % cols, row = i / cols;
+        int col = i % cols;
+        int row = i / cols;
+        int x = SZ_GAP + col * (gw + SZ_GAP);
+        int y = SZ_GAP + row * (gh + SZ_GAP);
+
         lv_obj_t *cell = lv_obj_create(s_screen);
         lv_obj_set_size(cell, gw, gh);
-        lv_obj_set_pos(cell, SZ_GAP + col * (gw + SZ_GAP), SZ_GAP + row * (gh + SZ_GAP));
+        lv_obj_set_pos(cell, x, y);
         lv_obj_set_style_bg_color(cell, COL_BASE, 0);
+        lv_obj_set_style_bg_opa(cell, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(cell, SZ_RADIUS_SM, 0);
         lv_obj_set_style_border_color(cell, COL_BD, 0);
         lv_obj_set_style_border_width(cell, 1, 0);
-        lv_obj_set_style_pad_all(cell, 8, 0);
+        lv_obj_set_style_pad_all(cell, 10, 0);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *k = lv_label_create(cell);
-        lv_label_set_text(k, keys[i]);
+        lv_label_set_text(k, defs[i].key);
         lv_obj_set_style_text_font(k, FONT_SANS_XXS, 0);
         lv_obj_set_style_text_color(k, COL_TX3, 0);
         lv_obj_set_pos(k, 0, 0);
@@ -89,22 +111,26 @@ void ui_debug_create(lv_obj_t *parent) {
         lv_label_set_text(*vals[i], "—");
         lv_obj_set_style_text_font(*vals[i], FONT_MONO_XXS, 0);
         lv_obj_set_style_text_color(*vals[i], COL_TX, 0);
-        lv_obj_set_pos(*vals[i], 0, 20);
+        lv_obj_set_pos(*vals[i], 0, 22);
     }
 
-    // Log panel (dark background)
+    // ── Log panel ──────────────────────────────────────────────────────────────
     int log_y = SZ_GAP + (gh + SZ_GAP) * 2;
     int log_h = CONTENT_H - log_y - SZ_BTN - SZ_GAP * 2;
+
     lv_obj_t *log_panel = lv_obj_create(s_screen);
     lv_obj_set_size(log_panel, SZ_SCREEN - SZ_GAP * 2, log_h);
-    lv_obj_set_pos(log_panel, 0, log_y);
+    lv_obj_set_pos(log_panel, SZ_GAP, log_y);
     lv_obj_set_style_bg_color(log_panel, COL_DBG_BG, 0);
+    lv_obj_set_style_bg_opa(log_panel, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(log_panel, SZ_RADIUS_SM, 0);
     lv_obj_set_style_border_width(log_panel, 0, 0);
     lv_obj_set_style_pad_all(log_panel, 8, 0);
+    lv_obj_clear_flag(log_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(log_panel, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(log_panel, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(log_panel, 2, 0);
 
     for (int i = 0; i < LOG_LINES; i++) {
         s_log_labels[i] = lv_label_create(log_panel);
@@ -113,10 +139,10 @@ void ui_debug_create(lv_obj_t *parent) {
         lv_obj_set_style_text_color(s_log_labels[i], COL_TX3, 0);
     }
 
-    // Simulate MQTT Publish button
+    // ── Simulate MQTT Publish button ──────────────────────────────────────────
     lv_obj_t *sim_btn = lv_btn_create(s_screen);
     lv_obj_set_size(sim_btn, SZ_SCREEN - SZ_GAP * 2, SZ_BTN);
-    lv_obj_set_pos(sim_btn, 0, CONTENT_H - SZ_BTN - SZ_GAP);
+    lv_obj_set_pos(sim_btn, SZ_GAP, CONTENT_H - SZ_BTN - SZ_GAP);
     lv_obj_set_style_bg_color(sim_btn, COL_HI, 0);
     lv_obj_set_style_radius(sim_btn, SZ_RADIUS, 0);
     lv_obj_t *sim_lbl = lv_label_create(sim_btn);
@@ -126,7 +152,7 @@ void ui_debug_create(lv_obj_t *parent) {
     lv_obj_center(sim_lbl);
     lv_obj_add_event_cb(sim_btn, debug_sim_btn_cb, LV_EVENT_CLICKED, NULL);
 
-    // 1s timer to keep hw stats live — created paused, resumed when Debug tab is active
+    // 1s timer — created paused, resumed only when Debug tab is active
     s_hw_timer = lv_timer_create(hw_stats_timer_cb, 1000, NULL);
     lv_timer_pause(s_hw_timer);
 

@@ -1,0 +1,14 @@
+--- a/managed_components/espressif__esp_lvgl_port/src/lvgl9/esp_lvgl_port_disp.c
++++ b/managed_components/espressif__esp_lvgl_port/src/lvgl9/esp_lvgl_port_disp.c
+@@ -393,6 +393,11 @@ static lv_disp_t *lvgl_port_add_disp_priv(const lvgl_port_display_cfg_t *disp_c
+         disp_ctx->flags.monochrome = 1;
+         lv_display_set_buffers(disp, buf1, buf2, buffer_size * color_bytes, LV_DISPLAY_RENDER_MODE_FULL);
+ 
++    } else if (priv_cfg && priv_cfg->avoid_tearing) {
++        /* avoid_tearing uses panel-owned full-frame PSRAM buffers — treat as full refresh */
++        disp_ctx->flags.full_refresh = 1;
++        lv_display_set_buffers(disp, buf1, buf2, buffer_size * color_bytes, LV_DISPLAY_RENDER_MODE_FULL);
++
+     } else if (disp_cfg->flags.direct_mode) {
+         /* When using direct_mode, there must be used full bufer! */
+         ESP_GOTO_ON_FALSE((disp_cfg->hres * disp_cfg->vres == buffer_size), ESP_ERR_INVALID_ARG, err, TAG,

@@ -273,7 +273,6 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         mc->running ? lv_color_hex(COL_OK_BD) : lv_color_hex(COL_ERR_BD), 0);
     lv_obj_set_style_radius(card, SZ_RADIUS, 0);
     lv_obj_set_style_pad_all(card, 0, 0);
-    lv_obj_set_style_clip_corner(card, true, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     s_cards[idx] = card;
 
@@ -571,6 +570,8 @@ void ui_machines_create(lv_obj_t *parent) {
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_scroll_dir(s_screen, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_screen, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
     g_screens[VIEW_MACHINES] = s_screen;
 
     // Scrollable 2-column grid (up to MAX_MACHINES cards, flex-wrap rows)
