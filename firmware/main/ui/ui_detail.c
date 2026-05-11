@@ -684,16 +684,13 @@ static void sim_panel_configure(Metric *m)
 {
     if (!s_sim_panel) return;
     s_ctx_m = m;
-    if (m->sim_profile == SIM_STEADY) {
-        lv_obj_add_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
     lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
 
     if (s_sim_profile_lbl) {
         const char *badge_text =
             m->sim_profile == SIM_SINE        ? "SINE" :
             m->sim_profile == SIM_RAMP        ? "RAMP" :
+            m->sim_profile == SIM_STEADY      ? "STEADY" :
                                                 "RANDOM WALK";
         lv_label_set_text(s_sim_profile_lbl, badge_text);
     }
@@ -764,9 +761,10 @@ static void sim_profile_cycle_cb(lv_event_t *e)
     Metric *m = s_ctx_m;
     DATA_LOCK();
     SimProfile next = m->sim_profile + 1;
-    if (next == SIM_STEADY) next = SIM_RANDOM_WALK;
+    if (next > SIM_STEADY) next = SIM_RANDOM_WALK;
     m->sim_profile = next;
     m->sim_phase_acc = 0.0f;
+    if (next == SIM_STEADY) metric_push(m, m->value);
     DATA_UNLOCK();
     sim_panel_configure(m);
 }
