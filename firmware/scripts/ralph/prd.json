@@ -1,56 +1,66 @@
 {
   "project": "DM-MQTT-Firmware",
-  "branchName": "ralph/fix-lvgl-thread-safety",
-  "description": "Fix cyan screen crashes caused by LVGL thread-safety violations. Diagnostic firmware confirmed the root cause: ui_notify_mqtt_status() and ui_notify_wifi_status() are called directly from background event handlers (MQTT event handler on CPU0, WiFi event handler) without holding the LVGL mutex, racing with the LVGL render task on CPU1. This triggers LV_ASSERT_MSG(!disp->rendering_in_progress) inside lv_inv_area(), which aborts the firmware and leaves the display showing raw uninitialised framebuffer content — visible as cyan on the ST7703 panel. The fix is to route all UI notifications from background tasks through lv_async_call() so they execute safely inside the LVGL task, and to harden the boot sequence so mqtt_task only starts after WiFi has an IP.",
+  "branchName": "ralph/sim-steady-profile",
+  "description": "Add a fourth simulation profile 'steady' that keeps a metric at its current value with no automatic variation. The value is static over time but remains manually adjustable by the operator. Covers enum, sim_task skip logic, config_loader parsing, JSON config update, and a test-case on the raw tank flowIn metric.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Route mqtt_task UI notifications through lv_async_call",
-      "description": "As a firmware developer, I want mqtt_task.c to never call LVGL APIs directly from the MQTT event handler so that connect/disconnect events cannot race with the LVGL render task and trigger the rendering_in_progress assert.",
+      "title": "Add SIM_STEADY enum and no-op skip logic in sim_task",
+      "description": "As a firmware developer, I need the SimProfile enum to include SIM_STEADY and sim_metric() to skip value mutation for steady metrics so that the published value never changes between ticks.",
       "acceptanceCriteria": [
-        "In mqtt_task.c, ui_notify_mqtt_status(true) and ui_notify_mqtt_status(false) are NOT called directly inside mqtt_event_handler()",
-        "Both calls are replaced with lv_async_call() trampolines that invoke ui_notify_mqtt_status() from the LVGL task context",
-        "The trampoline allocates a small heap struct to pass the bool, frees it after the call",
-        "mqtt_task_start() is only called from on_wifi_ip() in main.c (i.e. after WiFi has an IP), not unconditionally at boot — confirm main.c already does this or fix it",
-        "Build succeeds with idf.py build",
+        "SimProfile enum in main/ui/data.h has SIM_STEADY added as the last value: typedef enum { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP, SIM_STEADY } SimProfile;",
+        "sim_metric() in sim_task.c does not call metric_push() when sim_profile == SIM_STEADY — preferred: wrap the metric_push call in if (m->sim_profile != SIM_STEADY) after the switch",
+        "case SIM_STEADY: is present in the switch (even if just a break) to suppress compiler warnings about unhandled enum values",
+        "idf.py build succeeds with zero new warnings",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Root cause confirmed by crash decode: Core0 PC 0x4004d8da = lv_inv_area in lv_refr.c:286, assert !disp->rendering_in_progress. mqtt_event_handler fires on the MQTT internal task (CPU0) with no LVGL lock held."
+      "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Route wifi_manager UI notifications through lv_async_call",
-      "description": "As a firmware developer, I want wifi_manager.c to never call LVGL APIs directly from the WiFi/IP event handler so that wifi status changes cannot race with the LVGL render task.",
+      "title": "Parse 'steady' string in config_loader.c",
+      "description": "As a firmware developer, I need config_loader.c to map the JSON string 'steady' to SIM_STEADY so that configs using the new profile are loaded correctly.",
       "acceptanceCriteria": [
-        "In wifi_manager.c, the two direct calls to ui_notify_wifi_status() inside wifi_event_handler() (at WIFI_EVENT_STA_DISCONNECTED and IP_EVENT_STA_GOT_IP) are replaced with lv_async_call() trampolines",
-        "The direct call to ui_notify_wifi_status(false, -99, NULL) in wifi_manager_deinit() or any other non-LVGL-task context is also wrapped",
-        "Trampoline structs carry all required arguments (connected bool, rssi int, ip string copy)",
-        "Existing lv_async_call usage for conn_dispatch and scan_dispatch is left unchanged",
-        "Build succeeds with idf.py build",
+        "config_loader.c has an explicit else if (!strcmp(v->valuestring, \"steady\")) m->sim_profile = SIM_STEADY; branch in the profile-parsing block",
+        "The new branch is placed before the catch-all fallback that maps unknown strings to SIM_RANDOM_WALK",
+        "Existing branches for 'sine' and 'ramp' are unchanged",
+        "idf.py build succeeds with zero new warnings",
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "wifi_manager.c already uses lv_async_call for conn_dispatch and scan_dispatch — follow the same pattern for the ui_notify calls."
+      "passes": false,
+      "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Validate fix: stress-test navigation without cyan crash",
-      "description": "As a firmware developer, I want to confirm the thread-safety fix eliminates the cyan crash by flashing the patched firmware and exercising the UI paths that previously triggered it.",
+      "title": "Set raw tank flowIn metric to 'steady' in sapdm_config.json",
+      "description": "As a demo operator, I want the raw tank's flowIn metric set to steady in the JSON config so the fix can be verified by flashing and observing MQTT output.",
       "acceptanceCriteria": [
-        "Flash the patched firmware with idf.py flash",
-        "Navigate to Machines tab repeatedly (at least 5 times) — no cyan screen",
-        "Navigate between all tabs (Home, Machines, Tanks, People, Debug) in sequence — no cyan screen",
-        "Wait for WiFi connect/disconnect cycle (the board retries every ~5s) while on Machines tab — no cyan screen",
-        "Take a screenshot with python3 tools/screenshot.py confirming the UI is intact",
-        "Serial log shows no LV_ASSERT or abort messages during the test period",
+        "In main/spiffs_image/sapdm_config.json, the flowIn metric inside the 'raw' tank entry has its sim object changed to {\"profile\":\"steady\"} — no other sim fields needed",
+        "sapdm_config.annotated.json has the same change applied with a brief inline comment noting that 'steady' means no automatic variation",
+        "Both JSON files are valid (no syntax errors — verify with python3 -c 'import json,sys; json.load(open(sys.argv[1]))' on each file)",
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "This story is the verification step. If the serial log still shows lv_inv_area crashes, check for any remaining direct LVGL calls from non-LVGL tasks in the codebase (grep for lv_label_set_text, lv_obj_set_style, lv_arc_set_value outside of bsp_display_lock blocks or lv_async_call trampolines)."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Verify default_config.c needs no change",
+      "description": "As a developer, I need to confirm that default_config.c is consistent with the new enum and does not require updates.",
+      "acceptanceCriteria": [
+        "Read default_config.c and confirm there is no hard-coded 'steady' string that conflicts with the new profile",
+        "The config_loader.c fallback to SIM_RANDOM_WALK for unknown strings still applies as a safe default — no change needed in default_config.c",
+        "If default_config.c contains any sim profile string other than 'random_walk', 'sine', or 'ramp', flag it in notes — do not change any values",
+        "idf.py build succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

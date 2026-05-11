@@ -53,7 +53,18 @@ Started: 2026-05-11
   - publish_all() reads metric values after releasing DATA_LOCK — acceptable; torn float for MQTT publish is harmless
 ---
 
-## 2026-05-11 - US-003 (part 2 — LVGL task stack overflow)
+## 2026-05-11 - US-001 (sim-steady-profile)
+- Added SIM_STEADY as 4th value in SimProfile enum in main/ui/data.h
+- Added `case SIM_STEADY: break;` to sim_metric() switch to suppress unhandled enum warning
+- Wrapped metric_push() call in `if (m->sim_profile != SIM_STEADY)` so steady metrics are never mutated
+- idf.py build succeeded with zero new warnings
+- Files changed: main/ui/data.h, main/sim_task.c
+- **Learnings for future iterations:**
+  - Branch must be created from origin/main (via `git reset --hard origin/main`) since local `main` was 93 commits behind
+  - SimProfile enum and sim_metric() are the sole owners of simulation behavior; config_loader.c maps JSON strings to this enum
+  - The guard `if (m->sim_profile != SIM_STEADY) metric_push(m, next)` is cleaner than adding no-op code in the SIM_STEADY case because it avoids publishing the unmodified value redundantly
+---
+
 - Increased LVGL task stack from 7168 (default) to 20480 bytes in main.c bsp_display_cfg_t
 - Root cause: Stack protection fault on Core 1 at boot (~5.6s), before any navigation
 - Serial log showed SP=0x4ff39360 below stack bottom 0x4ff39370; crash was deterministic at boot not on navigation tap
