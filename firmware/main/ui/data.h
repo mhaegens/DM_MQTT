@@ -111,6 +111,7 @@ extern char    g_wifi_ssid[33];   // currently connected SSID, "" when disconnec
 extern int     g_wifi_rssi;
 extern char    g_device_ip[16];
 extern bool    g_tank_drag_active[MAX_TANKS];
+extern char    g_last_pub_topic[128];
 
 void metric_push(Metric *m, float value);
 void data_init_psram(void);

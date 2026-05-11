@@ -360,7 +360,7 @@ void ui_home_refresh(void)
     // Operator row: name + role
     if (s_operator_label) {
         if (g_active_badge >= 0 && g_active_badge < g_badge_count) {
-            char op_val[112];
+            char op_val[160];
             snprintf(op_val, sizeof(op_val), "%s  \xe2\x80\x93  %s",
                      g_badges[g_active_badge].name,
                      g_badges[g_active_badge].role);

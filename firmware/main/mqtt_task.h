@@ -3,6 +3,7 @@
 
 void mqtt_task_start(void);
 void mqtt_task_stop(void);
+void mqtt_task_reconnect(void);
 bool mqtt_is_connected(void);
 
 void mqtt_pub_machine_status(const char *id, bool running);

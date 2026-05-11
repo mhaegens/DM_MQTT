@@ -22,6 +22,7 @@ char    g_wifi_ssid[33]  = "";
 int     g_wifi_rssi      = -99;
 char    g_device_ip[16]  = "0.0.0.0";
 bool    g_tank_drag_active[MAX_TANKS] = {false};
+char    g_last_pub_topic[128] = "";
 
 // ─── data_init_psram ─────────────────────────────────────────────────────────
 void data_init_psram(void) {
