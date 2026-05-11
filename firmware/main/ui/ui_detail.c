@@ -26,6 +26,8 @@ static lv_obj_t *s_sim_sine_ampl_lbl   = NULL;
 static lv_obj_t *s_sim_sine_period_lbl = NULL;
 static lv_obj_t *s_sim_sine_offset_lbl = NULL;
 static lv_obj_t *s_sim_sine_rows[3]    = {NULL}; // [0]=ampl, [1]=period, [2]=offset
+static lv_obj_t *s_sim_ramp_step_lbl   = NULL;
+static lv_obj_t *s_sim_ramp_row        = NULL;
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -602,6 +604,21 @@ static void sim_sine_btn_cb(lv_event_t *e)
     }
 }
 
+static void sim_ramp_btn_cb(lv_event_t *e)
+{
+    // user_data: 0=minus, 1=plus
+    int dir = (int)(intptr_t)lv_event_get_user_data(e) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+    m->step += dir * 0.1f;
+    if (m->step < 0.1f) m->step = 0.1f;
+    if (s_sim_ramp_step_lbl) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.1f", m->step);
+        lv_label_set_text(s_sim_ramp_step_lbl, buf);
+    }
+}
+
 static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
                                      lv_obj_t **val_lbl_out,
                                      lv_event_cb_t cb,
@@ -725,6 +742,18 @@ static void sim_panel_configure(Metric *m)
             else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_offset);
             lv_label_set_text(s_sim_sine_offset_lbl, buf);
         }
+    }
+
+    // Ramp row
+    bool is_ramp = (m->sim_profile == SIM_RAMP);
+    if (s_sim_ramp_row) {
+        if (is_ramp) lv_obj_clear_flag(s_sim_ramp_row, LV_OBJ_FLAG_HIDDEN);
+        else         lv_obj_add_flag(s_sim_ramp_row,   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_ramp && s_sim_ramp_step_lbl) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.1f", m->step);
+        lv_label_set_text(s_sim_ramp_step_lbl, buf);
     }
 }
 
@@ -981,6 +1010,11 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_add_flag(s_sim_sine_rows[0], LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_sim_sine_rows[1], LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_sim_sine_rows[2], LV_OBJ_FLAG_HIDDEN);
+
+    // Step row for SIM_RAMP (hidden by default); user_data: 0=minus, 1=plus
+    s_sim_ramp_row = sim_build_param_row(s_sim_panel, "Step",
+                                         &s_sim_ramp_step_lbl, sim_ramp_btn_cb, 0, 1);
+    lv_obj_add_flag(s_sim_ramp_row, LV_OBJ_FLAG_HIDDEN);
 
 }
 
