@@ -1,0 +1,189 @@
+## Codebase Patterns
+- Entity globals are in `ui/data.h` + `ui/data.c` (Badge, Machine, Tank, g_badges, g_machines, g_tanks, g_badge_count, etc.) — data_model.h/c are legacy files not in CMakeLists.txt
+- Always use `g_tank_count` (runtime loaded count) not `TANK_COUNT` / `MAX_TANKS` for bounds checks in tank UI code; same pattern applies to machines (g_machine_count) and badges (g_badge_count)
+- JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
+- `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
+- The build environment requires proper IDF PATH setup to run `idf.py build`; individual object files can be compiled via `make -C firmware/build <target>.obj` after initial CMake configure
+- ui_machines.c grid uses LV_FLEX_FLOW_ROW_WRAP with LV_SIZE_CONTENT height + scrollable screen — adding machines beyond 4 automatically adds rows; no structural changes needed for dynamic count
+- Pre-existing CMake issue: `gdbinit.cmake:40` fails with "exactly three arguments" error in the ESP-IDF environment; this does not affect actual compilation, only CMake reconfigure step
+- JSON config key for operators is `"people"` (not "operators"); config_loader looks for `cJSON_GetObjectItem(root, "people")`
+- g_machines, g_tanks, g_badges are now heap pointers (not static arrays); `data_init_psram()` in data.c must be called in app_main() before config_load(); syntax for callers is unchanged (ptr[i] == arr[i] in C)
+- cJSON hooks pattern: install `psram_malloc` hook before cJSON_Parse(), restore NULL hooks after — always restore before any early return to avoid leaking the hook state
+- MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the correct cap combination for general-purpose SPIRAM allocations on ESP32-P4
+- Operator login MQTT topic is `factory/operators/login` (not `nfc/badge`); payload includes uid, name, role, plant, ts (ms)
+- Always use g_badge_count (runtime loaded count) not BADGE_COUNT (static max) when iterating g_badges
+- LVGL symbol set: LV_SYMBOL_USER does not exist in this version; use LV_SYMBOL_CALL for person/badge tab icon
+- LVGL flex API: lv_obj_set_flex_shrink() does not exist; use lv_obj_set_flex_grow() on the expanding sibling only
+- LVGL flex sizing: lv_obj_set_size(obj, LV_FLEX_GROW(1), h) is invalid; use lv_obj_set_size(obj, 0, h) + lv_obj_set_flex_grow(obj, 1)
+- format-truncation is -Werror in this build; snprintf buffers must cover worst-case field sizes (dept 32 + plant 32 + decoration = 80+ bytes)
+
+---
+
+## 2026-05-11 - US-001
+- Renamed JSON key from `"operators"` to `"people"` in config_loader.c and default_config.c
+- Added `plant` field parsing in config_loader.c badge population (BS macro)
+- Added `"plant":"Plant BE01"` to all 5 demo operators in default_config.c embedded JSON
+- Added ESP_LOGW when `people` array size exceeds MAX_BADGES
+- Gutted data_model.c/h (not compiled; legacy files left as minimal stubs)
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c, firmware/main/data_model.c, firmware/main/data_model.h
+- **Learnings for future iterations:**
+  - `data_model.c` is NOT in CMakeLists.txt — changes to it have no compile effect
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - The gdbinit.cmake error is pre-existing and does not block compilation of individual .obj files
+  - US-001 last criterion (UART boot log verification) requires flashing to hardware — mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-013
+- Converted g_machines, g_tanks, g_badges from static global arrays to NULL-initialized heap pointers in data.c; declarations in data.h updated to pointer types
+- Added `void data_init_psram(void)` in data.c that allocates all three arrays via heap_caps_malloc(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT), zeroes them with memset, logs their SPIRAM addresses, and aborts on allocation failure
+- Declared data_init_psram() in data.h; call added to app_main() in main.c before config_load()
+- Changed .buff_spiram from false to true in bsp_display_cfg_t in main.c so BSP allocates LVGL draw buffer(s) in SPIRAM
+- Added #include "esp_heap_caps.h" and #include "ui/data.h" to main.c
+- Added cJSON SPIRAM allocator (psram_malloc hook) in config_loader.c: hook installed before cJSON_Parse(), restored to NULL after; hooks pattern is symmetric with early-return safety
+- Added #include "esp_heap_caps.h" to config_loader.c
+- Added boot-time heap diagnostics after sim_task_start() in main.c: heap_caps_print_heap_info for both SPIRAM and internal, plus ESP_LOGW when internal SRAM < 100 KB
+- Verified default_config.c already declares DEFAULT_CONFIG_JSON as `const char[]` — lives in .rodata (flash) by default; no change needed
+- All callers of g_machines[], g_tanks[], g_badges[] use ptr[i] or &ptr[i] syntax which is identical for pointers and arrays in C; no changes to 15+ UI/sim/mqtt caller files required
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/main.c, firmware/main/ui/data.h, firmware/main/ui/data.c, firmware/main/config_loader.c
+- **Learnings for future iterations:**
+  - Converting static global arrays to heap pointers is zero-risk for callers in C: arr[i] and ptr[i] are identical syntax
+  - cJSON_InitHooks(NULL) restores default allocators; always restore before any early return to avoid leaking hook state into subsequent calls
+  - MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the safe general-purpose SPIRAM cap combination for ESP32-P4
+  - data_init_psram() must be called before config_load() because config_loader populates the arrays via pointer access
+  - BSP buff_spiram flag delegates LVGL draw buffer allocation to the BSP/LVGL port layer — no manual allocation needed for that tier
+  - AC 7 (boot log confirmation of SPIRAM addresses) and AC 8 (internal SRAM >= 100 KB) require flashing to hardware to verify
+---
+
+## 2026-05-11 - US-011
+- sim_task already used g_machine_count/g_tank_count dynamically (no changes needed to sim loop)
+- Fixed mqtt_pub_operator topic from `factory/nfc/badge` to `factory/operators/login`; added ts field (esp_timer_get_time()/1000 ms) to JSON payload; added esp_timer.h include
+- sim_tap_cb (Physical mode Simulate Tap) fixed to use g_badge_count instead of BADGE_COUNT; now calls mqtt_pub_operator() to publish login event
+- select_btn_cb (Virtual mode Select Operator) now calls mqtt_pub_operator() to publish login event
+- Added #include "../mqtt_task.h" to ui_nfc.c for access to mqtt_pub_operator
+- Added startup log in sim_task_fn listing all machine and tank IDs with their array index
+- Added ESP_LOGD("sim", ...) in publish_all() logging machine/tank counts per publish cycle
+- Updated ui_mqtt_detail.c display from nfc/badge to operators/login to match actual topic
+- Also committed CONFIG_ESP_HOSTED_DFLT_TASK_FROM_SPIRAM=y in sdkconfig.defaults (US-013 fix that was staged but missed)
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/mqtt_task.c, firmware/main/sim_task.c, firmware/main/ui/ui_nfc.c, firmware/main/ui/ui_mqtt_detail.c, firmware/sdkconfig.defaults
+- **Learnings for future iterations:**
+  - Always use g_badge_count (dynamic loaded count) not BADGE_COUNT (static max) for badge array iteration
+  - esp_timer_get_time() returns microseconds; divide by 1000 for milliseconds
+  - ui_nfc.c must include "../mqtt_task.h" (relative path from ui/ subdir) to call mqtt_pub_operator
+  - UART log criterion for topics is satisfied at LOGD (verbose) level in publish_all and LOGI in mqtt_pub_operator
+---
+
+- Renamed JSON key from `"operators"` to `"people"` in config_loader.c and default_config.c
+- Added `plant` field parsing in config_loader.c badge population (BS macro)
+- Added `"plant":"Plant BE01"` to all 5 demo operators in default_config.c embedded JSON
+- Added ESP_LOGW when `people` array size exceeds MAX_BADGES
+- Gutted data_model.c/h (not compiled; legacy files left as minimal stubs)
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c, firmware/main/data_model.c, firmware/main/data_model.h
+- **Learnings for future iterations:**
+  - `data_model.c` is NOT in CMakeLists.txt — changes to it have no compile effect
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - The gdbinit.cmake error is pre-existing and does not block compilation of individual .obj files
+  - US-001 last criterion (UART boot log verification) requires flashing to hardware — mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-013
+- Converted g_machines, g_tanks, g_badges from static global arrays to NULL-initialized heap pointers in data.c; declarations in data.h updated to pointer types
+- Added `void data_init_psram(void)` in data.c that allocates all three arrays via heap_caps_malloc(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT), zeroes them with memset, logs their SPIRAM addresses, and aborts on allocation failure
+- Declared data_init_psram() in data.h; call added to app_main() in main.c before config_load()
+- Changed .buff_spiram from false to true in bsp_display_cfg_t in main.c so BSP allocates LVGL draw buffer(s) in SPIRAM
+- Added #include "esp_heap_caps.h" and #include "ui/data.h" to main.c
+- Added cJSON SPIRAM allocator (psram_malloc hook) in config_loader.c: hook installed before cJSON_Parse(), restored to NULL after; hooks pattern is symmetric with early-return safety
+- Added #include "esp_heap_caps.h" to config_loader.c
+- Added boot-time heap diagnostics after sim_task_start() in main.c: heap_caps_print_heap_info for both SPIRAM and internal, plus ESP_LOGW when internal SRAM < 100 KB
+- Verified default_config.c already declares DEFAULT_CONFIG_JSON as `const char[]` — lives in .rodata (flash) by default; no change needed
+- All callers of g_machines[], g_tanks[], g_badges[] use ptr[i] or &ptr[i] syntax which is identical for pointers and arrays in C; no changes to 15+ UI/sim/mqtt caller files required
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/main.c, firmware/main/ui/data.h, firmware/main/ui/data.c, firmware/main/config_loader.c
+- **Learnings for future iterations:**
+  - Converting static global arrays to heap pointers is zero-risk for callers in C: arr[i] and ptr[i] are identical syntax
+  - cJSON_InitHooks(NULL) restores default allocators; always restore before any early return to avoid leaking hook state into subsequent calls
+  - MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT is the safe general-purpose SPIRAM cap combination for ESP32-P4
+  - data_init_psram() must be called before config_load() because config_loader populates the arrays via pointer access
+  - BSP buff_spiram flag delegates LVGL draw buffer allocation to the BSP/LVGL port layer — no manual allocation needed for that tier
+  - AC 7 (boot log confirmation of SPIRAM addresses) and AC 8 (internal SRAM >= 100 KB) require flashing to hardware to verify
+---
+
+## 2026-05-11 - US-003
+- Bumped MAX_MACHINES from 8 to 10 in data.h; data.c SPIRAM allocation uses MAX_MACHINES so the heap alloc grows automatically
+- Added `lv_obj_set_style_pad_bottom(grid, GRID_PAD, 0)` so last row of cards has breathing room before the scroll end
+- Updated top comment in ui_machines.c from "2×2 grid" to "dynamic 2-column scrollable grid (up to MAX_MACHINES)"
+- Verified grid already used LV_FLEX_FLOW_ROW_WRAP + LV_SIZE_CONTENT height + scrollable s_screen with LV_DIR_VER — no structural changes needed
+- Extended spiffs_image/sapdm_config.json from 4 to 8 machines (added weld01, asm01, coat01 alongside existing 4); supports 5-machine and 8-machine screenshot verification on hardware
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/data.h, firmware/main/ui/ui_machines.c, firmware/main/spiffs_image/sapdm_config.json, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - The flex-wrap + LV_SIZE_CONTENT grid pattern already handles N cards dynamically; no per-card position math needed
+  - MAX_MACHINES controls both the static array sizes (data.h) and the SPIRAM heap alloc (data.c) — one change in data.h covers both
+  - Screenshot AC (hardware verify) cannot be satisfied without flashing; mark as hardware-verify-pending
+  - config_loader.c already clamps to MAX_MACHINES with ESP_LOGW; no defensive code changes needed when bumping the limit
+---
+
+## 2026-05-11 - US-004
+- Layout was already fully dynamic: col_w = (CONTENT_W - COL_GAP*(g_tank_count+1)) / g_tank_count; LV_FLEX_ALIGN_SPACE_EVENLY in ui_tanks_create handles even distribution for 1/2/3 tanks
+- 1 tank: col_w = (720 - 16) / 1 = 704px, centered with equal ~8px margins — matches "full width with equal side margins"
+- 2 tanks: col_w = (720 - 24) / 2 = 348px each — side-by-side half-width
+- 3 tanks: col_w = (720 - 32) / 3 = 229px each — equal thirds
+- Fixed TANK_COUNT → g_tank_count in ui_tank_overview.c:459 and ui_detail.c:934,942 bounds checks
+- Updated comment in ui_tanks.c from "Three hopper-shaped tanks" to "Dynamic hopper-shaped tanks (1–3)"
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_tanks.c, firmware/main/ui/ui_tank_overview.c, firmware/main/ui/ui_detail.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - Bounds checks using TANK_COUNT/MAX_TANKS are a latent bug if g_tank_count < MAX_TANKS — always use the runtime count variable
+  - The flex-wrap + SPACE_EVENLY combination already handles 1–N layout centering; no explicit per-count CSS-like rules needed
+  - Screenshot AC requires hardware flash; mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-005
+- Replaced NFC ring animation + badge carousel entirely with a vertically scrollable operator list
+- build_operator_card() renders avatar circle (initials + avatar_color), full name, role pill (blue), dept+plant row, cert chips for each g_badges[i]
+- Scrollable list sized to fill content area minus button + counter rows; vertical scroll with active scrollbar
+- Simulate Scan button (full-width, COL_HI blue, always visible) cycles g_active_badge, calls mqtt_pub_operator, calls ui_home_refresh, increments scans_today counter
+- highlight_cards() marks active card with COL_HI_LT bg + COL_HI border + border_width=2; all others COL_BASE + COL_BD + border_width=1
+- Button flashes COL_OK (green) → "Scanned!" for 1200ms on press, restored by timer callback
+- Tab icon changed from LV_SYMBOL_WIFI to LV_SYMBOL_CALL (LV_SYMBOL_USER does not exist in this LVGL version); label changed from "NFC" to "People"
+- ui_nfc_on_badge_scanned() updated to use g_badge_count guard and call highlight_cards()
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_nfc.c, firmware/main/ui/ui_main.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - LV_SYMBOL_USER does not exist in this project's LVGL version; use LV_SYMBOL_CALL as the closest person/badge substitute
+  - lv_obj_set_flex_shrink() does not exist in this LVGL version; simply omit it (flex_grow on sibling achieves same layout effect)
+  - format-truncation is -Werror here; always size snprintf buffers for worst-case: dept(32) + plant(32) + decoration needs >=80 bytes
+  - lv_obj_set_size(obj, LV_FLEX_GROW(1), ...) is invalid syntax; use lv_obj_set_size(obj, 0, ...) + lv_obj_set_flex_grow(obj, 1)
+  - Screenshot AC requires hardware flash; mark as hardware-verify-pending
+---
+
+## 2026-05-11 - US-010
+- Added `#include "../mqtt_task.h"` to ui_tanks.c (same pattern as ui_machines.c and ui_nfc.c)
+- Added `s_last_pub_ms[MAX_TANKS]` static array and `DRAG_PUB_INTERVAL_MS 400` constant for throttle
+- During LV_EVENT_PRESSING: when dragging, publishes `mqtt_pub_tank_metric(t->id, t->metrics[0].key, new_pct)` at most once per 400ms using `lv_tick_get()` diff
+- On LV_EVENT_RELEASED: always publishes final value `t->metrics[0].value` if drag was active (clears s_dragging after), ensuring the exact released level is delivered even if < 400ms from last throttled publish
+- g_tank_drag_active flag set/cleared was already correct; sim_task already skips metric[0] when flag is set — no changes needed there
+- Wave physics (slosh) is baked into the draw callback and responds to the updated metric value automatically — no structural change needed
+- Build succeeded: idf.py build, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_tanks.c
+- **Learnings for future iterations:**
+  - `lv_tick_get()` returns milliseconds and is safe to call from the LVGL event handler (same task context); use it for throttling rapid UI events
+  - `uint32_t` wraps after ~49 days; the subtraction `now - s_last_pub_ms[idx] >= threshold` handles rollover correctly due to unsigned arithmetic
+  - Always publish a final value on RELEASED even if the throttle hasn't elapsed — last-write wins on the broker
+  - mqtt_pub_tank_metric uses metrics[0].key as the MQTT sub-topic key; this must match what config_loader set in metrics[0].key
+---
+
+## 2026-05-11 - US-009
+- Added `#include "../mqtt_task.h"` to ui_machines.c (same pattern as ui_nfc.c)
+- toggle_cb now calls `mqtt_pub_machine_status(mc->id, mc->running)` immediately after toggling mc->running
+- pulse_cb now calls `mqtt_pub_machine_pulse(mc->id, mc->pulses)` immediately after incrementing mc->pulses
+- Both MQTT publish functions already existed and were fully implemented in mqtt_task.c
+- `pub()` helper silently drops if MQTT disconnected; no crash on offline state
+- Build succeeded: make, 0 errors, 0 warnings
+- Files changed: firmware/main/ui/ui_machines.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - mqtt_pub_machine_status and mqtt_pub_machine_pulse are in mqtt_task.h/c — include "../mqtt_task.h" from ui/ subdir
+  - The `pub()` helper in mqtt_task.c handles disconnect gracefully (drops silently); no extra guard needed in callers
+  - UI callbacks (LVGL task, core 0) write to Machine.running/pulses; sim_task (core 1) reads them; no mutex needed for simple scalar ops in this demo
+---

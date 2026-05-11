@@ -1,0 +1,125 @@
+# Ralph Progress Log
+Started: 2026-05-11
+
+## Codebase Patterns
+- Entity globals are in `ui/data.h` + `ui/data.c` (Badge, Machine, Tank, g_badges, g_machines, g_tanks, g_badge_count, etc.) — data_model.h/c are legacy files not in CMakeLists.txt
+- JSON config parsing lives entirely in `config_loader.c` which includes `ui/data.h`; no separate data_model.h needed
+- `data_model.h` and `data_model.c` are NOT compiled (not listed in CMakeLists.txt); any changes to them are cosmetic/housekeeping
+- The build environment requires IDF_PATH setup; source /Users/I584748/esp/esp-idf/export.sh before idf.py
+- Pre-existing CMake issue: `gdbinit.cmake:40` fails with "exactly three arguments" error; does not affect compilation
+- JSON config key for operators is `"people"` (not "operators")
+- SPIFFS: use `spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)` in main/CMakeLists.txt; partition label must match partitions.csv 'Name' column; source files go in main/spiffs_image/
+- Config load order: SPIFFS (/spiffs/sapdm_config.json) -> SD card (/sdcard/sapdm_config.json) -> embedded DEFAULT_CONFIG_JSON
+- `esp_vfs_spiffs_register` returns `ESP_ERR_INVALID_STATE` if already mounted -- treat same as `ESP_OK`
+- Build: `idf.py build` fails with cmake 4.3.2 due to `remove_duplicated_flags` breaking in toolchain cmake; use compile_commands.json + direct riscv gcc to check individual files
+- LVGL is pinned to CPU1 (task_affinity=1 in bsp_display_cfg_t); all other tasks (sim, mqtt, btn, console) should use CPU0 or auto to avoid contention
+
+---
+
+## 2026-05-11 - US-001
+- Already implemented on claude/firmware-bsp-st7703-fonts branch (commit f45d130)
+- Renamed JSON key from "operators" to "people"; added plant field; added ESP_LOGW for MAX_BADGES overflow
+- Files changed: firmware/main/config_loader.c, firmware/main/default_config.c
+- **Learnings for future iterations:**
+  - `ui/data.h` is the authoritative header for all entity structs (Badge, Machine, Tank) and runtime globals
+  - UART boot log verification requires flashing to hardware
+---
+
+## 2026-05-11 - US-002
+- Added `esp_spiffs.h` include and SPIFFS mount logic to config_loader.c; SPIFFS checked before SD card
+- Added `CONFIG_SPIFFS_OK` to ConfigResult enum in config_loader.h
+- Added `spiffs` to REQUIRES in main/CMakeLists.txt
+- Added `spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)` to main/CMakeLists.txt
+- Created main/spiffs_image/sapdm_config.json with same data as embedded default (proper JSON, not C string)
+- partitions.csv already had spiffs partition at 0x410000 (0x7F0000 bytes) -- no change needed
+- Build confirmed: spiffs.bin (8 MB) generated; flash command shows 0x410000 address
+- Files changed: firmware/main/config_loader.c, firmware/main/config_loader.h, firmware/main/CMakeLists.txt, firmware/main/spiffs_image/sapdm_config.json
+- **Learnings for future iterations:**
+  - `spiffs_create_partition_image(LABEL DIR FLASH_IN_PROJECT)` -- LABEL must exactly match partitions.csv 'Name' column
+  - SPIFFS mount with `format_if_mount_failed=false` is the correct read-only boot pattern
+  - The config fallback chain ensures robustness: SPIFFS -> SD -> embedded; each step logs its outcome
+  - UART log criterion requires hardware flashing -- verified by build log instead
+---
+
+## 2026-05-11 - US-009
+- Added `#include "../mqtt_task.h"` to ui_machines.c (same pattern as ui_nfc.c)
+- toggle_cb now calls `mqtt_pub_machine_status(mc->id, mc->running)` immediately after toggling mc->running
+- pulse_cb now calls `mqtt_pub_machine_pulse(mc->id, mc->pulses)` immediately after incrementing mc->pulses
+- Both MQTT publish functions already existed and were fully implemented in mqtt_task.c
+- `pub()` helper silently drops if MQTT disconnected (g_mqtt_connected check); no crash on offline state
+- sim_task has no mutex on Machine fields — dual-core ESP-IDF approach is safe for simple bool/int in this demo
+- Build succeeded: make, 0 errors, 0 warnings; sapdm_simulator.bin generated
+- Files changed: firmware/main/ui/ui_machines.c, firmware/scripts/ralph/prd.json
+- **Learnings for future iterations:**
+  - mqtt_pub_machine_status and mqtt_pub_machine_pulse are in mqtt_task.h/c — include "../mqtt_task.h" from ui/ subdir
+  - The `pub()` function in mqtt_task.c already handles disconnect gracefully (drops silently); no extra guard needed in callers
+  - UI callbacks run in LVGL task (core 0); sim_task runs on core 1; no mutex needed for simple scalar writes in this demo
+---
+
+## 2026-05-11 - US-006
+- WiFi backend was already fully implemented; audit confirmed all acceptance criteria met
+- Added wifi_manager_set_on_connected(cb) API: fires once on first IP_EVENT_STA_GOT_IP
+- main.c: changed mqtt_task_start() to fire via wifi_manager_set_on_connected callback
+  (offline-first: MQTT only starts when WiFi has IP, not unconditionally at boot)
+- sim_task.c: moved sim task from CPU1 to CPU0 (LVGL pinned to CPU1 via task_affinity=1)
+- sdkconfig.defaults: added CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED + =0 (CPU0)
+- Files changed: main/main.c, main/wifi_manager.c, main/wifi_manager.h, main/sim_task.c, sdkconfig.defaults
+- **Learnings for future iterations:**
+  - wifi_manager_set_on_connected fires from IP_EVENT_STA_GOT_IP event handler (not LVGL task)
+  - Calling MQTT start directly from the WiFi event handler is safe (it just creates a FreeRTOS task)
+  - Build via make -f CMakeFiles/Makefile2 fails due to cmake 4.3.2 breaking toolchain cmake; use direct gcc compile from compile_commands.json to verify individual files
+  - LVGL is pinned to CPU1; all other tasks (sim, mqtt, btn, console) should use CPU0 or auto
+---
+
+## 2026-05-11 - US-007
+- Added 1500ms LVGL timer in ui_home_create() calling ui_home_refresh()
+- Fixed MACHINE_COUNT→g_machine_count, BADGE_COUNT→g_badge_count in ui_home_refresh()
+- KPI meta[1] now shows uptime HH:MM:SS via esp_timer_get_time()/1000000
+- MQTT badge dynamically shows OFFLINE (red) or CONNECTED (green) from g_mqtt_connected
+- WiFi status row shows "SSID · IP" when connected, "Not connected" otherwise
+- Operator row shows "name – role" from g_badges[g_active_badge]
+- RSSI KPI shows "--" when disconnected
+- Also: ui_debug.c expanded to 3-column grid with Int RAM + SPIRAM stats; 1s timer paused when not on Debug tab
+- Files changed: main/ui/ui_home.c, main/ui/ui_debug.c, main/ui/ui_main.c
+- **Learnings for future iterations:**
+  - make_badge/make_status_row are static helpers in ui_home.c; use out_pill/out_lbl params for dynamic badge update
+  - MACHINE_COUNT and BADGE_COUNT are deprecated static aliases; always use g_machine_count/g_badge_count
+  - lv_timer_pause/lv_timer_resume pattern for tab-specific timers (see ui_tanks_activate/deactivate)
+---
+
+## 2026-05-11 - US-008
+- Added `g_last_pub_topic[128]` extern to `ui/data.h`; definition in `ui/data.c` initialized to ""
+- `pub()` in `mqtt_task.c` now calls `strncpy(g_last_pub_topic, topic, sizeof(g_last_pub_topic)-1)` on every publish
+- Added `mqtt_task_reconnect()` to `mqtt_task.h` and `mqtt_task.c`; calls `esp_mqtt_client_reconnect(s_client)`
+- `ui_mqtt_detail.c`: added `#include "../mqtt_task.h"` (same pattern as ui_machines.c)
+- Added `s_last_topic_lbl` static ref; Last Topic row added to Runtime Status card in `ui_mqtt_detail_create()`
+- Added `s_reconnect_btn` static ref; Reconnect button now saved and wired to `mqtt_task_reconnect()`
+- Reconnect button has `LV_STATE_DISABLED` styles for bg/border/text; toggled in `ui_mqtt_detail_refresh()` based on `g_mqtt_connected`
+- Removed unused `TAG` + `esp_log.h` include from ui_mqtt_detail.c (no more log stub)
+- All 3 changed .c files verified via direct riscv gcc syntax check from compile_commands.json
+- Files changed: main/ui/data.h, main/ui/data.c, main/mqtt_task.h, main/mqtt_task.c, main/ui/ui_mqtt_detail.c
+- **Learnings for future iterations:**
+  - `esp_mqtt_client_reconnect()` is the correct API to force an immediate reconnect attempt; no stop/start needed
+  - `lv_obj_add_state(btn, LV_STATE_DISABLED)` / `lv_obj_clear_state(btn, LV_STATE_DISABLED)` to toggle button enable; style must be set with LV_STATE_DISABLED selector at creation time
+  - ui_mqtt_detail.c includes mqtt_task.h via `"../mqtt_task.h"` (one level up from ui/ subdir)
+  - Remove TAG + esp_log.h when removing the last ESP_LOG* call from a file to avoid -Wunused-variable
+---
+
+## 2026-05-11 - US-012
+- Shell bar pills: replaced `set_pill_connected()` with `set_pill_state(dot, lbl, connected, ok_text, err_text)`
+  - WiFi pill: "WiFi" (green) when connected, "No WiFi" (red) when disconnected
+  - MQTT pill: "MQTT" (green) when connected, "Offline" (red) when disconnected
+- wifi_manager.c: added `static void (*s_on_ip)(void)` and `wifi_manager_set_on_ip(cb)` — fires on EVERY IP acquisition (not one-shot)
+- main.c: `on_wifi_ip()` replaces the one-shot `set_on_connected(mqtt_task_start)` pattern; starts MQTT on first IP, calls `mqtt_task_reconnect()` on subsequent reconnects
+- mqtt_task.c: set `disable_auto_reconnect=true` in client config; implemented exponential backoff via `esp_timer_one_shot` (5s→10s→30s capped at 30s)
+- `s_reconnect_timer` created at `mqtt_task_start()`, deleted at `mqtt_task_stop()`
+- `mqtt_task_reconnect()` resets `s_disconnect_count` so manual reconnect resets backoff to 5s
+- All 4 changed files verified via direct riscv gcc syntax check
+- Files changed: main/mqtt_task.c, main/wifi_manager.c, main/wifi_manager.h, main/ui/ui_main.c, main/main.c
+- **Learnings for future iterations:**
+  - ESP-IDF MQTT component has no `esp_mqtt_client_set_reconnect_timeout()` API; use `disable_auto_reconnect=true` + `esp_timer_one_shot` for custom backoff
+  - `esp_timer_stop()` returns ESP_ERR_INVALID_STATE if timer is not running — call it before `esp_timer_start_once()` to avoid double-start; safe to call even when stopped
+  - `wifi_manager_set_on_ip` fires from IP event handler (not LVGL task); safe to call `esp_mqtt_client_reconnect()` from there (just posts to an internal queue)
+  - Shell bar pill label text can be updated from `ui_notify_*` which is called via `lv_async_call` from the WiFi event handler — thread-safe
+---
+

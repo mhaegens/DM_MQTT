@@ -1,10 +1,11 @@
-// ui_tanks.c — Three hopper-shaped tanks: cylindrical top + tapered bottom.
+// ui_tanks.c — Dynamic hopper-shaped tanks (1–3): cylindrical top + tapered bottom.
 // Rendered via LV_EVENT_DRAW_MAIN with lv_draw_rect and lv_draw_triangle.
 #include "ui_tanks.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "ui_detail.h"
 #include "data.h"
+#include "../mqtt_task.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,9 +18,9 @@ static const char *TAG = "tanks";
 #define ROW_PAD         12
 #define TANK_TOTAL_H   460    // total tank widget height (px)
 #define TANK_UPPER_RATIO 70   // % of TANK_TOTAL_H = cylindrical section
-#define TANK_TIP_W      20    // flat base width at bottom of taper (px)
-#define TANK_RADIUS     20    // top-corner border radius
-#define TANK_TIP_RADIUS  6    // rounded corner radius at taper tip
+#define TANK_TIP_W      28    // flat base width at bottom of taper (px)
+#define TANK_RADIUS     36    // top-corner border radius
+#define TANK_TIP_RADIUS  8    // rounded corner radius at taper tip
 #define LABEL_BTN_H     48    // tank name / badge button height (2 rows)
 #define LABEL_BTN_GAP    6    // gap between tank widget and label button
 
@@ -34,14 +35,17 @@ typedef struct {
     lv_obj_t  *badge_label;
 } tank_col_t;
 
-static tank_col_t  s_cols[TANK_COUNT];
+static tank_col_t  s_cols[MAX_TANKS];
 static lv_obj_t   *s_screen       = NULL;
 static lv_timer_t *s_refresh_timer = NULL;
 
 // Per-tank drag state
-static int16_t s_press_y[TANK_COUNT];
-static float   s_press_pct[TANK_COUNT];
-static bool    s_dragging[TANK_COUNT];
+static int16_t s_press_y[MAX_TANKS];
+static float   s_press_pct[MAX_TANKS];
+static bool    s_dragging[MAX_TANKS];
+static uint32_t s_last_pub_ms[MAX_TANKS];  // lv_tick_get() at last throttled publish
+
+#define DRAG_PUB_INTERVAL_MS 400
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 static const char *status_text(float pct) {
@@ -154,8 +158,9 @@ static void tank_draw_cb(lv_event_t *e) {
         dsc.border_color = COL_BD_STR;
         dsc.border_width = 1;
         dsc.border_opa  = LV_OPA_COVER;
+        dsc.border_side = LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_TOP;
         dsc.radius      = TANK_RADIUS;
-        lv_area_t area = {ox, oy, ox + w - 1, jct_y + TANK_RADIUS};
+        lv_area_t area = {ox, oy, ox + w - 1, jct_y};
         lv_draw_rect(layer, &dsc, &area);
     }
 
@@ -177,8 +182,9 @@ static void tank_draw_cb(lv_event_t *e) {
                        waterline, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
         } else {
             /* Fill spans rect + full taper */
-            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y,
-                             fc, LV_OPA_COVER, 0);
+            lv_coord_t fill_r = (waterline <= oy + TANK_RADIUS) ? TANK_RADIUS : 0;
+            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y + fill_r,
+                             fc, LV_OPA_COVER, fill_r);
             draw_taper(layer, ox, ox + w, tip_x1, tip_x2,
                        jct_y, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
         }
@@ -266,7 +272,7 @@ static void refresh_tank(int idx) {
 static void refresh_timer_cb(lv_timer_t *timer) {
     (void)timer;
     if (g_current_view != VIEW_TANKS) return;
-    for (int i = 0; i < TANK_COUNT; i++) refresh_tank(i);
+    for (int i = 0; i < g_tank_count; i++) refresh_tank(i);
 }
 
 // ─── Label button tap → drill into tank overview ───────────────────────────────
@@ -279,7 +285,7 @@ static void label_btn_cb(lv_event_t *e) {
 static void tank_event_cb(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    if (idx < 0 || idx >= TANK_COUNT) return;
+    if (idx < 0 || idx >= g_tank_count) return;
     Tank *t = &g_tanks[idx];
 
     if (code == LV_EVENT_PRESSED) {
@@ -298,6 +304,7 @@ static void tank_event_cb(lv_event_t *e) {
         int dy = s_press_y[idx] - pt.y;
         if (dy > 8 || dy < -8) s_dragging[idx] = true;
         if (s_dragging[idx]) {
+            g_tank_drag_active[idx] = true;
             lv_obj_t *widget = lv_event_get_target(e);
             int h = lv_obj_get_height(widget);
             if (h <= 0) return;
@@ -306,6 +313,11 @@ static void tank_event_cb(lv_event_t *e) {
             if (new_pct > 100.0f) new_pct = 100.0f;
             t->metrics[0].value = new_pct;
             refresh_tank(idx);
+            uint32_t now = lv_tick_get();
+            if (now - s_last_pub_ms[idx] >= DRAG_PUB_INTERVAL_MS) {
+                s_last_pub_ms[idx] = now;
+                mqtt_pub_tank_metric(t->id, t->metrics[0].key, new_pct);
+            }
         }
     } else if (code == LV_EVENT_SHORT_CLICKED) {
         if (!s_dragging[idx]) {
@@ -313,6 +325,10 @@ static void tank_event_cb(lv_event_t *e) {
         }
         s_dragging[idx] = false;
     } else if (code == LV_EVENT_RELEASED) {
+        if (s_dragging[idx]) {
+            mqtt_pub_tank_metric(t->id, t->metrics[0].key, t->metrics[0].value);
+        }
+        g_tank_drag_active[idx] = false;
         s_dragging[idx] = false;
     }
 }
@@ -346,7 +362,9 @@ static void position_tick_labels(int col_idx) {
 // ─── Build one tank column ─────────────────────────────────────────────────────
 static void build_tank_col(lv_obj_t *parent, int idx) {
     Tank      *t    = &g_tanks[idx];
-    lv_coord_t col_w = (CONTENT_W - COL_GAP * (TANK_COUNT + 1)) / TANK_COUNT;
+    lv_coord_t col_w = (g_tank_count > 0)
+        ? (CONTENT_W - COL_GAP * (g_tank_count + 1)) / g_tank_count
+        : CONTENT_W - 2 * COL_GAP;
     tank_col_t *col = &s_cols[idx];
     col->tank_idx = idx;
     col->col_w    = col_w;
@@ -454,13 +472,13 @@ void ui_tanks_create(lv_obj_t *parent) {
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(s_screen, COL_GAP, 0);
 
-    for (int i = 0; i < TANK_COUNT; i++) {
+    for (int i = 0; i < g_tank_count; i++) {
         build_tank_col(s_screen, i);
     }
 
     /* Force layout so lv_obj_get_width on labels returns correct values */
     lv_obj_update_layout(s_screen);
-    for (int i = 0; i < TANK_COUNT; i++) {
+    for (int i = 0; i < g_tank_count; i++) {
         position_tick_labels(i);
     }
 
@@ -472,7 +490,7 @@ void ui_tanks_create(lv_obj_t *parent) {
 
 void ui_tanks_activate(void) {
     if (s_refresh_timer) lv_timer_resume(s_refresh_timer);
-    for (int i = 0; i < TANK_COUNT; i++) refresh_tank(i);
+    for (int i = 0; i < g_tank_count; i++) refresh_tank(i);
 }
 
 void ui_tanks_deactivate(void) {

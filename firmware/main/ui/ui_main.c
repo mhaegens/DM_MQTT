@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "ui_wifi_setup.h"
 #include "ui_mqtt_detail.h"
+#include "ui_wifi_password.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -28,6 +29,8 @@ void ui_tanks_activate(void);
 void ui_tanks_deactivate(void);
 void ui_debug_create(lv_obj_t *parent);
 void ui_debug_refresh(void);
+void ui_debug_activate(void);
+void ui_debug_deactivate(void);
 void ui_nfc_create(lv_obj_t *parent);
 void ui_detail_create(lv_obj_t *parent);
 void ui_detail_step(int direction);
@@ -57,9 +60,9 @@ static const char *TAB_ICONS[]  = {
     LV_SYMBOL_SETTINGS,
     LV_SYMBOL_IMAGE,     // Tanks placeholder (no tank symbol in built-in set)
     LV_SYMBOL_LIST,
-    LV_SYMBOL_WIFI,
+    LV_SYMBOL_CALL,   // People tab (person/badge icon closest available)
 };
-static const char *TAB_LABELS[] = { "Home", "Machines", "Tanks", "Debug", "NFC" };
+static const char *TAB_LABELS[] = { "Home", "Machines", "Tanks", "Debug", "People" };
 
 // Per-tab button + active-indicator bar (static; accessed by ui_switch_tab)
 static lv_obj_t *s_tab_btns[5]       = {NULL};
@@ -446,6 +449,7 @@ void ui_main_init(void)
     ui_tank_overview_create(g_content);
     ui_wifi_setup_create(g_content);
     ui_mqtt_detail_create(g_content);
+    ui_wifi_password_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -458,6 +462,7 @@ void ui_switch_tab(ViewId v)
 
     // Deactivate tanks timer if leaving tanks
     if (g_current_view == VIEW_TANKS) ui_tanks_deactivate();
+    if (g_current_view == VIEW_DEBUG) ui_debug_deactivate();
 
     // Hide all screens
     for (int i = 0; i < VIEW_COUNT; i++) {
@@ -474,7 +479,7 @@ void ui_switch_tab(ViewId v)
     if (v == VIEW_HOME)     ui_home_refresh();
     if (v == VIEW_MACHINES) ui_machines_refresh();
     if (v == VIEW_TANKS)    ui_tanks_activate();
-    if (v == VIEW_DEBUG)    ui_debug_refresh();
+    if (v == VIEW_DEBUG)    ui_debug_activate();
 }
 
 void ui_push_detail(const char *back_label, const char *metric_label)
@@ -504,6 +509,15 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
+    if (g_current_view == VIEW_WIFI_PASSWORD) {
+        for (int i = 0; i < VIEW_COUNT; i++)
+            if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_screens[VIEW_WIFI_SETUP], LV_OBJ_FLAG_HIDDEN);
+        if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
+        if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+        g_current_view = VIEW_WIFI_SETUP;
+        return;
+    }
     if (g_current_view == VIEW_TANK_OVW) {
         ui_tank_overview_deactivate();
     }
@@ -559,6 +573,7 @@ void ui_push_wifi_setup(void)
     if (s_crumb_label) lv_label_set_text(s_crumb_label, "WiFi Setup");
     if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
     g_current_view = VIEW_WIFI_SETUP;
+    ui_wifi_setup_activate();
 }
 
 void ui_push_mqtt_detail(void)
@@ -574,29 +589,51 @@ void ui_push_mqtt_detail(void)
     ui_mqtt_detail_refresh();
 }
 
+void ui_push_wifi_password(const char *ssid)
+{
+    if (g_current_view == VIEW_WIFI_PASSWORD) return;
+    g_prev_view = g_current_view;
+    for (int i = 0; i < VIEW_COUNT; i++)
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_screens[VIEW_WIFI_PASSWORD], LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, ssid);
+    if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    g_current_view = VIEW_WIFI_PASSWORD;
+    ui_wifi_password_activate(ssid);
+}
+
 // ─── Status pill helpers ──────────────────────────────────────────────────────
-static void set_pill_connected(lv_obj_t *dot, lv_obj_t *lbl, bool connected)
+static void set_pill_state(lv_obj_t *dot, lv_obj_t *lbl,
+                           bool connected,
+                           const char *ok_text, const char *err_text)
 {
     if (!dot || !lbl) return;
     if (connected) {
         lv_obj_set_style_bg_color(dot, COL_OK, LV_PART_MAIN);
         lv_obj_set_style_text_color(lbl, COL_OK, LV_PART_MAIN);
+        lv_label_set_text(lbl, ok_text);
     } else {
-        lv_obj_set_style_bg_color(dot, COL_TX3, LV_PART_MAIN);
-        lv_obj_set_style_text_color(lbl, COL_TX3, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(dot, COL_ERR, LV_PART_MAIN);
+        lv_obj_set_style_text_color(lbl, COL_ERR, LV_PART_MAIN);
+        lv_label_set_text(lbl, err_text);
     }
 }
 
 void ui_notify_mqtt_status(bool connected)
 {
-    set_pill_connected(s_mqtt_dot, s_mqtt_lbl, connected);
+    set_pill_state(s_mqtt_dot, s_mqtt_lbl, connected, "MQTT", "Offline");
 }
 
 void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 {
-    set_pill_connected(s_wifi_dot, s_wifi_lbl, connected);
+    set_pill_state(s_wifi_dot, s_wifi_lbl, connected, "WiFi", "No WiFi");
+    g_wifi_connected = connected;
     g_wifi_rssi = rssi;
-    if (ip) strncpy(g_device_ip, ip, sizeof(g_device_ip) - 1);
+    if (connected && ip) {
+        strncpy(g_device_ip, ip, sizeof(g_device_ip) - 1);
+    } else if (!connected) {
+        strncpy(g_device_ip, "0.0.0.0", sizeof(g_device_ip) - 1);
+    }
 }
 
 // ─── Hardware button callbacks ────────────────────────────────────────────────

@@ -1,13 +1,22 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "driver/gpio.h"
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
 #include "bsp/display.h"
 #include "ui/ui_main.h"
 #include "ui/ui_screenshot.h"
+#include "ui/data.h"
 #include "config.h"
+#include "config_loader.h"
+#include "wifi_manager.h"
+#include "mqtt_task.h"
+#include "sim_task.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
+#include "esp_event.h"
 
 static const char *TAG = "main";
 
@@ -56,8 +65,37 @@ static void console_task(void *arg) {
     }
 }
 
+static void on_wifi_ip(void) {
+    if (mqtt_is_connected()) return;
+    // MQTT client not yet started on first IP; start it; on subsequent reconnects call reconnect
+    static bool s_mqtt_started = false;
+    if (!s_mqtt_started) {
+        s_mqtt_started = true;
+        mqtt_task_start();
+    } else {
+        mqtt_task_reconnect();
+    }
+}
+
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
+
+    // Network prerequisites — must come before WiFi and SD card init
+    esp_err_t nvs_ret = nvs_flash_init();
+    if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nvs_ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(nvs_ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Allocate entity arrays in SPIRAM before any other init
+    data_init_psram();
+
+    // Load config from SD (or fall back to embedded defaults)
+    ConfigResult cr = config_load();
+    ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
@@ -65,7 +103,7 @@ void app_main(void) {
         .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
         .flags = {
             .buff_dma    = true,
-            .buff_spiram = false,
+            .buff_spiram = false,  // draw buffer must stay in internal DMA-capable SRAM
             .sw_rotate   = false,
         }
     };
@@ -75,12 +113,32 @@ void app_main(void) {
     bsp_display_backlight_on();
     bsp_display_brightness_set(80);
 
+    // Set root screen background before UI builds to prevent teal flash on first frame
+    bsp_display_lock(0);
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xF2F4FA), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, LV_PART_MAIN);
+    bsp_display_unlock();
+
     bsp_display_lock(0);
     ui_main_init();
     bsp_display_unlock();
 
+    // Start networking — mqtt starts only after WiFi gets an IP; reconnects on IP renewal
+    wifi_manager_init();
+    wifi_manager_set_on_ip(on_wifi_ip);
+    sim_task_start();
+
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(console_task, "con", 8192, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(console_task, "con", 2048, NULL, 3, NULL, 0);
+
+    // Memory diagnostics — log SPIRAM and internal SRAM state after all init
+    heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
+    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+    size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    ESP_LOGI(TAG, "Internal SRAM free: %u bytes", (unsigned)free_internal);
+    if (free_internal < 100 * 1024) {
+        ESP_LOGW(TAG, "Warning: internal SRAM below 100 KB threshold");
+    }
 
     while(1) vTaskDelay(pdMS_TO_TICKS(1000));
 }
