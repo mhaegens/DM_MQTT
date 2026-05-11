@@ -109,6 +109,7 @@ void app_main(void) {
     };
     cfg.lvgl_port_cfg.task_affinity = 1;   // pin LVGL render task to CPU 1, free CPU 0 for IDLE
     cfg.lvgl_port_cfg.timer_period_ms = 20; // ~50fps cap, reduce CPU pressure
+    cfg.lvgl_port_cfg.task_stack = 20480;  // 20KB: deep LVGL object hierarchy in ui_machines_create needs > 7KB default
     bsp_display_start_with_config(&cfg);
     bsp_display_backlight_on();
     bsp_display_brightness_set(80);

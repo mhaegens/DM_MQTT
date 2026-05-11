@@ -86,7 +86,9 @@ static void sim_task_fn(void *arg) {
     for (int i = 0; i < g_tank_count; i++)
         ESP_LOGI(TAG, "  tank[%d] id=%s", i, g_tanks[i].id);
     while (1) {
+        DATA_LOCK();
         sim_tick();
+        DATA_UNLOCK();
         if (mqtt_is_connected()) publish_all();
         vTaskDelay(pdMS_TO_TICKS(1500));
     }

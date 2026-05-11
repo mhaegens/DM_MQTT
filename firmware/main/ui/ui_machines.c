@@ -602,6 +602,7 @@ void ui_machines_create(lv_obj_t *parent) {
 // for live data the caller should call ui_machines_refresh() which updates
 // visible label text and chart data.
 void ui_machines_refresh(void) {
+    DATA_LOCK();
     // Refresh status dots and toggle button labels / colors to match current state
     for (int i = 0; i < g_machine_count; i++) {
         Machine *mc = &g_machines[i];
@@ -658,6 +659,7 @@ void ui_machines_refresh(void) {
             }
         }
     }
+    DATA_UNLOCK();
 }
 
 // ─── Public: pulse the first running machine ──────────────────────────────────

@@ -82,6 +82,15 @@ static void conn_dispatch(void *p)
     free(a);
 }
 
+typedef struct { bool connected; int rssi; char ip[16]; } wifi_status_async_t;
+
+static void wifi_status_dispatch(void *p)
+{
+    wifi_status_async_t *a = (wifi_status_async_t *)p;
+    ui_notify_wifi_status(a->connected, a->rssi, a->connected ? a->ip : NULL);
+    free(a);
+}
+
 // ─── Event handler ────────────────────────────────────────────────────────────
 
 static void wifi_event_handler(void *arg, esp_event_base_t base,
@@ -93,7 +102,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *ev = data;
         g_wifi_ssid[0] = '\0';
-        ui_notify_wifi_status(false, -99, NULL);
+        {
+            wifi_status_async_t *a = malloc(sizeof(*a));
+            if (a) {
+                a->connected = false; a->rssi = -99; a->ip[0] = '\0';
+                if (lv_async_call(wifi_status_dispatch, a) != LV_RESULT_OK) free(a);
+            }
+        }
 
         if (s_connecting && s_connect_cb &&
             (ev->reason == WIFI_REASON_AUTH_FAIL  ||
@@ -115,7 +130,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
         esp_ip4addr_ntoa(&ev->ip_info.ip, ip, sizeof(ip));
         g_wifi_rssi = wifi_manager_get_rssi();
         strncpy(g_wifi_ssid, s_pending_ssid, sizeof(g_wifi_ssid) - 1);
-        ui_notify_wifi_status(true, g_wifi_rssi, ip);
+        {
+            wifi_status_async_t *a = malloc(sizeof(*a));
+            if (a) {
+                a->connected = true; a->rssi = g_wifi_rssi;
+                strncpy(a->ip, ip, sizeof(a->ip) - 1); a->ip[sizeof(a->ip)-1] = '\0';
+                if (lv_async_call(wifi_status_dispatch, a) != LV_RESULT_OK) free(a);
+            }
+        }
         ESP_LOGI(TAG, "IP: %s  SSID: %s", ip, g_wifi_ssid);
 
         if (s_connecting && s_connect_cb) {
@@ -239,7 +261,13 @@ void wifi_manager_forget(void)
     nvs_clear_creds();
     esp_wifi_disconnect();
     g_wifi_ssid[0] = '\0';
-    ui_notify_wifi_status(false, -99, NULL);
+    {
+        wifi_status_async_t *a = malloc(sizeof(*a));
+        if (a) {
+            a->connected = false; a->rssi = -99; a->ip[0] = '\0';
+            if (lv_async_call(wifi_status_dispatch, a) != LV_RESULT_OK) free(a);
+        }
+    }
     ESP_LOGI(TAG, "credentials cleared");
 }
 

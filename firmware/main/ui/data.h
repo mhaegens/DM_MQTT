@@ -2,6 +2,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #define HISTORY_LEN   32
 
 // ─── Colors (uint32_t raw hex — only defines NOT already in ui_theme.h) ────
@@ -115,6 +117,12 @@ extern char    g_last_pub_topic[128];
 
 void metric_push(Metric *m, float value);
 void data_init_psram(void);
+
+extern SemaphoreHandle_t g_data_mutex;
+
+// Convenience macros — always use these, never take/give directly
+#define DATA_LOCK()    xSemaphoreTake(g_data_mutex, portMAX_DELAY)
+#define DATA_UNLOCK()  xSemaphoreGive(g_data_mutex)
 
 // Helper: get tank level (always metrics[0].value)
 static inline float tank_level(const Tank *t) { return t->metrics[0].value; }

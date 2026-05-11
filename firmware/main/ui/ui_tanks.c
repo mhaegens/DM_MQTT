@@ -242,10 +242,12 @@ static void refresh_tank(int idx) {
     tank_col_t *col = &s_cols[idx];
     if (!col->tank_widget) return;
 
+    DATA_LOCK();
     Tank  *t   = &g_tanks[idx];
     float  pct = tank_level(t);
     if (pct < 0.0f)   pct = 0.0f;
     if (pct > 100.0f) pct = 100.0f;
+    DATA_UNLOCK();
 
     lv_obj_invalidate(col->tank_widget);
 
