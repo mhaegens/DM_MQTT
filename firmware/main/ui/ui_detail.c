@@ -19,6 +19,9 @@ static lv_obj_t *s_slider_row = NULL;
 static lv_obj_t *s_slider     = NULL;
 static lv_obj_t *s_sim_panel  = NULL;
 static lv_obj_t *s_sim_profile_lbl = NULL;
+static lv_obj_t *s_sim_rw_min_lbl  = NULL;
+static lv_obj_t *s_sim_rw_max_lbl  = NULL;
+static lv_obj_t *s_sim_rw_rows[2]  = {NULL}; // [0]=min row, [1]=max row
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -510,6 +513,143 @@ static void slider_event_cb(lv_event_t *e)
     detail_refresh_labels();
 }
 
+// ─── Sim panel configure ─────────────────────────────────────────────────────
+
+// Live metric pointer — set by sim_panel_configure(), used by sim panel callbacks
+static Metric *s_ctx_m = NULL;
+
+static void sim_rw_btn_cb(lv_event_t *e)
+{
+    // user_data encodes: field (bit 0: 0=min, 1=max) | direction (bit 1: 0=-1, 1=+1)
+    int code  = (int)(intptr_t)lv_event_get_user_data(e);
+    int field = code & 1;       // 0=min, 1=max
+    int dir   = (code >> 1) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+
+    if (field == 0) {
+        m->rand_min += dir * m->step;
+        if (m->rand_min < m->min_val) m->rand_min = m->min_val;
+        if (m->rand_min > m->rand_max - m->step) m->rand_min = m->rand_max - m->step;
+        if (s_sim_rw_min_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_min);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_min);
+            lv_label_set_text(s_sim_rw_min_lbl, buf);
+        }
+    } else {
+        m->rand_max += dir * m->step;
+        if (m->rand_max > m->max_val) m->rand_max = m->max_val;
+        if (m->rand_max < m->rand_min + m->step) m->rand_max = m->rand_min + m->step;
+        if (s_sim_rw_max_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_max);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_max);
+            lv_label_set_text(s_sim_rw_max_lbl, buf);
+        }
+    }
+}
+
+static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
+                                     lv_obj_t **val_lbl_out,
+                                     int minus_code, int plus_code)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_PCT(100), 44);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row, 6, 0);
+
+    lv_obj_t *key_lbl = lv_label_create(row);
+    lv_label_set_text(key_lbl, key);
+    lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(key_lbl, COL_TX2, 0);
+    lv_obj_set_width(key_lbl, 40);
+
+    lv_obj_t *minus_btn = lv_btn_create(row);
+    lv_obj_set_size(minus_btn, SZ_BTN_SM, 36);
+    lv_obj_set_style_bg_color(minus_btn, COL_BASE2, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(minus_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(minus_btn, 0, 0);
+    lv_obj_set_style_radius(minus_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(minus_btn, 0, 0);
+    lv_obj_add_event_cb(minus_btn, sim_rw_btn_cb, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)minus_code);
+    lv_obj_t *mlbl = lv_label_create(minus_btn);
+    lv_label_set_text(mlbl, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(mlbl, FONT_SANS_LG, 0);
+    lv_obj_set_style_text_color(mlbl, COL_TX2, 0);
+    lv_obj_center(mlbl);
+
+    lv_obj_t *val = lv_label_create(row);
+    lv_label_set_text(val, "-");
+    lv_obj_set_style_text_font(val, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(val, COL_TX, 0);
+    lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_flex_grow(val, 1);
+    if (val_lbl_out) *val_lbl_out = val;
+
+    lv_obj_t *plus_btn = lv_btn_create(row);
+    lv_obj_set_size(plus_btn, SZ_BTN_SM, 36);
+    lv_obj_set_style_bg_color(plus_btn, COL_BASE2, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(plus_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(plus_btn, 0, 0);
+    lv_obj_set_style_radius(plus_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(plus_btn, 0, 0);
+    lv_obj_add_event_cb(plus_btn, sim_rw_btn_cb, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)plus_code);
+    lv_obj_t *plbl = lv_label_create(plus_btn);
+    lv_label_set_text(plbl, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(plbl, FONT_SANS_LG, 0);
+    lv_obj_set_style_text_color(plbl, COL_TX2, 0);
+    lv_obj_center(plbl);
+
+    return row;
+}
+
+static void sim_panel_configure(Metric *m)
+{
+    if (!s_sim_panel) return;
+    s_ctx_m = m;
+    if (m->sim_profile == SIM_STEADY) {
+        lv_obj_add_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+
+    if (s_sim_profile_lbl) {
+        const char *badge_text =
+            m->sim_profile == SIM_SINE        ? "SINE" :
+            m->sim_profile == SIM_RAMP        ? "RAMP" :
+                                                "RANDOM WALK";
+        lv_label_set_text(s_sim_profile_lbl, badge_text);
+    }
+
+    // Random walk rows
+    bool is_rw = (m->sim_profile == SIM_RANDOM_WALK);
+    for (int i = 0; i < 2; i++) {
+        if (!s_sim_rw_rows[i]) continue;
+        if (is_rw) lv_obj_clear_flag(s_sim_rw_rows[i], LV_OBJ_FLAG_HIDDEN);
+        else       lv_obj_add_flag(s_sim_rw_rows[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_rw) {
+        char buf[16];
+        if (s_sim_rw_min_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_min);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_min);
+            lv_label_set_text(s_sim_rw_min_lbl, buf);
+        }
+        if (s_sim_rw_max_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_max);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_max);
+            lv_label_set_text(s_sim_rw_max_lbl, buf);
+        }
+    }
+}
+
 // ─── Screen create ────────────────────────────────────────────────────────────
 void ui_detail_create(lv_obj_t *parent)
 {
@@ -697,7 +837,7 @@ void ui_detail_create(lv_obj_t *parent)
 
     // ── Sim control panel ─────────────────────────────────────────────────────
     s_sim_panel = lv_obj_create(s_screen);
-    lv_obj_set_size(s_sim_panel, CONTENT_W - SZ_GAP * 2, sim_panel_h);
+    lv_obj_set_size(s_sim_panel, CONTENT_W - SZ_GAP * 2, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(s_sim_panel, COL_BASE, 0);
     lv_obj_set_style_border_color(s_sim_panel, COL_BD, 0);
     lv_obj_set_style_border_width(s_sim_panel, 1, 0);
@@ -743,25 +883,15 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_sim_profile_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(s_sim_profile_lbl, COL_BASE, 0);
 
-}
+    // Min / Max rows for SIM_RANDOM_WALK (hidden by default)
+    // minus_code: field | dir<<1 — 0=min-minus, 2=min-plus, 1=max-minus, 3=max-plus
+    s_sim_rw_rows[0] = sim_build_param_row(s_sim_panel, "Min",
+                                           &s_sim_rw_min_lbl, 0, 2);
+    s_sim_rw_rows[1] = sim_build_param_row(s_sim_panel, "Max",
+                                           &s_sim_rw_max_lbl, 1, 3);
+    lv_obj_add_flag(s_sim_rw_rows[0], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_rw_rows[1], LV_OBJ_FLAG_HIDDEN);
 
-// ─── Sim panel configure ─────────────────────────────────────────────────────
-static void sim_panel_configure(Metric *m)
-{
-    if (!s_sim_panel) return;
-    if (m->sim_profile == SIM_STEADY) {
-        lv_obj_add_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
-
-    if (s_sim_profile_lbl) {
-        const char *badge_text =
-            m->sim_profile == SIM_SINE        ? "SINE" :
-            m->sim_profile == SIM_RAMP        ? "RAMP" :
-                                                "RANDOM WALK";
-        lv_label_set_text(s_sim_profile_lbl, badge_text);
-    }
 }
 
 // ─── Internal: open context helper ───────────────────────────────────────────
