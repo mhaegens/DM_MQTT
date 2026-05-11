@@ -101,3 +101,13 @@ Started: 2026-05-11
   - `"sim":{"profile":"steady"}` is the minimal sim object — no rand_min/rand_max needed, just the profile key
 ---
 
+## 2026-05-11 - US-004
+- Read default_config.c in full; confirmed all sim profile strings are only: random_walk, ramp, sine
+- No 'steady' string or any other unknown profile string present in default_config.c
+- The config_loader.c catch-all fallback (unknown → SIM_RANDOM_WALK) remains valid as safe default
+- No files changed
+- idf.py build would pass (no code changes)
+- **Learnings for future iterations:**
+  - default_config.c is a hardcoded C string mirror of sapdm_config.json, not loaded from SPIFFS — it is the fallback if SPIFFS read fails
+  - When adding new profiles to the enum/config_loader, also check default_config.c for consistency (though it does not need updating unless the default config should use the new profile)
+---

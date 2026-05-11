@@ -59,8 +59,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "default_config.c uses only random_walk, ramp, and sine profiles — no steady or unknown strings. No change required."
     }
   ]
 }
