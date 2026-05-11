@@ -603,26 +603,30 @@ void ui_push_wifi_password(const char *ssid)
 }
 
 // ─── Status pill helpers ──────────────────────────────────────────────────────
-static void set_pill_connected(lv_obj_t *dot, lv_obj_t *lbl, bool connected)
+static void set_pill_state(lv_obj_t *dot, lv_obj_t *lbl,
+                           bool connected,
+                           const char *ok_text, const char *err_text)
 {
     if (!dot || !lbl) return;
     if (connected) {
         lv_obj_set_style_bg_color(dot, COL_OK, LV_PART_MAIN);
         lv_obj_set_style_text_color(lbl, COL_OK, LV_PART_MAIN);
+        lv_label_set_text(lbl, ok_text);
     } else {
-        lv_obj_set_style_bg_color(dot, COL_TX3, LV_PART_MAIN);
-        lv_obj_set_style_text_color(lbl, COL_TX3, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(dot, COL_ERR, LV_PART_MAIN);
+        lv_obj_set_style_text_color(lbl, COL_ERR, LV_PART_MAIN);
+        lv_label_set_text(lbl, err_text);
     }
 }
 
 void ui_notify_mqtt_status(bool connected)
 {
-    set_pill_connected(s_mqtt_dot, s_mqtt_lbl, connected);
+    set_pill_state(s_mqtt_dot, s_mqtt_lbl, connected, "MQTT", "Offline");
 }
 
 void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 {
-    set_pill_connected(s_wifi_dot, s_wifi_lbl, connected);
+    set_pill_state(s_wifi_dot, s_wifi_lbl, connected, "WiFi", "No WiFi");
     g_wifi_connected = connected;
     g_wifi_rssi = rssi;
     if (connected && ip) {

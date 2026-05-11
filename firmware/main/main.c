@@ -65,6 +65,18 @@ static void console_task(void *arg) {
     }
 }
 
+static void on_wifi_ip(void) {
+    if (mqtt_is_connected()) return;
+    // MQTT client not yet started on first IP; start it; on subsequent reconnects call reconnect
+    static bool s_mqtt_started = false;
+    if (!s_mqtt_started) {
+        s_mqtt_started = true;
+        mqtt_task_start();
+    } else {
+        mqtt_task_reconnect();
+    }
+}
+
 void app_main(void) {
     ESP_LOGI(TAG, "SAP DM MQTT Simulator - ESP32-P4");
 
@@ -111,9 +123,9 @@ void app_main(void) {
     ui_main_init();
     bsp_display_unlock();
 
-    // Start networking — mqtt starts only after WiFi gets an IP
+    // Start networking — mqtt starts only after WiFi gets an IP; reconnects on IP renewal
     wifi_manager_init();
-    wifi_manager_set_on_connected(mqtt_task_start);
+    wifi_manager_set_on_ip(on_wifi_ip);
     sim_task_start();
 
     xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);

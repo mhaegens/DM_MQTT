@@ -10,26 +10,48 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  mqtt_task.c — esp_mqtt client with WSS transport to Cloudflare Tunnel.
-//  No TLS certificate pinning in initial version (Cloudflare public cert).
+//  Auto-reconnect disabled; exponential backoff 5s→10s→30s via esp_timer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static const char *TAG = "mqtt";
 static esp_mqtt_client_handle_t s_client = NULL;
+static int s_disconnect_count = 0;
+static esp_timer_handle_t s_reconnect_timer = NULL;
+
+static const uint32_t BACKOFF_MS[] = { 5000, 10000, 30000 };
+#define BACKOFF_STEPS  3
+
+static void reconnect_timer_cb(void *arg)
+{
+    (void)arg;
+    if (s_client && !g_mqtt_connected)
+        esp_mqtt_client_reconnect(s_client);
+}
 
 static void mqtt_event_handler(void *arg, esp_event_base_t base,
                                int32_t event_id, void *event_data) {
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "connected to %s", MQTT_BROKER_URI);
+        s_disconnect_count = 0;
         g_mqtt_connected = true;
         g_mqtt_msg_count = 0;
         ui_notify_mqtt_status(true);
         break;
-    case MQTT_EVENT_DISCONNECTED:
-        ESP_LOGW(TAG, "disconnected — will retry");
+    case MQTT_EVENT_DISCONNECTED: {
+        int idx = s_disconnect_count < BACKOFF_STEPS ? s_disconnect_count : BACKOFF_STEPS - 1;
+        uint32_t delay_ms = BACKOFF_MS[idx];
+        s_disconnect_count++;
+        ESP_LOGW(TAG, "disconnected — retry in %lu ms (attempt %d)",
+                 (unsigned long)delay_ms, s_disconnect_count);
         g_mqtt_connected = false;
         ui_notify_mqtt_status(false);
+        if (s_reconnect_timer) {
+            esp_timer_stop(s_reconnect_timer);
+            esp_timer_start_once(s_reconnect_timer, (uint64_t)delay_ms * 1000);
+        }
         break;
+    }
     case MQTT_EVENT_PUBLISHED:
         g_mqtt_msg_count++;
         break;
@@ -44,21 +66,33 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
 
 void mqtt_task_start(void) {
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri            = MQTT_BROKER_URI,
-        .broker.address.port           = MQTT_BROKER_PORT,
-        .credentials.client_id         = MQTT_CLIENT_ID,
-        .session.keepalive             = MQTT_KEEPALIVE_S,
-        .network.reconnect_timeout_ms  = 5000,
+        .broker.address.uri              = MQTT_BROKER_URI,
+        .broker.address.port             = MQTT_BROKER_PORT,
+        .credentials.client_id           = MQTT_CLIENT_ID,
+        .session.keepalive               = MQTT_KEEPALIVE_S,
+        .network.disable_auto_reconnect  = true,  // we handle backoff ourselves
     };
     s_client = esp_mqtt_client_init(&cfg);
     esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID,
                                    mqtt_event_handler, NULL);
+
+    esp_timer_create_args_t ta = {
+        .callback = reconnect_timer_cb,
+        .name     = "mqtt_backoff",
+    };
+    esp_timer_create(&ta, &s_reconnect_timer);
+
     esp_mqtt_client_start(s_client);
     ESP_LOGI(TAG, "MQTT client started → %s", MQTT_BROKER_URI);
 }
 
 void mqtt_task_stop(void) {
     if (!s_client) return;
+    if (s_reconnect_timer) {
+        esp_timer_stop(s_reconnect_timer);
+        esp_timer_delete(s_reconnect_timer);
+        s_reconnect_timer = NULL;
+    }
     esp_mqtt_client_stop(s_client);
     esp_mqtt_client_destroy(s_client);
     s_client = NULL;
@@ -69,8 +103,10 @@ bool mqtt_is_connected(void) { return g_mqtt_connected; }
 
 void mqtt_task_reconnect(void) {
     if (!s_client) return;
+    s_disconnect_count = 0;
+    if (s_reconnect_timer) esp_timer_stop(s_reconnect_timer);
     esp_mqtt_client_reconnect(s_client);
-    ESP_LOGI(TAG, "reconnect requested");
+    ESP_LOGI(TAG, "manual reconnect requested");
 }
 
 static void pub(const char *topic, const char *payload) {

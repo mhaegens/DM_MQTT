@@ -24,6 +24,7 @@ static wifi_connect_cb_t s_connect_cb    = NULL;
 static bool              s_connecting    = false;
 static char              s_pending_ssid[33] = {0};
 static void            (*s_on_connected)(void) = NULL;
+static void            (*s_on_ip)(void)        = NULL;
 static esp_netif_t      *s_ap_netif      = NULL;
 
 // ─── NVS helpers ─────────────────────────────────────────────────────────────
@@ -133,6 +134,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             cb();
         }
 
+        if (s_on_ip) {
+            s_on_ip();               // fire on every IP acquisition
+        }
+
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_SCAN_DONE) {
         uint16_t n = WIFI_SCAN_MAX;
         wifi_ap_record_t *recs = calloc(n, sizeof(*recs));
@@ -168,6 +173,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 void wifi_manager_set_on_connected(void (*cb)(void)) { s_on_connected = cb; }
+void wifi_manager_set_on_ip(void (*cb)(void))        { s_on_ip = cb; }
 
 void wifi_manager_init(void)
 {
