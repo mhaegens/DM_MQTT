@@ -16,7 +16,7 @@
 #define COL_ERR_BD   0xFFAAAA
 
 // ─── Simulation profile ────────────────────────────────────────────────────
-typedef enum { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP } SimProfile;
+typedef enum { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP, SIM_STEADY } SimProfile;
 
 // ─── Viz/input types ───────────────────────────────────────────────────────
 typedef enum { VIZ_SPARK=0, VIZ_ARC, VIZ_THERMO, VIZ_PH, VIZ_TANK, VIZ_BULLET } VizType;

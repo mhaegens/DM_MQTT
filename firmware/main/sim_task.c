@@ -36,8 +36,10 @@ static void sim_metric(Metric *m) {
         next = m->value + m->step;
         if (next > m->max_val) next = m->min_val;
         break;
+    case SIM_STEADY:
+        break;
     }
-    metric_push(m, next);
+    if (m->sim_profile != SIM_STEADY) metric_push(m, next);
 }
 
 static int s_pulse_tick[MAX_MACHINES];
