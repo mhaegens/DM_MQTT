@@ -9,105 +9,78 @@ Started: 2026-05-11
 - LVGL is pinned to CPU1 (task_affinity=1 in bsp_display_cfg_t); all other tasks (sim, mqtt, btn, console) should use CPU0 or auto
 - LVGL draw buffers MUST stay in internal DMA-capable SRAM (buff_spiram=false, buff_dma=true); buff_spiram=true causes UI freeze
 - Screenshot tool: python3 tools/screenshot.py from firmware/ dir
-- wifi_manager.c handles NVS, scan, connect, AP mode; already uses lv_async_call for conn_dispatch and scan_dispatch — follow same pattern for any new UI notifications
-- mqtt_task.c: disable_auto_reconnect=true; exponential backoff via esp_timer_one_shot (5s→10s→30s)
-- THREAD SAFETY RULE: Any code running outside the LVGL task (sim_task, mqtt event handler, wifi event handler) must NEVER call LVGL APIs directly. Use lv_async_call() trampolines. Trampoline pattern: malloc a small struct, set fields, call lv_async_call(cb, struct); in cb call the UI function then free(struct). Always check lv_async_call() return value and free on LV_RESULT_INVALID.
-- DATA MUTEX: g_machines and g_tanks are shared between sim_task (CPU0, writes) and LVGL refresh timers (CPU1, reads). Protect all reads/writes with DATA_LOCK()/DATA_UNLOCK() macros (defined in ui/data.h, backed by g_data_mutex FreeRTOS mutex created in data_init_psram()).
-- LVGL TASK STACK: Default 7168 bytes is insufficient for complex UIs. With 7 machines × multi-widget cards, ui_machines_create() overflows the stack. Set cfg.lvgl_port_cfg.task_stack = 20480 in bsp_display_cfg_t init.
+- THREAD SAFETY RULE: Any code running outside the LVGL task (sim_task, mqtt event handler, wifi event handler) must NEVER call LVGL APIs directly. Use lv_async_call() trampolines.
+- DATA MUTEX: g_machines and g_tanks are shared between sim_task (CPU0, writes) and LVGL refresh timers (CPU1, reads). Protect all reads/writes with DATA_LOCK()/DATA_UNLOCK() macros.
+- LVGL TASK STACK: Set cfg.lvgl_port_cfg.task_stack = 20480 in bsp_display_cfg_t init.
 - Flash to device: idf.py flash (port auto-detected as /dev/cu.usbmodem5B610403841)
 - Serial monitor requires TTY; use python3 -c with pyserial for headless capture instead of idf.py monitor
+- SimProfile enum is in main/ui/data.h: { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP, SIM_STEADY }
+- sim_task.c: sim_metric() dispatches on m->sim_profile; metric_push() is only called when profile != SIM_STEADY
+- ui_detail.c: s_ctx_tank / s_ctx_machine / s_ctx_metric back-references are used to write values back to the live Metric struct
+- ui_detail.c: rand_h = 112 is the height reserved for the random generator section (to be replaced by s_sim_panel)
+- ui_detail.c: viz_h calculation: DETAIL_H - SZ_GAP*2 - hdr_approx - SZ_BTN_SM - rand_h - SZ_GAP*4 — must be updated when rand_h changes
+- Metric struct (ui/data.h): sim fields are sim_profile, sim_amplitude, sim_period_s, sim_offset, sim_phase_acc, rand_min, rand_max, step
+- Direct compile check: riscv32-esp-elf-gcc <flags from compile_commands.json> main/ui/ui_detail.c
 
 ---
 
-## 2026-05-11 - US-001
-- Replaced direct ui_notify_mqtt_status() calls in mqtt_event_handler() with lv_async_call() trampolines (mqtt_status_async_t struct + mqtt_status_dispatch callback)
-- Added lv_async_call return value guard: frees struct on LV_RESULT_INVALID to prevent leak
-- Confirmed mqtt_task_start() is only called from on_wifi_ip() in main.c — no change needed
-- Files changed: main/mqtt_task.c
-- **Learnings:**
-  - lv_async_call() works by creating a one-shot lv_timer; fires inside lv_timer_handler() on the LVGL task — safe
-  - Always check lv_async_call() return value; LV_RESULT_INVALID means the timer alloc failed and user_data was not taken — must free manually
-  - malloc/free pair for user_data must stay matched with libc, not lv_malloc/lv_free
+## 2026-05-11 - US-006
+- Added s_sim_ramp_step_lbl, s_sim_ramp_row statics
+- Added sim_ramp_btn_cb: user_data 0=minus, 1=plus; step ±0.1f, clamped >= 0.1f
+- Added 'Step' row in ui_detail_create(), hidden by default
+- sim_panel_configure() shows/hides ramp row and populates step label
+- Files changed: main/ui/ui_detail.c
 ---
-
-## 2026-05-11 - US-002
-- Replaced all three direct ui_notify_wifi_status() calls in wifi_manager.c with lv_async_call() trampolines (wifi_status_async_t struct + wifi_status_dispatch)
-- Locations: WIFI_EVENT_STA_DISCONNECTED (line 96), IP_EVENT_STA_GOT_IP (line 118), wifi_manager_forget() (line 242)
-- Left conn_dispatch and scan_dispatch unchanged
-- Files changed: main/wifi_manager.c
-- **Learnings:**
-  - wifi_manager_forget() is called from application context (not event handler) but still needs the trampoline — any non-LVGL-task context requires it
-  - wifi_status_dispatch passes NULL for ip when connected=false; ui_notify_wifi_status must accept NULL ip (it does)
-  - After this fix, cyan flashes on WiFi connect/disconnect were eliminated
----
-
-## 2026-05-11 - US-003 (part 1 — data race)
-- Added g_data_mutex (FreeRTOS mutex) to data.h/data.c with DATA_LOCK()/DATA_UNLOCK() macros
-- Wrapped sim_tick() in sim_task_fn() with DATA_LOCK/DATA_UNLOCK
-- Wrapped ui_machines_refresh() loop body with DATA_LOCK/DATA_UNLOCK
-- Wrapped tank_level() read in refresh_tank() with DATA_LOCK/DATA_UNLOCK
-- Files changed: main/ui/data.h, main/ui/data.c, main/sim_task.c, main/ui/ui_machines.c, main/ui/ui_tanks.c
-- **Learnings:**
-  - g_machines/g_tanks live in SPIRAM which is not cache-coherent between cores — plain C reads are not safe without explicit sync
-  - bsp_display_lock/lvgl_port_lock only protects LVGL internals, not application data
-  - publish_all() reads metric values after releasing DATA_LOCK — acceptable; torn float for MQTT publish is harmless
----
-
-## 2026-05-11 - US-001 (sim-steady-profile)
-- Added SIM_STEADY as 4th value in SimProfile enum in main/ui/data.h
-- Added `case SIM_STEADY: break;` to sim_metric() switch to suppress unhandled enum warning
-- Wrapped metric_push() call in `if (m->sim_profile != SIM_STEADY)` so steady metrics are never mutated
-- idf.py build succeeded with zero new warnings
-- Files changed: main/ui/data.h, main/sim_task.c
+- Added s_sim_sine_ampl_lbl, s_sim_sine_period_lbl, s_sim_sine_offset_lbl, s_sim_sine_rows[3] statics
+- Added sim_sine_btn_cb: field in bits 0-1 (0=ampl, 1=period, 2=offset), direction in bit 2
+- Generalized sim_build_param_row to accept lv_event_cb_t callback parameter
+- Added 3 sine rows (Ampl/Per/Offs) in ui_detail_create(), hidden by default
+- sim_panel_configure() now shows/hides sine rows and populates ampl/period/offset labels
+- Amplitude clamped >= 0 and so offset ± amplitude stays within [min_val, max_val]
+- Period clamped >= 1.0f; offset reclamped when changed
+- Files changed: main/ui/ui_detail.c
 - **Learnings for future iterations:**
-  - Branch must be created from origin/main (via `git reset --hard origin/main`) since local `main` was 93 commits behind
-  - SimProfile enum and sim_metric() are the sole owners of simulation behavior; config_loader.c maps JSON strings to this enum
-  - The guard `if (m->sim_profile != SIM_STEADY) metric_push(m, next)` is cleaner than adding no-op code in the SIM_STEADY case because it avoids publishing the unmodified value redundantly
+  - sim_build_param_row now takes (parent, key, val_lbl_out, cb, minus_code, plus_code) — always pass the specific callback
 ---
-
-- Increased LVGL task stack from 7168 (default) to 20480 bytes in main.c bsp_display_cfg_t
-- Root cause: Stack protection fault on Core 1 at boot (~5.6s), before any navigation
-- Serial log showed SP=0x4ff39360 below stack bottom 0x4ff39370; crash was deterministic at boot not on navigation tap
-- 7 machines × complex cards (sparkline chart + arc gauges + metric tiles) in ui_machines_create() exhausted 7KB during initial UI build
-- Files changed: main/main.c
-- **Learnings:**
-  - Stack overflow manifests as cyan screen (same symptom as LVGL assert) — serial log is essential to distinguish causes
-  - Crash at boot before user interaction = stack/init problem, not a race condition
-  - idf.py monitor requires TTY; use python3 pyserial script for headless serial capture
-  - With complex LVGL UIs (many nested objects), 7KB LVGL task stack is insufficient; 20KB is safe headroom for this config
----
-
-## 2026-05-11 - US-002
-- Added `else if (!strcmp(v->valuestring, "steady")) m->sim_profile = SIM_STEADY;` branch in parse_metric() in config_loader.c
-- Placed before the catch-all `else m->sim_profile = SIM_RANDOM_WALK` fallback, after the existing "ramp" branch
-- Existing "sine" and "ramp" branches unchanged
-- Verified with direct riscv32-esp-elf-gcc compile: RC=0, zero new warnings
-- Files changed: main/config_loader.c
+- Added s_sim_rw_min_lbl, s_sim_rw_max_lbl static vars
+- Added s_ctx_m (Metric*) static set by sim_panel_configure() for use by callbacks
+- Added sim_rw_btn_cb: user_data encodes field (bit0) + direction (bit1); 0=min-minus, 2=min-plus, 1=max-minus, 3=max-plus
+- Added sim_build_param_row() helper: key label + minus btn + value label (flex_grow=1) + plus btn
+- sim_panel_configure() now shows/hides rw rows and populates min/max labels
+- Panel height changed to LV_SIZE_CONTENT (auto-expands for active profile rows)
+- Moved sim panel helpers before ui_detail_create() to avoid implicit declaration errors
+- Files changed: main/ui/ui_detail.c
 - **Learnings for future iterations:**
-  - Profile-parsing block is in parse_metric() at the `const cJSON *sim` section (line ~84-96)
-  - The catch-all fallback maps any unknown string to SIM_RANDOM_WALK — new profiles must be added before it
-  - Direct riscv32-esp-elf-gcc compile from build/compile_commands.json is the reliable "typecheck" for this project
+  - Functions called from ui_detail_create() must be defined BEFORE it (forward declarations not used in this codebase style)
+  - sim_build_param_row() is reusable for US-005/006 — accepts any event callback via minus_code/plus_code user_data
+  - For US-005 (sine) and US-006 (ramp) will need separate callbacks since they update different Metric fields
 ---
-
-## 2026-05-11 - US-003
-- Changed flowIn metric in the 'raw' tank in sapdm_config.json from `"sim":{"profile":"random_walk","rand_min":2,"rand_max":10}` to `"sim":{"profile":"steady"}`
-- Added flowIn entry to sapdm_config.annotated.json with `_comment` explaining the steady profile
-- Fixed pre-existing syntax error in sapdm_config.annotated.json (missing comma after `"offset": 41.2` in the CNC-01 machTemp sine sim block at line 81)
-- Both JSON files validated with `python3 -c 'import json,sys; json.load(open(sys.argv[1]))'`
-- Files changed: main/spiffs_image/sapdm_config.json, main/spiffs_image/sapdm_config.annotated.json
+- Added s_sim_profile_lbl static variable
+- Added header row inside s_sim_panel: 'SIM' label (COL_TX3, FONT_MONO_XXS) left, pill badge right
+- Pill badge: COL_HI bg, COL_BASE text, SZ_RADIUS_SM, pad_hor=8 pad_ver=4
+- sim_panel_configure() now sets badge text: 'RANDOM WALK'/'SINE'/'RAMP' per profile
+- Files changed: main/ui/ui_detail.c
 - **Learnings for future iterations:**
-  - sapdm_config.annotated.json is an abbreviated version — it only had the first machine (cnc01) and first tank (raw) without all metrics; added flowIn there to keep it complete for the affected metric
-  - The annotated file had a pre-existing missing comma syntax error; always validate both files after edits
-  - `"sim":{"profile":"steady"}` is the minimal sim object — no rand_min/rand_max needed, just the profile key
+  - Header row height = 40px; sim_panel_h=56 accounts for 8px padding top+bottom
+  - When adding parameter rows (US-004/005/006), must increase sim_panel_h accordingly
 ---
-
-## 2026-05-11 - US-004
-- Read default_config.c in full; confirmed all sim profile strings are only: random_walk, ramp, sine
-- No 'steady' string or any other unknown profile string present in default_config.c
-- The config_loader.c catch-all fallback (unknown → SIM_RANDOM_WALK) remains valid as safe default
-- No files changed
-- idf.py build would pass (no code changes)
+- Added s_sim_panel static variable to ui_detail.c
+- Replaced rand_h=112 with sim_panel_h=56 in viz_h calculation
+- Created s_sim_panel card after slider row (full-width, COL_BASE bg, COL_BD border, column flex)
+- Added sim_panel_configure(m): hides panel for SIM_STEADY, shows for all other profiles
+- Called sim_panel_configure(m) from open_context() after input row show/hide
+- Files changed: main/ui/ui_detail.c
 - **Learnings for future iterations:**
-  - default_config.c is a hardcoded C string mirror of sapdm_config.json, not loaded from SPIFFS — it is the fallback if SPIFFS read fails
-  - When adding new profiles to the enum/config_loader, also check default_config.c for consistency (though it does not need updating unless the default config should use the new profile)
+  - sim_panel_configure() is the right place to show/hide child rows per profile (US-003/004/005/006 will add rows here)
+  - sim_panel_h=56 is header-row-only height; must be updated in US-004/005/006 as rows are added
+---
+- Deleted static vars: s_rand_start_btn/lbl, s_interval_btns[5], s_rand_timer, s_rand_interval_idx, s_intervals[], s_interval_labels[]
+- Deleted functions: update_interval_btns(), rand_gen_once(), rand_timer_cb(), rand_once_btn_cb(), rand_start_btn_cb(), interval_btn_cb()
+- Removed rand_sect UI block (rows, gen_once btn, interval btns, start/stop btn) from ui_detail_create()
+- Removed s_rand_timer cleanup block from open_context()
+- Removed unused #include <stdlib.h>
+- Files changed: main/ui/ui_detail.c
+- **Learnings for future iterations:**
+  - rand_h = 112 was the height constant; it still exists as a local in ui_detail_create() for viz_h calc — US-002 will replace it with sim_panel_h
+  - The macOS LSP shows RISC-V clang errors for all files; ignore — use direct riscv32-esp-elf-gcc compile check only
 ---
