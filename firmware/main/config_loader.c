@@ -84,9 +84,10 @@ static void parse_metric(const cJSON *j, Metric *m) {
     const cJSON *sim = cJSON_GetObjectItem(j, "sim");
     if (cJSON_IsObject(sim)) {
         if ((v = cJSON_GetObjectItem(sim, "profile")) && cJSON_IsString(v)) {
-            if      (!strcmp(v->valuestring, "sine")) m->sim_profile = SIM_SINE;
-            else if (!strcmp(v->valuestring, "ramp")) m->sim_profile = SIM_RAMP;
-            else                                       m->sim_profile = SIM_RANDOM_WALK;
+            if      (!strcmp(v->valuestring, "sine"))   m->sim_profile = SIM_SINE;
+            else if (!strcmp(v->valuestring, "ramp"))   m->sim_profile = SIM_RAMP;
+            else if (!strcmp(v->valuestring, "steady")) m->sim_profile = SIM_STEADY;
+            else                                         m->sim_profile = SIM_RANDOM_WALK;
         }
         if ((v = cJSON_GetObjectItem(sim, "rand_min"))  && cJSON_IsNumber(v)) m->rand_min      = (float)v->valuedouble;
         if ((v = cJSON_GetObjectItem(sim, "rand_max"))  && cJSON_IsNumber(v)) m->rand_max      = (float)v->valuedouble;
