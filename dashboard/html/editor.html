@@ -384,6 +384,7 @@ input[type="color"]{height:56px;cursor:pointer}
             <option value="random_walk">Random Walk</option>
             <option value="sine">Sine Wave</option>
             <option value="ramp">Ramp</option>
+            <option value="steady">Steady (no variation)</option>
           </select>
         </div>
         <div id="simFieldsContainer"></div>
@@ -858,6 +859,8 @@ function updateSimFieldsVisibility() {
         </div>
       </div>
     `;
+  } else if (profile === 'steady') {
+    html = `<p style="font-size:0.85em;color:var(--text-secondary);margin:4px 0 0">Value stays fixed at its current initial value — no automatic variation.</p>`;
   }
 
   container.innerHTML = html;
@@ -875,6 +878,7 @@ function buildSimObject() {
     sim.period_s = parseFloat(document.getElementById('simPeriod')?.value || 60);
     sim.offset = parseFloat(document.getElementById('simOffset')?.value || 0);
   }
+  // steady: no extra fields — just { profile: 'steady' }
 
   return sim;
 }
