@@ -10,6 +10,8 @@ Machine *g_machines = NULL;
 Tank    *g_tanks    = NULL;
 Badge   *g_badges   = NULL;
 
+SemaphoreHandle_t g_data_mutex = NULL;
+
 int     g_machine_count = 0;
 int     g_tank_count    = 0;
 int     g_badge_count   = 0;
@@ -26,6 +28,9 @@ char    g_last_pub_topic[128] = "";
 
 // ─── data_init_psram ─────────────────────────────────────────────────────────
 void data_init_psram(void) {
+    g_data_mutex = xSemaphoreCreateMutex();
+    // No abort needed — if this fails everything breaks anyway
+
     g_machines = heap_caps_malloc(MAX_MACHINES * sizeof(Machine), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!g_machines) {
         ESP_LOGE(TAG, "FATAL: g_machines SPIRAM alloc failed (%u bytes)", (unsigned)(MAX_MACHINES * sizeof(Machine)));
