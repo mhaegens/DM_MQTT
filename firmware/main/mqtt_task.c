@@ -5,8 +5,10 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "mqtt_client.h"
+#include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  mqtt_task.c — esp_mqtt client with WSS transport to Cloudflare Tunnel.
@@ -28,6 +30,14 @@ static void reconnect_timer_cb(void *arg)
         esp_mqtt_client_reconnect(s_client);
 }
 
+typedef struct { bool connected; } mqtt_status_async_t;
+
+static void mqtt_status_dispatch(void *p) {
+    mqtt_status_async_t *a = (mqtt_status_async_t *)p;
+    ui_notify_mqtt_status(a->connected);
+    free(a);
+}
+
 static void mqtt_event_handler(void *arg, esp_event_base_t base,
                                int32_t event_id, void *event_data) {
     switch ((esp_mqtt_event_id_t)event_id) {
@@ -36,7 +46,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         s_disconnect_count = 0;
         g_mqtt_connected = true;
         g_mqtt_msg_count = 0;
-        ui_notify_mqtt_status(true);
+        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = true;  lv_async_call(mqtt_status_dispatch, a); } }
         break;
     case MQTT_EVENT_DISCONNECTED: {
         int idx = s_disconnect_count < BACKOFF_STEPS ? s_disconnect_count : BACKOFF_STEPS - 1;
@@ -45,7 +55,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         ESP_LOGW(TAG, "disconnected — retry in %lu ms (attempt %d)",
                  (unsigned long)delay_ms, s_disconnect_count);
         g_mqtt_connected = false;
-        ui_notify_mqtt_status(false);
+        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = false; lv_async_call(mqtt_status_dispatch, a); } }
         if (s_reconnect_timer) {
             esp_timer_stop(s_reconnect_timer);
             esp_timer_start_once(s_reconnect_timer, (uint64_t)delay_ms * 1000);
