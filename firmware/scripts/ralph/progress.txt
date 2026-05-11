@@ -105,3 +105,21 @@ Started: 2026-05-11
   - Remove TAG + esp_log.h when removing the last ESP_LOG* call from a file to avoid -Wunused-variable
 ---
 
+## 2026-05-11 - US-012
+- Shell bar pills: replaced `set_pill_connected()` with `set_pill_state(dot, lbl, connected, ok_text, err_text)`
+  - WiFi pill: "WiFi" (green) when connected, "No WiFi" (red) when disconnected
+  - MQTT pill: "MQTT" (green) when connected, "Offline" (red) when disconnected
+- wifi_manager.c: added `static void (*s_on_ip)(void)` and `wifi_manager_set_on_ip(cb)` — fires on EVERY IP acquisition (not one-shot)
+- main.c: `on_wifi_ip()` replaces the one-shot `set_on_connected(mqtt_task_start)` pattern; starts MQTT on first IP, calls `mqtt_task_reconnect()` on subsequent reconnects
+- mqtt_task.c: set `disable_auto_reconnect=true` in client config; implemented exponential backoff via `esp_timer_one_shot` (5s→10s→30s capped at 30s)
+- `s_reconnect_timer` created at `mqtt_task_start()`, deleted at `mqtt_task_stop()`
+- `mqtt_task_reconnect()` resets `s_disconnect_count` so manual reconnect resets backoff to 5s
+- All 4 changed files verified via direct riscv gcc syntax check
+- Files changed: main/mqtt_task.c, main/wifi_manager.c, main/wifi_manager.h, main/ui/ui_main.c, main/main.c
+- **Learnings for future iterations:**
+  - ESP-IDF MQTT component has no `esp_mqtt_client_set_reconnect_timeout()` API; use `disable_auto_reconnect=true` + `esp_timer_one_shot` for custom backoff
+  - `esp_timer_stop()` returns ESP_ERR_INVALID_STATE if timer is not running — call it before `esp_timer_start_once()` to avoid double-start; safe to call even when stopped
+  - `wifi_manager_set_on_ip` fires from IP event handler (not LVGL task); safe to call `esp_mqtt_client_reconnect()` from there (just posts to an internal queue)
+  - Shell bar pill label text can be updated from `ui_notify_*` which is called via `lv_async_call` from the WiFi event handler — thread-safe
+---
+

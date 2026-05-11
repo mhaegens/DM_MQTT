@@ -243,8 +243,8 @@
         "UART log confirms boot-to-Home time and disconnected state labels"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": "This is a validation/integration story. Most logic should already exist from earlier stories. Focus on end-to-end flow testing and fixing any gaps."
+      "passes": true,
+      "notes": "Shell bar pills updated: set_pill_state() now changes label text to 'No WiFi'/'Offline' (red dot) when disconnected; was grey with static label. wifi_manager: added set_on_ip() persistent callback fired on every IP_EVENT_STA_GOT_IP. main.c: on_wifi_ip() starts MQTT on first IP, calls mqtt_task_reconnect() on re-connects. mqtt_task: disable_auto_reconnect=true; exponential backoff 5s→10s→30s via esp_timer_one_shot created at start, deleted at stop. mqtt_task_reconnect() resets counter."
     }
   ]
 }
