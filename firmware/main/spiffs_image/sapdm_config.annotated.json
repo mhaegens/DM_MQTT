@@ -1,0 +1,137 @@
+{
+  "_comment": "SAP DM MQTT Demo Config — copy this to the SD card as /sapdm_config.json",
+
+  "plant_name": "Plant BE01",
+
+  "machines": [
+    {
+      "_comment": "Each machine maps to one card on the Machines tab and one row in SAP DM",
+      "id": "cnc01",           "_c_id":      "Used in MQTT topic: factory/machines/{id}/{metric_key}",
+      "name": "CNC-01",        "_c_name":    "Display label on the card",
+      "type": "CNC Machining", "_c_type":    "Subtitle on the card",
+      "running": true,         "_c_running": "Initial running state (green/red indicator)",
+      "pulses": 347,           "_c_pulses":  "Initial pulse counter value",
+
+      "metrics": [
+        {
+          "_comment": "Sparkline chart — shown on the card face, Detail view shows history",
+          "key":       "rpm",
+          "label":     "Spindle RPM",
+          "unit":      "RPM",
+          "viz":       "spark",     "_c_viz":   "spark | arc | bullet | thermo | ph | tank",
+          "input":     "step",      "_c_input": "step | slider (how you edit it in Detail view)",
+          "color":     "0x0070F2",  "_c_color": "Hex RGB — used by spark and bullet viz",
+          "init_val":  4850,
+          "min_val":   0,
+          "max_val":   8000,
+          "step":      50,          "_c_step":  "Increment for step input buttons",
+          "sim": {
+            "profile":  "random_walk",  "_c_profile": "random_walk | sine | ramp",
+            "rand_min": 2000,
+            "rand_max": 7000
+          }
+        },
+        {
+          "_comment": "Arc gauge — shows 0-100% arc with color thresholds",
+          "key":      "spindleLoad",
+          "label":    "Spindle Load",
+          "unit":     "%",
+          "viz":      "arc",
+          "input":    "slider",
+          "init_val": 62,
+          "min_val":  0,
+          "max_val":  100,
+          "step":     1,
+          "thresholds": [
+            {"limit": 40,  "color": "0x107E3E"},
+            {"limit": 70,  "color": "0xE76500"},
+            {"limit": 100, "color": "0xBB0000"}
+          ],
+          "_c_thresholds": "Color bands: value <= limit gets that color. Stack low-to-high.",
+          "sim": {"profile": "random_walk", "rand_min": 20, "rand_max": 95}
+        },
+        {
+          "_comment": "Ramp sim — steadily increases then resets (e.g. tool wear)",
+          "key": "toolWear", "label": "Tool Wear", "unit": "%",
+          "viz": "arc", "input": "slider",
+          "init_val": 34, "min_val": 0, "max_val": 100, "step": 1,
+          "thresholds": [
+            {"limit": 40, "color": "0x107E3E"},
+            {"limit": 70, "color": "0xE76500"},
+            {"limit": 100, "color": "0xBB0000"}
+          ],
+          "sim": {"profile": "ramp"}
+        },
+        {
+          "_comment": "Bullet chart — horizontal bar with value vs max",
+          "key": "feedRate", "label": "Feed Rate", "unit": "mm/m",
+          "viz": "bullet", "input": "step", "color": "0x0070F2",
+          "init_val": 380, "min_val": 0, "max_val": 600, "step": 10,
+          "sim": {"profile": "random_walk", "rand_min": 200, "rand_max": 550}
+        },
+        {
+          "_comment": "Thermometer viz — vertical fill bar",
+          "key": "machTemp", "label": "Temperature", "unit": "°C",
+          "viz": "thermo", "input": "step",
+          "init_val": 41.2, "min_val": 15, "max_val": 80, "step": 0.5,
+          "sim": {
+            "profile":   "sine",
+            "amplitude": 3.0,      "_c_amplitude": "Peak deviation from offset",
+            "period_s":  120,      "_c_period_s":  "Full cycle duration in seconds",
+            "offset":    41.2,     "_c_offset":    "Centre value for sine wave"
+          }
+        }
+      ]
+    }
+  ],
+
+  "tanks": [
+    {
+      "_comment": "Each tank is one column on the Tanks tab. Max 3 tanks.",
+      "id":   "raw",
+      "name": "Raw Material",
+      "metrics": [
+        {
+          "_comment": "The 'tank' viz IS the wave fill. Every tank must have exactly one metric with viz=tank.",
+          "key": "level", "label": "Fill Level", "unit": "%",
+          "viz": "tank", "input": "slider",
+          "init_val": 68, "min_val": 0, "max_val": 100, "step": 1,
+          "thresholds": [
+            {"limit": 15, "color": "0xBB0000"},
+            {"limit": 40, "color": "0xE76500"}
+          ],
+          "_c_thresholds": "Tank thresholds color the wave fill. Low values trigger warning colors.",
+          "sim": {"profile": "random_walk", "rand_min": 60, "rand_max": 80}
+        },
+        {
+          "key": "temperature", "label": "Temperature", "unit": "°C",
+          "viz": "thermo", "input": "step",
+          "init_val": 22.4, "min_val": 5, "max_val": 70, "step": 0.5,
+          "sim": {"profile": "sine", "amplitude": 2.0, "period_s": 60, "offset": 22.4}
+        },
+        {
+          "_comment": "steady profile: value never changes automatically; operator can still adjust manually",
+          "key": "flowIn", "label": "Flow In", "unit": "L/min",
+          "viz": "spark", "input": "step", "color": "0x0070F2",
+          "init_val": 4.2, "min_val": 0, "max_val": 20, "step": 0.5,
+          "sim": {"profile": "steady"}
+        }
+      ]
+    }
+  ],
+
+  "people": [
+    {
+      "_comment": "Each person is one badge card in the Virtual carousel on the People tab",
+      "id":           "EMP-0042",    "_c_id":           "Shown on the badge card",
+      "name":         "Michiel Haegens",
+      "role":         "Shift Lead",  "_c_role":         "Display role on the badge",
+      "role_key":     "lead",        "_c_role_key":     "lead | operator | engineer | quality | supervisor",
+      "dept":         "Production",
+      "plant":        "Plant BE01",
+      "uid":          "A3:F7:C2:91", "_c_uid":          "NFC UID for physical tap matching",
+      "avatar_color": "0x0050BE",    "_c_avatar_color": "Background color of the badge card",
+      "certs":        ["ISO 9001", "Lean", "PLC Certified"]
+    }
+  ]
+}

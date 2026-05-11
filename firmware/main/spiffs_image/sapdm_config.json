@@ -75,7 +75,7 @@
       "metrics": [
         {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":68,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":60,"rand_max":80}},
         {"key":"temperature","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":22.4,"min_val":5,"max_val":70,"step":0.5,"sim":{"profile":"sine","amplitude":2.0,"period_s":60,"offset":22.4}},
-        {"key":"flowIn","label":"Flow In","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":4.2,"min_val":0,"max_val":20,"step":0.5,"sim":{"profile":"random_walk","rand_min":2,"rand_max":10}}
+        {"key":"flowIn","label":"Flow In","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":4.2,"min_val":0,"max_val":20,"step":0.5,"sim":{"profile":"steady"}}
       ]
     },
     {

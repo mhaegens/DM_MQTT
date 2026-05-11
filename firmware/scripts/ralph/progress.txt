@@ -77,3 +77,27 @@ Started: 2026-05-11
   - With complex LVGL UIs (many nested objects), 7KB LVGL task stack is insufficient; 20KB is safe headroom for this config
 ---
 
+## 2026-05-11 - US-002
+- Added `else if (!strcmp(v->valuestring, "steady")) m->sim_profile = SIM_STEADY;` branch in parse_metric() in config_loader.c
+- Placed before the catch-all `else m->sim_profile = SIM_RANDOM_WALK` fallback, after the existing "ramp" branch
+- Existing "sine" and "ramp" branches unchanged
+- Verified with direct riscv32-esp-elf-gcc compile: RC=0, zero new warnings
+- Files changed: main/config_loader.c
+- **Learnings for future iterations:**
+  - Profile-parsing block is in parse_metric() at the `const cJSON *sim` section (line ~84-96)
+  - The catch-all fallback maps any unknown string to SIM_RANDOM_WALK — new profiles must be added before it
+  - Direct riscv32-esp-elf-gcc compile from build/compile_commands.json is the reliable "typecheck" for this project
+---
+
+## 2026-05-11 - US-003
+- Changed flowIn metric in the 'raw' tank in sapdm_config.json from `"sim":{"profile":"random_walk","rand_min":2,"rand_max":10}` to `"sim":{"profile":"steady"}`
+- Added flowIn entry to sapdm_config.annotated.json with `_comment` explaining the steady profile
+- Fixed pre-existing syntax error in sapdm_config.annotated.json (missing comma after `"offset": 41.2` in the CNC-01 machTemp sine sim block at line 81)
+- Both JSON files validated with `python3 -c 'import json,sys; json.load(open(sys.argv[1]))'`
+- Files changed: main/spiffs_image/sapdm_config.json, main/spiffs_image/sapdm_config.annotated.json
+- **Learnings for future iterations:**
+  - sapdm_config.annotated.json is an abbreviated version — it only had the first machine (cnc01) and first tank (raw) without all metrics; added flowIn there to keep it complete for the affected metric
+  - The annotated file had a pre-existing missing comma syntax error; always validate both files after edits
+  - `"sim":{"profile":"steady"}` is the minimal sim object — no rand_min/rand_max needed, just the profile key
+---
+
