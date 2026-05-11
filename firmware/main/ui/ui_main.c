@@ -29,6 +29,8 @@ void ui_tanks_activate(void);
 void ui_tanks_deactivate(void);
 void ui_debug_create(lv_obj_t *parent);
 void ui_debug_refresh(void);
+void ui_debug_activate(void);
+void ui_debug_deactivate(void);
 void ui_nfc_create(lv_obj_t *parent);
 void ui_detail_create(lv_obj_t *parent);
 void ui_detail_step(int direction);
@@ -460,6 +462,7 @@ void ui_switch_tab(ViewId v)
 
     // Deactivate tanks timer if leaving tanks
     if (g_current_view == VIEW_TANKS) ui_tanks_deactivate();
+    if (g_current_view == VIEW_DEBUG) ui_debug_deactivate();
 
     // Hide all screens
     for (int i = 0; i < VIEW_COUNT; i++) {
@@ -476,7 +479,7 @@ void ui_switch_tab(ViewId v)
     if (v == VIEW_HOME)     ui_home_refresh();
     if (v == VIEW_MACHINES) ui_machines_refresh();
     if (v == VIEW_TANKS)    ui_tanks_activate();
-    if (v == VIEW_DEBUG)    ui_debug_refresh();
+    if (v == VIEW_DEBUG)    ui_debug_activate();
 }
 
 void ui_push_detail(const char *back_label, const char *metric_label)

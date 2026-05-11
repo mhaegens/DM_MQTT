@@ -207,8 +207,8 @@
         "Screenshot (python3 tools/screenshot.py) confirms KPI tiles show live values"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added 1500ms LVGL timer in ui_home_create() for periodic refresh. Fixed g_machine_count/g_badge_count usage (was MACHINE_COUNT/BADGE_COUNT static maxes). MQTT badge updates to OFFLINE/CONNECTED dynamically. WiFi row shows SSID·IP or 'Not connected'. Operator shows name+role. Uptime HH:MM:SS in KPI meta[1]. Also: ui_debug.c adds RAM stats (Int/SPI) in 3-col grid with 1s paused timer; ui_main.c calls ui_debug_activate/deactivate."
     },
     {
       "id": "US-008",

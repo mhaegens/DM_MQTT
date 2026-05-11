@@ -6,20 +6,48 @@
 #include "config.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdio.h>
 #include <string.h>
 
 #define LOG_LINES 7
 static lv_obj_t *s_screen = NULL;
 static lv_obj_t *s_log_labels[LOG_LINES] = {NULL};
-static lv_obj_t *s_broker_val = NULL;
-static lv_obj_t *s_mqtt_val   = NULL;
-static lv_obj_t *s_ip_val     = NULL;
-static lv_obj_t *s_rssi_val   = NULL;
+static lv_obj_t *s_broker_val  = NULL;
+static lv_obj_t *s_mqtt_val    = NULL;
+static lv_obj_t *s_ip_val      = NULL;
+static lv_obj_t *s_rssi_val    = NULL;
+static lv_obj_t *s_int_ram_val = NULL;
+static lv_obj_t *s_spi_ram_val = NULL;
+static lv_timer_t *s_hw_timer  = NULL;
 
 static void debug_sim_btn_cb(lv_event_t *e) {
     (void)e;
     ui_debug_log("PUB", "factory/machines/cnc01/rpm", "4850");
+}
+
+static void hw_stats_timer_cb(lv_timer_t *t) {
+    (void)t;
+    size_t int_free  = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    size_t int_min   = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+    size_t spi_free  = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
+    if (s_int_ram_val) {
+        lv_label_set_text_fmt(s_int_ram_val, "%u KB free\n(min %u KB)",
+                              (unsigned)(int_free / 1024),
+                              (unsigned)(int_min  / 1024));
+        lv_color_t c = (int_free < 50*1024) ? COL_ERR :
+                       (int_free < 100*1024) ? COL_WARN : COL_OK;
+        lv_obj_set_style_text_color(s_int_ram_val, c, 0);
+    }
+    if (s_spi_ram_val) {
+        lv_label_set_text_fmt(s_spi_ram_val, "%u KB free",
+                              (unsigned)(spi_free / 1024));
+        lv_obj_set_style_text_color(s_spi_ram_val, COL_OK, 0);
+    }
+    ui_debug_refresh();
 }
 
 void ui_debug_create(lv_obj_t *parent) {
@@ -33,19 +61,23 @@ void ui_debug_create(lv_obj_t *parent) {
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
     g_screens[VIEW_DEBUG] = s_screen;
 
-    // Connection info grid (2×2)
-    static const char *keys[] = {"Broker", "MQTT", "Device IP", "RSSI"};
-    lv_obj_t **vals[] = {&s_broker_val, &s_mqtt_val, &s_ip_val, &s_rssi_val};
-    int gw = (SZ_SCREEN - SZ_GAP * 3) / 2, gh = 56;
-    for (int i = 0; i < 4; i++) {
+    // Stats grid — 3 columns × 2 rows: Broker, MQTT, IP, RSSI, Int RAM, SPI RAM
+    static const char *keys[] = {"Broker", "MQTT", "Device IP", "WiFi RSSI", "Internal RAM", "SPIRAM"};
+    lv_obj_t **vals[] = {&s_broker_val, &s_mqtt_val, &s_ip_val, &s_rssi_val, &s_int_ram_val, &s_spi_ram_val};
+    int cols = 3;
+    int gw = (SZ_SCREEN - SZ_GAP * (cols + 1)) / cols;
+    int gh = 64;
+    for (int i = 0; i < 6; i++) {
+        int col = i % cols, row = i / cols;
         lv_obj_t *cell = lv_obj_create(s_screen);
         lv_obj_set_size(cell, gw, gh);
-        lv_obj_set_pos(cell, SZ_GAP + (i%2)*(gw+SZ_GAP), SZ_GAP + (i/2)*(gh+SZ_GAP));
+        lv_obj_set_pos(cell, SZ_GAP + col * (gw + SZ_GAP), SZ_GAP + row * (gh + SZ_GAP));
         lv_obj_set_style_bg_color(cell, COL_BASE, 0);
         lv_obj_set_style_radius(cell, SZ_RADIUS_SM, 0);
         lv_obj_set_style_border_color(cell, COL_BD, 0);
         lv_obj_set_style_border_width(cell, 1, 0);
         lv_obj_set_style_pad_all(cell, 8, 0);
+        lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *k = lv_label_create(cell);
         lv_label_set_text(k, keys[i]);
@@ -54,6 +86,7 @@ void ui_debug_create(lv_obj_t *parent) {
         lv_obj_set_pos(k, 0, 0);
 
         *vals[i] = lv_label_create(cell);
+        lv_label_set_text(*vals[i], "—");
         lv_obj_set_style_text_font(*vals[i], FONT_MONO_XXS, 0);
         lv_obj_set_style_text_color(*vals[i], COL_TX, 0);
         lv_obj_set_pos(*vals[i], 0, 20);
@@ -93,7 +126,20 @@ void ui_debug_create(lv_obj_t *parent) {
     lv_obj_center(sim_lbl);
     lv_obj_add_event_cb(sim_btn, debug_sim_btn_cb, LV_EVENT_CLICKED, NULL);
 
+    // 1s timer to keep hw stats live — created paused, resumed when Debug tab is active
+    s_hw_timer = lv_timer_create(hw_stats_timer_cb, 1000, NULL);
+    lv_timer_pause(s_hw_timer);
+
     ui_debug_refresh();
+}
+
+void ui_debug_activate(void) {
+    hw_stats_timer_cb(NULL);   // immediate update
+    if (s_hw_timer) lv_timer_resume(s_hw_timer);
+}
+
+void ui_debug_deactivate(void) {
+    if (s_hw_timer) lv_timer_pause(s_hw_timer);
 }
 
 void ui_debug_refresh(void) {
