@@ -11,6 +11,8 @@ Started: 2026-05-11
 - SPIFFS: use `spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)` in main/CMakeLists.txt; partition label must match partitions.csv 'Name' column; source files go in main/spiffs_image/
 - Config load order: SPIFFS (/spiffs/sapdm_config.json) -> SD card (/sdcard/sapdm_config.json) -> embedded DEFAULT_CONFIG_JSON
 - `esp_vfs_spiffs_register` returns `ESP_ERR_INVALID_STATE` if already mounted -- treat same as `ESP_OK`
+- Build: `idf.py build` fails with cmake 4.3.2 due to `remove_duplicated_flags` breaking in toolchain cmake; use compile_commands.json + direct riscv gcc to check individual files
+- LVGL is pinned to CPU1 (task_affinity=1 in bsp_display_cfg_t); all other tasks (sim, mqtt, btn, console) should use CPU0 or auto to avoid contention
 
 ---
 
@@ -53,3 +55,19 @@ Started: 2026-05-11
   - The `pub()` function in mqtt_task.c already handles disconnect gracefully (drops silently); no extra guard needed in callers
   - UI callbacks run in LVGL task (core 0); sim_task runs on core 1; no mutex needed for simple scalar writes in this demo
 ---
+
+## 2026-05-11 - US-006
+- WiFi backend was already fully implemented; audit confirmed all acceptance criteria met
+- Added wifi_manager_set_on_connected(cb) API: fires once on first IP_EVENT_STA_GOT_IP
+- main.c: changed mqtt_task_start() to fire via wifi_manager_set_on_connected callback
+  (offline-first: MQTT only starts when WiFi has IP, not unconditionally at boot)
+- sim_task.c: moved sim task from CPU1 to CPU0 (LVGL pinned to CPU1 via task_affinity=1)
+- sdkconfig.defaults: added CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED + =0 (CPU0)
+- Files changed: main/main.c, main/wifi_manager.c, main/wifi_manager.h, main/sim_task.c, sdkconfig.defaults
+- **Learnings for future iterations:**
+  - wifi_manager_set_on_connected fires from IP_EVENT_STA_GOT_IP event handler (not LVGL task)
+  - Calling MQTT start directly from the WiFi event handler is safe (it just creates a FreeRTOS task)
+  - Build via make -f CMakeFiles/Makefile2 fails due to cmake 4.3.2 breaking toolchain cmake; use direct gcc compile from compile_commands.json to verify individual files
+  - LVGL is pinned to CPU1; all other tasks (sim, mqtt, btn, console) should use CPU0 or auto
+---
+
