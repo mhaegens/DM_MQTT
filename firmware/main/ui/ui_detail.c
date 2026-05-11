@@ -771,7 +771,6 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_outline_width(s_screen, 0, 0);
     lv_obj_set_style_shadow_width(s_screen, 0, 0);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(s_screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_screen, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
