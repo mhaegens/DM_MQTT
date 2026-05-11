@@ -46,7 +46,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         s_disconnect_count = 0;
         g_mqtt_connected = true;
         g_mqtt_msg_count = 0;
-        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = true;  lv_async_call(mqtt_status_dispatch, a); } }
+        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = true;  if (lv_async_call(mqtt_status_dispatch, a) != LV_RESULT_OK) free(a); } }
         break;
     case MQTT_EVENT_DISCONNECTED: {
         int idx = s_disconnect_count < BACKOFF_STEPS ? s_disconnect_count : BACKOFF_STEPS - 1;
@@ -55,7 +55,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         ESP_LOGW(TAG, "disconnected — retry in %lu ms (attempt %d)",
                  (unsigned long)delay_ms, s_disconnect_count);
         g_mqtt_connected = false;
-        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = false; lv_async_call(mqtt_status_dispatch, a); } }
+        { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = false; if (lv_async_call(mqtt_status_dispatch, a) != LV_RESULT_OK) free(a); } }
         if (s_reconnect_timer) {
             esp_timer_stop(s_reconnect_timer);
             esp_timer_start_once(s_reconnect_timer, (uint64_t)delay_ms * 1000);
