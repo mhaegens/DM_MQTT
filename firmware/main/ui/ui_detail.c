@@ -1,11 +1,10 @@
-// ui_detail.c — Detail overlay: header + viz card + step/slider + random gen.
+// ui_detail.c — Detail overlay: header + viz card + step/slider + sim panel.
 #include "ui_detail.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "data.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 // ─── Static context ─────────────────────────────────────────────────────────
 static lv_obj_t *s_screen     = NULL;
@@ -30,16 +29,6 @@ static lv_obj_t          *s_viz_ph_bar   = NULL;
 static lv_obj_t          *s_viz_ph_lbl   = NULL;
 static lv_obj_t          *s_viz_bul_fill = NULL;
 static lv_obj_t          *s_viz_bul_outer = NULL;
-
-// Random generator
-static lv_obj_t   *s_rand_start_btn   = NULL;
-static lv_obj_t   *s_rand_start_lbl   = NULL;
-static lv_obj_t   *s_interval_btns[5] = {NULL};
-static lv_timer_t *s_rand_timer        = NULL;
-static int         s_rand_interval_idx = 1;   // default 1s
-
-static const int   s_intervals[]      = {500, 1000, 2000, 5000, 10000};
-static const char *s_interval_labels[] = {"0.5s", "1s", "2s", "5s", "10s"};
 
 // Metric context
 static char  s_entity[32]      = "";
@@ -456,22 +445,6 @@ static void update_viz(void)
     }
 }
 
-// ─── Random generator ─────────────────────────────────────────────────────────
-
-static void update_interval_btns(void)
-{
-    for (int i = 0; i < 5; i++) {
-        if (!s_interval_btns[i]) continue;
-        bool active = (i == s_rand_interval_idx);
-        lv_obj_set_style_bg_color(s_interval_btns[i],
-                                  active ? COL_HI : COL_BASE2, 0);
-        lv_obj_t *lbl = lv_obj_get_child(s_interval_btns[i], 0);
-        if (lbl)
-            lv_obj_set_style_text_color(lbl,
-                                        active ? COL_BASE : COL_TX2, 0);
-    }
-}
-
 static void push_history(float v)
 {
     if (s_history_len < HISTORY_LEN) {
@@ -480,78 +453,6 @@ static void push_history(float v)
         memmove(s_history, s_history + 1,
                 (HISTORY_LEN - 1) * sizeof(float));
         s_history[HISTORY_LEN - 1] = v;
-    }
-}
-
-static void rand_gen_once(void)
-{
-    float range = s_max - s_min;
-    float r = s_min + (float)rand() / (float)RAND_MAX * range;
-    if (r < s_min) r = s_min;
-    if (r > s_max) r = s_max;
-    s_value = r;
-    push_history(r);
-
-    // Update data model
-    if (s_ctx_tank >= 0 && s_ctx_metric >= 0)
-        g_tanks[s_ctx_tank].metrics[s_ctx_metric].value = s_value;
-    else if (s_ctx_machine >= 0 && s_ctx_metric >= 0)
-        g_machines[s_ctx_machine].metrics[s_ctx_metric].value = s_value;
-
-    // Refresh detail labels and viz
-    if (s_value_lbl) {
-        char buf[24];
-        if (s_step >= 1.0f)
-            snprintf(buf, sizeof(buf), "%.0f", s_value);
-        else
-            snprintf(buf, sizeof(buf), "%.1f", s_value);
-        lv_label_set_text(s_value_lbl, buf);
-    }
-    if (s_step_val_lbl) {
-        char buf[24];
-        if (s_step >= 1.0f)
-            snprintf(buf, sizeof(buf), "%.0f", s_value);
-        else
-            snprintf(buf, sizeof(buf), "%.1f", s_value);
-        lv_label_set_text(s_step_val_lbl, buf);
-    }
-    if (s_input_type == INPUT_SLIDER && s_slider) {
-        int32_t sv = (int32_t)((s_value - s_min) * s_slider_factor);
-        lv_slider_set_value(s_slider, sv, LV_ANIM_OFF);
-    }
-    update_viz();
-}
-
-static void rand_timer_cb(lv_timer_t *timer) { (void)timer; rand_gen_once(); }
-
-static void rand_once_btn_cb(lv_event_t *e) { (void)e; rand_gen_once(); }
-
-static void rand_start_btn_cb(lv_event_t *e)
-{
-    (void)e;
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = NULL;
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Start Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, 0);
-    } else {
-        int ms = s_intervals[s_rand_interval_idx];
-        s_rand_timer = lv_timer_create(rand_timer_cb, ms, NULL);
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Stop Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_ERR, 0);
-    }
-}
-
-static void interval_btn_cb(lv_event_t *e)
-{
-    int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    s_rand_interval_idx = idx;
-    update_interval_btns();
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = lv_timer_create(rand_timer_cb, s_intervals[idx], NULL);
     }
 }
 
@@ -792,96 +693,12 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(s_slider, -(SZ_THUMB / 2 - 3), LV_PART_KNOB);
     lv_obj_add_event_cb(s_slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // ── Random generator section ──────────────────────────────────────────────
-    lv_obj_t *rand_sect = lv_obj_create(s_screen);
-    lv_obj_set_size(rand_sect, CONTENT_W - SZ_GAP * 2, rand_h);
-    lv_obj_set_style_bg_color(rand_sect, COL_BASE, 0);
-    lv_obj_set_style_border_color(rand_sect, COL_BD, 0);
-    lv_obj_set_style_border_width(rand_sect, 1, 0);
-    lv_obj_set_style_radius(rand_sect, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(rand_sect, 8, 0);
-    lv_obj_set_style_pad_gap(rand_sect, 8, 0);
-    lv_obj_set_style_shadow_width(rand_sect, 0, 0);
-    lv_obj_set_style_outline_width(rand_sect, 0, 0);
-    lv_obj_clear_flag(rand_sect, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(rand_sect, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(rand_sect, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-    // Row 1: "Gen Once" + interval buttons
-    lv_obj_t *row1 = lv_obj_create(rand_sect);
-    lv_obj_remove_style_all(row1);
-    lv_obj_set_size(row1, LV_PCT(100), 44);
-    lv_obj_clear_flag(row1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(row1, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row1, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row1, 6, 0);
-
-    lv_obj_t *gen_once = lv_btn_create(row1);
-    lv_obj_set_size(gen_once, LV_SIZE_CONTENT, 44);
-    lv_obj_set_style_bg_color(gen_once, COL_BASE2, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(gen_once, COL_HI_LT, LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(gen_once, COL_BD, LV_PART_MAIN);
-    lv_obj_set_style_border_width(gen_once, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(gen_once, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_shadow_width(gen_once, 0, 0);
-    lv_obj_set_style_pad_hor(gen_once, 12, LV_PART_MAIN);
-    lv_obj_add_event_cb(gen_once, rand_once_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *gen_once_lbl = lv_label_create(gen_once);
-    lv_label_set_text(gen_once_lbl, "Gen Once");
-    lv_obj_set_style_text_font(gen_once_lbl, FONT_SANS_XXS, 0);
-    lv_obj_set_style_text_color(gen_once_lbl, COL_TX, 0);
-    lv_obj_center(gen_once_lbl);
-
-    for (int i = 0; i < 5; i++) {
-        lv_obj_t *ibtn = lv_btn_create(row1);
-        lv_obj_set_size(ibtn, LV_SIZE_CONTENT, 44);
-        lv_obj_set_style_border_color(ibtn, COL_BD, LV_PART_MAIN);
-        lv_obj_set_style_border_width(ibtn, 1, LV_PART_MAIN);
-        lv_obj_set_style_radius(ibtn, SZ_RADIUS_SM, 0);
-        lv_obj_set_style_shadow_width(ibtn, 0, 0);
-        lv_obj_set_style_pad_hor(ibtn, 10, LV_PART_MAIN);
-        lv_obj_add_event_cb(ibtn, interval_btn_cb, LV_EVENT_CLICKED,
-                            (void *)(intptr_t)i);
-        lv_obj_t *ilbl = lv_label_create(ibtn);
-        lv_label_set_text(ilbl, s_interval_labels[i]);
-        lv_obj_set_style_text_font(ilbl, FONT_MONO_XXS, 0);
-        lv_obj_center(ilbl);
-        s_interval_btns[i] = ibtn;
-    }
-    update_interval_btns();
-
-    // Row 2: Start/Stop button
-    s_rand_start_btn = lv_btn_create(rand_sect);
-    lv_obj_set_size(s_rand_start_btn, LV_PCT(100), 44);
-    lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI_DK, LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(s_rand_start_btn, 0, 0);
-    lv_obj_set_style_radius(s_rand_start_btn, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_shadow_width(s_rand_start_btn, 0, 0);
-    lv_obj_add_event_cb(s_rand_start_btn, rand_start_btn_cb, LV_EVENT_CLICKED, NULL);
-
-    s_rand_start_lbl = lv_label_create(s_rand_start_btn);
-    lv_label_set_text(s_rand_start_lbl, "Start Auto");
-    lv_obj_set_style_text_font(s_rand_start_lbl, FONT_SANS_XXS, 0);
-    lv_obj_set_style_text_color(s_rand_start_lbl, COL_BASE, 0);
-    lv_obj_center(s_rand_start_lbl);
 }
 
 // ─── Internal: open context helper ───────────────────────────────────────────
 static void open_context(const char *entity, Metric *m,
                          int ctx_tank, int ctx_machine, int ctx_metric)
 {
-    // Stop running random timer
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = NULL;
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Start Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, 0);
-    }
-
     strncpy(s_entity, entity,  sizeof(s_entity)  - 1);
     strncpy(s_metric, m->label, sizeof(s_metric) - 1);
     strncpy(s_unit,   m->unit,  sizeof(s_unit)   - 1);
