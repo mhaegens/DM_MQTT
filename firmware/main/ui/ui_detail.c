@@ -22,6 +22,10 @@ static lv_obj_t *s_sim_profile_lbl = NULL;
 static lv_obj_t *s_sim_rw_min_lbl  = NULL;
 static lv_obj_t *s_sim_rw_max_lbl  = NULL;
 static lv_obj_t *s_sim_rw_rows[2]  = {NULL}; // [0]=min row, [1]=max row
+static lv_obj_t *s_sim_sine_ampl_lbl   = NULL;
+static lv_obj_t *s_sim_sine_period_lbl = NULL;
+static lv_obj_t *s_sim_sine_offset_lbl = NULL;
+static lv_obj_t *s_sim_sine_rows[3]    = {NULL}; // [0]=ampl, [1]=period, [2]=offset
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -550,8 +554,57 @@ static void sim_rw_btn_cb(lv_event_t *e)
     }
 }
 
+static void sim_sine_btn_cb(lv_event_t *e)
+{
+    // user_data: field in bits 0-1 (0=ampl, 1=period, 2=offset), direction in bit 2 (0=-1, 1=+1)
+    int code  = (int)(intptr_t)lv_event_get_user_data(e);
+    int field = code & 3;
+    int dir   = (code >> 2) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+
+    if (field == 0) {
+        m->sim_amplitude += dir * m->step;
+        if (m->sim_amplitude < 0.0f) m->sim_amplitude = 0.0f;
+        // clamp: offset - amplitude >= min_val and offset + amplitude <= max_val
+        if (m->sim_offset - m->sim_amplitude < m->min_val)
+            m->sim_amplitude = m->sim_offset - m->min_val;
+        if (m->sim_offset + m->sim_amplitude > m->max_val)
+            m->sim_amplitude = m->max_val - m->sim_offset;
+        if (m->sim_amplitude < 0.0f) m->sim_amplitude = 0.0f;
+        if (s_sim_sine_ampl_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_amplitude);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_amplitude);
+            lv_label_set_text(s_sim_sine_ampl_lbl, buf);
+        }
+    } else if (field == 1) {
+        m->sim_period_s += dir * 1.0f;
+        if (m->sim_period_s < 1.0f) m->sim_period_s = 1.0f;
+        if (s_sim_sine_period_lbl) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f", m->sim_period_s);
+            lv_label_set_text(s_sim_sine_period_lbl, buf);
+        }
+    } else {
+        m->sim_offset += dir * m->step;
+        // clamp so offset - amplitude >= min_val and offset + amplitude <= max_val
+        if (m->sim_offset - m->sim_amplitude < m->min_val)
+            m->sim_offset = m->min_val + m->sim_amplitude;
+        if (m->sim_offset + m->sim_amplitude > m->max_val)
+            m->sim_offset = m->max_val - m->sim_amplitude;
+        if (s_sim_sine_offset_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_offset);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_offset);
+            lv_label_set_text(s_sim_sine_offset_lbl, buf);
+        }
+    }
+}
+
 static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
                                      lv_obj_t **val_lbl_out,
+                                     lv_event_cb_t cb,
                                      int minus_code, int plus_code)
 {
     lv_obj_t *row = lv_obj_create(parent);
@@ -576,7 +629,7 @@ static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
     lv_obj_set_style_border_width(minus_btn, 0, 0);
     lv_obj_set_style_radius(minus_btn, SZ_RADIUS_SM, 0);
     lv_obj_set_style_shadow_width(minus_btn, 0, 0);
-    lv_obj_add_event_cb(minus_btn, sim_rw_btn_cb, LV_EVENT_CLICKED,
+    lv_obj_add_event_cb(minus_btn, cb, LV_EVENT_CLICKED,
                         (void *)(intptr_t)minus_code);
     lv_obj_t *mlbl = lv_label_create(minus_btn);
     lv_label_set_text(mlbl, LV_SYMBOL_MINUS);
@@ -599,7 +652,7 @@ static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
     lv_obj_set_style_border_width(plus_btn, 0, 0);
     lv_obj_set_style_radius(plus_btn, SZ_RADIUS_SM, 0);
     lv_obj_set_style_shadow_width(plus_btn, 0, 0);
-    lv_obj_add_event_cb(plus_btn, sim_rw_btn_cb, LV_EVENT_CLICKED,
+    lv_obj_add_event_cb(plus_btn, cb, LV_EVENT_CLICKED,
                         (void *)(intptr_t)plus_code);
     lv_obj_t *plbl = lv_label_create(plus_btn);
     lv_label_set_text(plbl, LV_SYMBOL_PLUS);
@@ -646,6 +699,31 @@ static void sim_panel_configure(Metric *m)
             if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_max);
             else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_max);
             lv_label_set_text(s_sim_rw_max_lbl, buf);
+        }
+    }
+
+    // Sine rows
+    bool is_sine = (m->sim_profile == SIM_SINE);
+    for (int i = 0; i < 3; i++) {
+        if (!s_sim_sine_rows[i]) continue;
+        if (is_sine) lv_obj_clear_flag(s_sim_sine_rows[i], LV_OBJ_FLAG_HIDDEN);
+        else         lv_obj_add_flag(s_sim_sine_rows[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_sine) {
+        char buf[16];
+        if (s_sim_sine_ampl_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_amplitude);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_amplitude);
+            lv_label_set_text(s_sim_sine_ampl_lbl, buf);
+        }
+        if (s_sim_sine_period_lbl) {
+            snprintf(buf, sizeof(buf), "%.0f", m->sim_period_s);
+            lv_label_set_text(s_sim_sine_period_lbl, buf);
+        }
+        if (s_sim_sine_offset_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_offset);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_offset);
+            lv_label_set_text(s_sim_sine_offset_lbl, buf);
         }
     }
 }
@@ -886,11 +964,23 @@ void ui_detail_create(lv_obj_t *parent)
     // Min / Max rows for SIM_RANDOM_WALK (hidden by default)
     // minus_code: field | dir<<1 — 0=min-minus, 2=min-plus, 1=max-minus, 3=max-plus
     s_sim_rw_rows[0] = sim_build_param_row(s_sim_panel, "Min",
-                                           &s_sim_rw_min_lbl, 0, 2);
+                                           &s_sim_rw_min_lbl, sim_rw_btn_cb, 0, 2);
     s_sim_rw_rows[1] = sim_build_param_row(s_sim_panel, "Max",
-                                           &s_sim_rw_max_lbl, 1, 3);
+                                           &s_sim_rw_max_lbl, sim_rw_btn_cb, 1, 3);
     lv_obj_add_flag(s_sim_rw_rows[0], LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_sim_rw_rows[1], LV_OBJ_FLAG_HIDDEN);
+
+    // Ampl / Period / Offset rows for SIM_SINE (hidden by default)
+    // Encoding: field in bits 0-1, direction in bit 2: ampl-minus=0, ampl-plus=4, period-minus=1, period-plus=5, offset-minus=2, offset-plus=6
+    s_sim_sine_rows[0] = sim_build_param_row(s_sim_panel, "Ampl",
+                                             &s_sim_sine_ampl_lbl, sim_sine_btn_cb, 0, 4);
+    s_sim_sine_rows[1] = sim_build_param_row(s_sim_panel, "Per",
+                                             &s_sim_sine_period_lbl, sim_sine_btn_cb, 1, 5);
+    s_sim_sine_rows[2] = sim_build_param_row(s_sim_panel, "Offs",
+                                             &s_sim_sine_offset_lbl, sim_sine_btn_cb, 2, 6);
+    lv_obj_add_flag(s_sim_sine_rows[0], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_sine_rows[1], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_sine_rows[2], LV_OBJ_FLAG_HIDDEN);
 
 }
 
