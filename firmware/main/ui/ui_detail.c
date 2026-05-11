@@ -17,6 +17,7 @@ static lv_obj_t *s_step_row   = NULL;
 static lv_obj_t *s_step_val_lbl = NULL;
 static lv_obj_t *s_slider_row = NULL;
 static lv_obj_t *s_slider     = NULL;
+static lv_obj_t *s_sim_panel  = NULL;
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -593,9 +594,9 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(s_unit_lbl, COL_TX2, 0);
 
     // ── Viz card ──────────────────────────────────────────────────────────────
-    int hdr_approx = 84;
-    int rand_h     = 112;
-    int viz_h = DETAIL_H - SZ_GAP * 2 - hdr_approx - SZ_BTN_SM - rand_h - SZ_GAP * 4;
+    int hdr_approx   = 84;
+    int sim_panel_h  = 56;
+    int viz_h = DETAIL_H - SZ_GAP * 2 - hdr_approx - SZ_BTN_SM - sim_panel_h - SZ_GAP * 4;
     if (viz_h < 80) viz_h = 80;
 
     s_viz_card = lv_obj_create(s_screen);
@@ -693,6 +694,32 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(s_slider, -(SZ_THUMB / 2 - 3), LV_PART_KNOB);
     lv_obj_add_event_cb(s_slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    // ── Sim control panel ─────────────────────────────────────────────────────
+    s_sim_panel = lv_obj_create(s_screen);
+    lv_obj_set_size(s_sim_panel, CONTENT_W - SZ_GAP * 2, sim_panel_h);
+    lv_obj_set_style_bg_color(s_sim_panel, COL_BASE, 0);
+    lv_obj_set_style_border_color(s_sim_panel, COL_BD, 0);
+    lv_obj_set_style_border_width(s_sim_panel, 1, 0);
+    lv_obj_set_style_radius(s_sim_panel, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(s_sim_panel, 8, 0);
+    lv_obj_set_style_pad_gap(s_sim_panel, 6, 0);
+    lv_obj_set_style_shadow_width(s_sim_panel, 0, 0);
+    lv_obj_set_style_outline_width(s_sim_panel, 0, 0);
+    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_sim_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_sim_panel, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+}
+
+// ─── Sim panel configure ─────────────────────────────────────────────────────
+static void sim_panel_configure(Metric *m)
+{
+    if (!s_sim_panel) return;
+    if (m->sim_profile == SIM_STEADY)
+        lv_obj_add_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+    else
+        lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ─── Internal: open context helper ───────────────────────────────────────────
@@ -740,6 +767,8 @@ static void open_context(const char *entity, Metric *m,
             lv_obj_add_flag(s_slider_row, LV_OBJ_FLAG_HIDDEN);
         }
     }
+
+    sim_panel_configure(m);
 
     s_viz_needs_rebuild = true;
     detail_refresh_labels();
