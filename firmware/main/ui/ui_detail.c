@@ -18,6 +18,7 @@ static lv_obj_t *s_step_val_lbl = NULL;
 static lv_obj_t *s_slider_row = NULL;
 static lv_obj_t *s_slider     = NULL;
 static lv_obj_t *s_sim_panel  = NULL;
+static lv_obj_t *s_sim_profile_lbl = NULL;
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -710,16 +711,57 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_flex_align(s_sim_panel, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+    // Header row: 'SIM' label left, profile pill badge right
+    lv_obj_t *sim_hdr = lv_obj_create(s_sim_panel);
+    lv_obj_remove_style_all(sim_hdr);
+    lv_obj_set_size(sim_hdr, LV_PCT(100), 40);
+    lv_obj_clear_flag(sim_hdr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(sim_hdr, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sim_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t *sim_key_lbl = lv_label_create(sim_hdr);
+    lv_label_set_text(sim_key_lbl, "SIM");
+    lv_obj_set_style_text_font(sim_key_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(sim_key_lbl, COL_TX3, 0);
+
+    // Pill badge
+    lv_obj_t *pill = lv_obj_create(sim_hdr);
+    lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(pill, COL_HI, 0);
+    lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(pill, 0, 0);
+    lv_obj_set_style_radius(pill, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_hor(pill, 8, 0);
+    lv_obj_set_style_pad_ver(pill, 4, 0);
+    lv_obj_set_style_shadow_width(pill, 0, 0);
+    lv_obj_set_style_outline_width(pill, 0, 0);
+    lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_sim_profile_lbl = lv_label_create(pill);
+    lv_label_set_text(s_sim_profile_lbl, "—");
+    lv_obj_set_style_text_font(s_sim_profile_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(s_sim_profile_lbl, COL_BASE, 0);
+
 }
 
 // ─── Sim panel configure ─────────────────────────────────────────────────────
 static void sim_panel_configure(Metric *m)
 {
     if (!s_sim_panel) return;
-    if (m->sim_profile == SIM_STEADY)
+    if (m->sim_profile == SIM_STEADY) {
         lv_obj_add_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
-    else
-        lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+
+    if (s_sim_profile_lbl) {
+        const char *badge_text =
+            m->sim_profile == SIM_SINE        ? "SINE" :
+            m->sim_profile == SIM_RAMP        ? "RAMP" :
+                                                "RANDOM WALK";
+        lv_label_set_text(s_sim_profile_lbl, badge_text);
+    }
 }
 
 // ─── Internal: open context helper ───────────────────────────────────────────
