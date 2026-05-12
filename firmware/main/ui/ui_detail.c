@@ -1,11 +1,10 @@
-// ui_detail.c — Detail overlay: header + viz card + step/slider + random gen.
+// ui_detail.c — Detail overlay: header + viz card + step/slider + sim panel.
 #include "ui_detail.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "data.h"
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 // ─── Static context ─────────────────────────────────────────────────────────
 static lv_obj_t *s_screen     = NULL;
@@ -18,6 +17,17 @@ static lv_obj_t *s_step_row   = NULL;
 static lv_obj_t *s_step_val_lbl = NULL;
 static lv_obj_t *s_slider_row = NULL;
 static lv_obj_t *s_slider     = NULL;
+static lv_obj_t *s_sim_panel  = NULL;
+static lv_obj_t *s_sim_profile_lbl = NULL;
+static lv_obj_t *s_sim_rw_min_lbl  = NULL;
+static lv_obj_t *s_sim_rw_max_lbl  = NULL;
+static lv_obj_t *s_sim_rw_rows[2]  = {NULL}; // [0]=min row, [1]=max row
+static lv_obj_t *s_sim_sine_ampl_lbl   = NULL;
+static lv_obj_t *s_sim_sine_period_lbl = NULL;
+static lv_obj_t *s_sim_sine_offset_lbl = NULL;
+static lv_obj_t *s_sim_sine_rows[3]    = {NULL}; // [0]=ampl, [1]=period, [2]=offset
+static lv_obj_t *s_sim_ramp_step_lbl   = NULL;
+static lv_obj_t *s_sim_ramp_row        = NULL;
 
 // Viz child pointers (valid after build_viz(), cleared before rebuild)
 static lv_obj_t          *s_viz_chart    = NULL;
@@ -30,16 +40,6 @@ static lv_obj_t          *s_viz_ph_bar   = NULL;
 static lv_obj_t          *s_viz_ph_lbl   = NULL;
 static lv_obj_t          *s_viz_bul_fill = NULL;
 static lv_obj_t          *s_viz_bul_outer = NULL;
-
-// Random generator
-static lv_obj_t   *s_rand_start_btn   = NULL;
-static lv_obj_t   *s_rand_start_lbl   = NULL;
-static lv_obj_t   *s_interval_btns[5] = {NULL};
-static lv_timer_t *s_rand_timer        = NULL;
-static int         s_rand_interval_idx = 1;   // default 1s
-
-static const int   s_intervals[]      = {500, 1000, 2000, 5000, 10000};
-static const char *s_interval_labels[] = {"0.5s", "1s", "2s", "5s", "10s"};
 
 // Metric context
 static char  s_entity[32]      = "";
@@ -456,22 +456,6 @@ static void update_viz(void)
     }
 }
 
-// ─── Random generator ─────────────────────────────────────────────────────────
-
-static void update_interval_btns(void)
-{
-    for (int i = 0; i < 5; i++) {
-        if (!s_interval_btns[i]) continue;
-        bool active = (i == s_rand_interval_idx);
-        lv_obj_set_style_bg_color(s_interval_btns[i],
-                                  active ? COL_HI : COL_BASE2, 0);
-        lv_obj_t *lbl = lv_obj_get_child(s_interval_btns[i], 0);
-        if (lbl)
-            lv_obj_set_style_text_color(lbl,
-                                        active ? COL_BASE : COL_TX2, 0);
-    }
-}
-
 static void push_history(float v)
 {
     if (s_history_len < HISTORY_LEN) {
@@ -480,78 +464,6 @@ static void push_history(float v)
         memmove(s_history, s_history + 1,
                 (HISTORY_LEN - 1) * sizeof(float));
         s_history[HISTORY_LEN - 1] = v;
-    }
-}
-
-static void rand_gen_once(void)
-{
-    float range = s_max - s_min;
-    float r = s_min + (float)rand() / (float)RAND_MAX * range;
-    if (r < s_min) r = s_min;
-    if (r > s_max) r = s_max;
-    s_value = r;
-    push_history(r);
-
-    // Update data model
-    if (s_ctx_tank >= 0 && s_ctx_metric >= 0)
-        g_tanks[s_ctx_tank].metrics[s_ctx_metric].value = s_value;
-    else if (s_ctx_machine >= 0 && s_ctx_metric >= 0)
-        g_machines[s_ctx_machine].metrics[s_ctx_metric].value = s_value;
-
-    // Refresh detail labels and viz
-    if (s_value_lbl) {
-        char buf[24];
-        if (s_step >= 1.0f)
-            snprintf(buf, sizeof(buf), "%.0f", s_value);
-        else
-            snprintf(buf, sizeof(buf), "%.1f", s_value);
-        lv_label_set_text(s_value_lbl, buf);
-    }
-    if (s_step_val_lbl) {
-        char buf[24];
-        if (s_step >= 1.0f)
-            snprintf(buf, sizeof(buf), "%.0f", s_value);
-        else
-            snprintf(buf, sizeof(buf), "%.1f", s_value);
-        lv_label_set_text(s_step_val_lbl, buf);
-    }
-    if (s_input_type == INPUT_SLIDER && s_slider) {
-        int32_t sv = (int32_t)((s_value - s_min) * s_slider_factor);
-        lv_slider_set_value(s_slider, sv, LV_ANIM_OFF);
-    }
-    update_viz();
-}
-
-static void rand_timer_cb(lv_timer_t *timer) { (void)timer; rand_gen_once(); }
-
-static void rand_once_btn_cb(lv_event_t *e) { (void)e; rand_gen_once(); }
-
-static void rand_start_btn_cb(lv_event_t *e)
-{
-    (void)e;
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = NULL;
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Start Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, 0);
-    } else {
-        int ms = s_intervals[s_rand_interval_idx];
-        s_rand_timer = lv_timer_create(rand_timer_cb, ms, NULL);
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Stop Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_ERR, 0);
-    }
-}
-
-static void interval_btn_cb(lv_event_t *e)
-{
-    int idx = (int)(intptr_t)lv_event_get_user_data(e);
-    s_rand_interval_idx = idx;
-    update_interval_btns();
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = lv_timer_create(rand_timer_cb, s_intervals[idx], NULL);
     }
 }
 
@@ -607,6 +519,256 @@ static void slider_event_cb(lv_event_t *e)
     detail_refresh_labels();
 }
 
+// ─── Sim panel configure ─────────────────────────────────────────────────────
+
+// Live metric pointer — set by sim_panel_configure(), used by sim panel callbacks
+static Metric *s_ctx_m = NULL;
+
+static void sim_rw_btn_cb(lv_event_t *e)
+{
+    // user_data encodes: field (bit 0: 0=min, 1=max) | direction (bit 1: 0=-1, 1=+1)
+    int code  = (int)(intptr_t)lv_event_get_user_data(e);
+    int field = code & 1;       // 0=min, 1=max
+    int dir   = (code >> 1) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+
+    if (field == 0) {
+        m->rand_min += dir * m->step;
+        if (m->rand_min < m->min_val) m->rand_min = m->min_val;
+        if (m->rand_min > m->rand_max - m->step) m->rand_min = m->rand_max - m->step;
+        if (s_sim_rw_min_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_min);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_min);
+            lv_label_set_text(s_sim_rw_min_lbl, buf);
+        }
+    } else {
+        m->rand_max += dir * m->step;
+        if (m->rand_max > m->max_val) m->rand_max = m->max_val;
+        if (m->rand_max < m->rand_min + m->step) m->rand_max = m->rand_min + m->step;
+        if (s_sim_rw_max_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_max);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_max);
+            lv_label_set_text(s_sim_rw_max_lbl, buf);
+        }
+    }
+}
+
+static void sim_sine_btn_cb(lv_event_t *e)
+{
+    // user_data: field in bits 0-1 (0=ampl, 1=period, 2=offset), direction in bit 2 (0=-1, 1=+1)
+    int code  = (int)(intptr_t)lv_event_get_user_data(e);
+    int field = code & 3;
+    int dir   = (code >> 2) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+
+    if (field == 0) {
+        m->sim_amplitude += dir * m->step;
+        if (m->sim_amplitude < 0.0f) m->sim_amplitude = 0.0f;
+        // clamp: offset - amplitude >= min_val and offset + amplitude <= max_val
+        if (m->sim_offset - m->sim_amplitude < m->min_val)
+            m->sim_amplitude = m->sim_offset - m->min_val;
+        if (m->sim_offset + m->sim_amplitude > m->max_val)
+            m->sim_amplitude = m->max_val - m->sim_offset;
+        if (m->sim_amplitude < 0.0f) m->sim_amplitude = 0.0f;
+        if (s_sim_sine_ampl_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_amplitude);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_amplitude);
+            lv_label_set_text(s_sim_sine_ampl_lbl, buf);
+        }
+    } else if (field == 1) {
+        m->sim_period_s += dir * 1.0f;
+        if (m->sim_period_s < 1.0f) m->sim_period_s = 1.0f;
+        if (s_sim_sine_period_lbl) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f", m->sim_period_s);
+            lv_label_set_text(s_sim_sine_period_lbl, buf);
+        }
+    } else {
+        m->sim_offset += dir * m->step;
+        // clamp so offset - amplitude >= min_val and offset + amplitude <= max_val
+        if (m->sim_offset - m->sim_amplitude < m->min_val)
+            m->sim_offset = m->min_val + m->sim_amplitude;
+        if (m->sim_offset + m->sim_amplitude > m->max_val)
+            m->sim_offset = m->max_val - m->sim_amplitude;
+        if (s_sim_sine_offset_lbl) {
+            char buf[16];
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_offset);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_offset);
+            lv_label_set_text(s_sim_sine_offset_lbl, buf);
+        }
+    }
+}
+
+static void sim_ramp_btn_cb(lv_event_t *e)
+{
+    // user_data: 0=minus, 1=plus
+    int dir = (int)(intptr_t)lv_event_get_user_data(e) ? 1 : -1;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+    m->step += dir * 0.1f;
+    if (m->step < 0.1f) m->step = 0.1f;
+    if (s_sim_ramp_step_lbl) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.1f", m->step);
+        lv_label_set_text(s_sim_ramp_step_lbl, buf);
+    }
+}
+
+static lv_obj_t *sim_build_param_row(lv_obj_t *parent, const char *key,
+                                     lv_obj_t **val_lbl_out,
+                                     lv_event_cb_t cb,
+                                     int minus_code, int plus_code)
+{
+    lv_obj_t *row = lv_obj_create(parent);
+    lv_obj_remove_style_all(row);
+    lv_obj_set_size(row, LV_PCT(100), 44);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row, 6, 0);
+
+    lv_obj_t *key_lbl = lv_label_create(row);
+    lv_label_set_text(key_lbl, key);
+    lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(key_lbl, COL_TX2, 0);
+    lv_obj_set_width(key_lbl, 40);
+
+    lv_obj_t *minus_btn = lv_btn_create(row);
+    lv_obj_set_size(minus_btn, SZ_BTN_SM, 36);
+    lv_obj_set_style_bg_color(minus_btn, COL_BASE2, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(minus_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(minus_btn, 0, 0);
+    lv_obj_set_style_radius(minus_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(minus_btn, 0, 0);
+    lv_obj_add_event_cb(minus_btn, cb, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)minus_code);
+    lv_obj_t *mlbl = lv_label_create(minus_btn);
+    lv_label_set_text(mlbl, LV_SYMBOL_MINUS);
+    lv_obj_set_style_text_font(mlbl, FONT_SANS_LG, 0);
+    lv_obj_set_style_text_color(mlbl, COL_TX2, 0);
+    lv_obj_center(mlbl);
+
+    lv_obj_t *val = lv_label_create(row);
+    lv_label_set_text(val, "-");
+    lv_obj_set_style_text_font(val, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(val, COL_TX, 0);
+    lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_flex_grow(val, 1);
+    if (val_lbl_out) *val_lbl_out = val;
+
+    lv_obj_t *plus_btn = lv_btn_create(row);
+    lv_obj_set_size(plus_btn, SZ_BTN_SM, 36);
+    lv_obj_set_style_bg_color(plus_btn, COL_BASE2, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(plus_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(plus_btn, 0, 0);
+    lv_obj_set_style_radius(plus_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(plus_btn, 0, 0);
+    lv_obj_add_event_cb(plus_btn, cb, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)plus_code);
+    lv_obj_t *plbl = lv_label_create(plus_btn);
+    lv_label_set_text(plbl, LV_SYMBOL_PLUS);
+    lv_obj_set_style_text_font(plbl, FONT_SANS_LG, 0);
+    lv_obj_set_style_text_color(plbl, COL_TX2, 0);
+    lv_obj_center(plbl);
+
+    return row;
+}
+
+static void sim_panel_configure(Metric *m)
+{
+    if (!s_sim_panel) return;
+    s_ctx_m = m;
+    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_HIDDEN);
+
+    if (s_sim_profile_lbl) {
+        const char *badge_text =
+            m->sim_profile == SIM_SINE        ? "SINE" :
+            m->sim_profile == SIM_RAMP        ? "RAMP" :
+            m->sim_profile == SIM_STEADY      ? "STEADY" :
+                                                "RANDOM WALK";
+        lv_label_set_text(s_sim_profile_lbl, badge_text);
+    }
+
+    // Random walk rows
+    bool is_rw = (m->sim_profile == SIM_RANDOM_WALK);
+    for (int i = 0; i < 2; i++) {
+        if (!s_sim_rw_rows[i]) continue;
+        if (is_rw) lv_obj_clear_flag(s_sim_rw_rows[i], LV_OBJ_FLAG_HIDDEN);
+        else       lv_obj_add_flag(s_sim_rw_rows[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_rw) {
+        char buf[16];
+        if (s_sim_rw_min_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_min);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_min);
+            lv_label_set_text(s_sim_rw_min_lbl, buf);
+        }
+        if (s_sim_rw_max_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->rand_max);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->rand_max);
+            lv_label_set_text(s_sim_rw_max_lbl, buf);
+        }
+    }
+
+    // Sine rows
+    bool is_sine = (m->sim_profile == SIM_SINE);
+    for (int i = 0; i < 3; i++) {
+        if (!s_sim_sine_rows[i]) continue;
+        if (is_sine) lv_obj_clear_flag(s_sim_sine_rows[i], LV_OBJ_FLAG_HIDDEN);
+        else         lv_obj_add_flag(s_sim_sine_rows[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_sine) {
+        char buf[16];
+        if (s_sim_sine_ampl_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_amplitude);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_amplitude);
+            lv_label_set_text(s_sim_sine_ampl_lbl, buf);
+        }
+        if (s_sim_sine_period_lbl) {
+            snprintf(buf, sizeof(buf), "%.0f", m->sim_period_s);
+            lv_label_set_text(s_sim_sine_period_lbl, buf);
+        }
+        if (s_sim_sine_offset_lbl) {
+            if (m->step >= 1.0f) snprintf(buf, sizeof(buf), "%.0f", m->sim_offset);
+            else                 snprintf(buf, sizeof(buf), "%.1f", m->sim_offset);
+            lv_label_set_text(s_sim_sine_offset_lbl, buf);
+        }
+    }
+
+    // Ramp row
+    bool is_ramp = (m->sim_profile == SIM_RAMP);
+    if (s_sim_ramp_row) {
+        if (is_ramp) lv_obj_clear_flag(s_sim_ramp_row, LV_OBJ_FLAG_HIDDEN);
+        else         lv_obj_add_flag(s_sim_ramp_row,   LV_OBJ_FLAG_HIDDEN);
+    }
+    if (is_ramp && s_sim_ramp_step_lbl) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%.1f", m->step);
+        lv_label_set_text(s_sim_ramp_step_lbl, buf);
+    }
+}
+
+static void sim_profile_cycle_cb(lv_event_t *e)
+{
+    (void)e;
+    if (!s_ctx_m) return;
+    Metric *m = s_ctx_m;
+    DATA_LOCK();
+    SimProfile next = m->sim_profile + 1;
+    if (next > SIM_STEADY) next = SIM_RANDOM_WALK;
+    m->sim_profile = next;
+    m->sim_phase_acc = 0.0f;
+    if (next == SIM_STEADY) metric_push(m, m->value);
+    DATA_UNLOCK();
+    sim_panel_configure(m);
+}
+
 // ─── Screen create ────────────────────────────────────────────────────────────
 void ui_detail_create(lv_obj_t *parent)
 {
@@ -621,7 +783,6 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_outline_width(s_screen, 0, 0);
     lv_obj_set_style_shadow_width(s_screen, 0, 0);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(s_screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_screen, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -692,9 +853,9 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(s_unit_lbl, COL_TX2, 0);
 
     // ── Viz card ──────────────────────────────────────────────────────────────
-    int hdr_approx = 84;
-    int rand_h     = 112;
-    int viz_h = DETAIL_H - SZ_GAP * 2 - hdr_approx - SZ_BTN_SM - rand_h - SZ_GAP * 4;
+    int hdr_approx   = 84;
+    int sim_panel_h  = 56;
+    int viz_h = DETAIL_H - SZ_GAP * 2 - hdr_approx - SZ_BTN_SM - sim_panel_h - SZ_GAP * 4;
     if (viz_h < 80) viz_h = 80;
 
     s_viz_card = lv_obj_create(s_screen);
@@ -792,96 +953,89 @@ void ui_detail_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(s_slider, -(SZ_THUMB / 2 - 3), LV_PART_KNOB);
     lv_obj_add_event_cb(s_slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-    // ── Random generator section ──────────────────────────────────────────────
-    lv_obj_t *rand_sect = lv_obj_create(s_screen);
-    lv_obj_set_size(rand_sect, CONTENT_W - SZ_GAP * 2, rand_h);
-    lv_obj_set_style_bg_color(rand_sect, COL_BASE, 0);
-    lv_obj_set_style_border_color(rand_sect, COL_BD, 0);
-    lv_obj_set_style_border_width(rand_sect, 1, 0);
-    lv_obj_set_style_radius(rand_sect, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(rand_sect, 8, 0);
-    lv_obj_set_style_pad_gap(rand_sect, 8, 0);
-    lv_obj_set_style_shadow_width(rand_sect, 0, 0);
-    lv_obj_set_style_outline_width(rand_sect, 0, 0);
-    lv_obj_clear_flag(rand_sect, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(rand_sect, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(rand_sect, LV_FLEX_ALIGN_START,
+    // ── Sim control panel ─────────────────────────────────────────────────────
+    s_sim_panel = lv_obj_create(s_screen);
+    lv_obj_set_size(s_sim_panel, CONTENT_W - SZ_GAP * 2, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(s_sim_panel, COL_BASE, 0);
+    lv_obj_set_style_border_color(s_sim_panel, COL_BD, 0);
+    lv_obj_set_style_border_width(s_sim_panel, 1, 0);
+    lv_obj_set_style_radius(s_sim_panel, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(s_sim_panel, 8, 0);
+    lv_obj_set_style_pad_gap(s_sim_panel, 6, 0);
+    lv_obj_set_style_shadow_width(s_sim_panel, 0, 0);
+    lv_obj_set_style_outline_width(s_sim_panel, 0, 0);
+    lv_obj_clear_flag(s_sim_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_sim_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_sim_panel, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Row 1: "Gen Once" + interval buttons
-    lv_obj_t *row1 = lv_obj_create(rand_sect);
-    lv_obj_remove_style_all(row1);
-    lv_obj_set_size(row1, LV_PCT(100), 44);
-    lv_obj_clear_flag(row1, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(row1, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row1, LV_FLEX_ALIGN_START,
+    // Header row: 'SIM' label left, profile pill badge right
+    lv_obj_t *sim_hdr = lv_obj_create(s_sim_panel);
+    lv_obj_remove_style_all(sim_hdr);
+    lv_obj_set_size(sim_hdr, LV_PCT(100), 40);
+    lv_obj_clear_flag(sim_hdr, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(sim_hdr, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sim_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(row1, 6, 0);
 
-    lv_obj_t *gen_once = lv_btn_create(row1);
-    lv_obj_set_size(gen_once, LV_SIZE_CONTENT, 44);
-    lv_obj_set_style_bg_color(gen_once, COL_BASE2, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(gen_once, COL_HI_LT, LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(gen_once, COL_BD, LV_PART_MAIN);
-    lv_obj_set_style_border_width(gen_once, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(gen_once, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_shadow_width(gen_once, 0, 0);
-    lv_obj_set_style_pad_hor(gen_once, 12, LV_PART_MAIN);
-    lv_obj_add_event_cb(gen_once, rand_once_btn_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *gen_once_lbl = lv_label_create(gen_once);
-    lv_label_set_text(gen_once_lbl, "Gen Once");
-    lv_obj_set_style_text_font(gen_once_lbl, FONT_SANS_XXS, 0);
-    lv_obj_set_style_text_color(gen_once_lbl, COL_TX, 0);
-    lv_obj_center(gen_once_lbl);
+    lv_obj_t *sim_key_lbl = lv_label_create(sim_hdr);
+    lv_label_set_text(sim_key_lbl, "SIM");
+    lv_obj_set_style_text_font(sim_key_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(sim_key_lbl, COL_TX3, 0);
 
-    for (int i = 0; i < 5; i++) {
-        lv_obj_t *ibtn = lv_btn_create(row1);
-        lv_obj_set_size(ibtn, LV_SIZE_CONTENT, 44);
-        lv_obj_set_style_border_color(ibtn, COL_BD, LV_PART_MAIN);
-        lv_obj_set_style_border_width(ibtn, 1, LV_PART_MAIN);
-        lv_obj_set_style_radius(ibtn, SZ_RADIUS_SM, 0);
-        lv_obj_set_style_shadow_width(ibtn, 0, 0);
-        lv_obj_set_style_pad_hor(ibtn, 10, LV_PART_MAIN);
-        lv_obj_add_event_cb(ibtn, interval_btn_cb, LV_EVENT_CLICKED,
-                            (void *)(intptr_t)i);
-        lv_obj_t *ilbl = lv_label_create(ibtn);
-        lv_label_set_text(ilbl, s_interval_labels[i]);
-        lv_obj_set_style_text_font(ilbl, FONT_MONO_XXS, 0);
-        lv_obj_center(ilbl);
-        s_interval_btns[i] = ibtn;
-    }
-    update_interval_btns();
+    // Pill badge
+    lv_obj_t *pill = lv_obj_create(sim_hdr);
+    lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(pill, COL_HI, 0);
+    lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(pill, 0, 0);
+    lv_obj_set_style_radius(pill, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_hor(pill, 8, 0);
+    lv_obj_set_style_pad_ver(pill, 4, 0);
+    lv_obj_set_style_shadow_width(pill, 0, 0);
+    lv_obj_set_style_outline_width(pill, 0, 0);
+    lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(pill, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(pill, COL_HI_DK, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(pill, sim_profile_cycle_cb, LV_EVENT_CLICKED, NULL);
 
-    // Row 2: Start/Stop button
-    s_rand_start_btn = lv_btn_create(rand_sect);
-    lv_obj_set_size(s_rand_start_btn, LV_PCT(100), 44);
-    lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI_DK, LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(s_rand_start_btn, 0, 0);
-    lv_obj_set_style_radius(s_rand_start_btn, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_shadow_width(s_rand_start_btn, 0, 0);
-    lv_obj_add_event_cb(s_rand_start_btn, rand_start_btn_cb, LV_EVENT_CLICKED, NULL);
+    s_sim_profile_lbl = lv_label_create(pill);
+    lv_label_set_text(s_sim_profile_lbl, "—");
+    lv_obj_set_style_text_font(s_sim_profile_lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(s_sim_profile_lbl, COL_BASE, 0);
 
-    s_rand_start_lbl = lv_label_create(s_rand_start_btn);
-    lv_label_set_text(s_rand_start_lbl, "Start Auto");
-    lv_obj_set_style_text_font(s_rand_start_lbl, FONT_SANS_XXS, 0);
-    lv_obj_set_style_text_color(s_rand_start_lbl, COL_BASE, 0);
-    lv_obj_center(s_rand_start_lbl);
+    // Min / Max rows for SIM_RANDOM_WALK (hidden by default)
+    // minus_code: field | dir<<1 — 0=min-minus, 2=min-plus, 1=max-minus, 3=max-plus
+    s_sim_rw_rows[0] = sim_build_param_row(s_sim_panel, "Min",
+                                           &s_sim_rw_min_lbl, sim_rw_btn_cb, 0, 2);
+    s_sim_rw_rows[1] = sim_build_param_row(s_sim_panel, "Max",
+                                           &s_sim_rw_max_lbl, sim_rw_btn_cb, 1, 3);
+    lv_obj_add_flag(s_sim_rw_rows[0], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_rw_rows[1], LV_OBJ_FLAG_HIDDEN);
+
+    // Ampl / Period / Offset rows for SIM_SINE (hidden by default)
+    // Encoding: field in bits 0-1, direction in bit 2: ampl-minus=0, ampl-plus=4, period-minus=1, period-plus=5, offset-minus=2, offset-plus=6
+    s_sim_sine_rows[0] = sim_build_param_row(s_sim_panel, "Ampl",
+                                             &s_sim_sine_ampl_lbl, sim_sine_btn_cb, 0, 4);
+    s_sim_sine_rows[1] = sim_build_param_row(s_sim_panel, "Per",
+                                             &s_sim_sine_period_lbl, sim_sine_btn_cb, 1, 5);
+    s_sim_sine_rows[2] = sim_build_param_row(s_sim_panel, "Offs",
+                                             &s_sim_sine_offset_lbl, sim_sine_btn_cb, 2, 6);
+    lv_obj_add_flag(s_sim_sine_rows[0], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_sine_rows[1], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_sim_sine_rows[2], LV_OBJ_FLAG_HIDDEN);
+
+    // Step row for SIM_RAMP (hidden by default); user_data: 0=minus, 1=plus
+    s_sim_ramp_row = sim_build_param_row(s_sim_panel, "Step",
+                                         &s_sim_ramp_step_lbl, sim_ramp_btn_cb, 0, 1);
+    lv_obj_add_flag(s_sim_ramp_row, LV_OBJ_FLAG_HIDDEN);
+
 }
 
 // ─── Internal: open context helper ───────────────────────────────────────────
 static void open_context(const char *entity, Metric *m,
                          int ctx_tank, int ctx_machine, int ctx_metric)
 {
-    // Stop running random timer
-    if (s_rand_timer) {
-        lv_timer_delete(s_rand_timer);
-        s_rand_timer = NULL;
-        if (s_rand_start_lbl) lv_label_set_text(s_rand_start_lbl, "Start Auto");
-        if (s_rand_start_btn)
-            lv_obj_set_style_bg_color(s_rand_start_btn, COL_HI, 0);
-    }
-
     strncpy(s_entity, entity,  sizeof(s_entity)  - 1);
     strncpy(s_metric, m->label, sizeof(s_metric) - 1);
     strncpy(s_unit,   m->unit,  sizeof(s_unit)   - 1);
@@ -923,6 +1077,8 @@ static void open_context(const char *entity, Metric *m,
             lv_obj_add_flag(s_slider_row, LV_OBJ_FLAG_HIDDEN);
         }
     }
+
+    sim_panel_configure(m);
 
     s_viz_needs_rebuild = true;
     detail_refresh_labels();

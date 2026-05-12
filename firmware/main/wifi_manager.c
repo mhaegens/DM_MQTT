@@ -160,35 +160,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t base,
             s_on_ip();               // fire on every IP acquisition
         }
 
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_SCAN_DONE) {
-        uint16_t n = WIFI_SCAN_MAX;
-        wifi_ap_record_t *recs = calloc(n, sizeof(*recs));
-        if (!recs) return;
-        esp_wifi_scan_get_ap_records(&n, recs);
-
-        wifi_scan_entry_t *e = calloc(n + 1, sizeof(*e));
-        if (!e) { free(recs); return; }
-        int cnt = 0;
-        for (int i = 0; i < (int)n; i++) {
-            if (recs[i].ssid[0] == '\0') continue;
-            strncpy(e[cnt].ssid, (char *)recs[i].ssid, 32);
-            e[cnt].rssi = recs[i].rssi;
-            e[cnt].open = (recs[i].authmode == WIFI_AUTH_OPEN);
-            cnt++;
-        }
-        free(recs);
-
-        if (s_scan_cb) {
-            scan_async_t *a = malloc(sizeof(*a));
-            if (!a) { free(e); return; }
-            a->cb = s_scan_cb;
-            a->e  = e;
-            a->n  = cnt;
-            s_scan_cb = NULL;
-            lv_async_call(scan_dispatch, a);
-        } else {
-            free(e);
-        }
     }
 }
 
@@ -229,11 +200,62 @@ void wifi_manager_init(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+// Blocking scan runs in a FreeRTOS task so LVGL is not stalled.
+// esp_wifi_scan_start with block=true works reliably on the C6 SDIO bridge;
+// the async WIFI_EVENT_SCAN_DONE path returned 0 APs while STA was reconnecting.
+static void scan_task(void *arg)
+{
+    wifi_scan_cb_t cb = (wifi_scan_cb_t)arg;
+    esp_err_t err;
+
+    // Stop any active STA reconnect before scanning; blocking scan returns
+    // ESP_ERR_WIFI_STATE immediately if the driver is mid-connect.
+    esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(300));
+
+    uint16_t n = WIFI_SCAN_MAX;
+    wifi_ap_record_t *recs = calloc(WIFI_SCAN_MAX, sizeof(*recs));
+    if (!recs) { vTaskDelete(NULL); return; }
+
+    esp_wifi_start();
+    err = esp_wifi_scan_start(NULL, true);   // blocking
+    esp_wifi_scan_get_ap_num(&n);
+    ESP_LOGI("wifi_mgr", "scan ret=0x%x ap_count=%u", err, n);
+    if (n > WIFI_SCAN_MAX) n = WIFI_SCAN_MAX;
+    esp_wifi_scan_get_ap_records(&n, recs);
+
+    wifi_scan_entry_t *e = calloc(n + 1, sizeof(*e));
+    int cnt = 0;
+    if (e) {
+        for (int i = 0; i < (int)n; i++) {
+            if (recs[i].ssid[0] == '\0') continue;
+            strncpy(e[cnt].ssid, (char *)recs[i].ssid, 32);
+            e[cnt].rssi = recs[i].rssi;
+            e[cnt].open = (recs[i].authmode == WIFI_AUTH_OPEN);
+            cnt++;
+        }
+    }
+    free(recs);
+
+    scan_async_t *a = malloc(sizeof(*a));
+    if (a && e) {
+        a->cb = cb;
+        a->e  = e;
+        a->n  = cnt;
+        if (lv_async_call(scan_dispatch, a) != LV_RESULT_OK) {
+            free(e); free(a);
+        }
+    } else {
+        free(e); free(a);
+    }
+
+    vTaskDelete(NULL);
+}
+
 void wifi_manager_scan(wifi_scan_cb_t cb)
 {
-    s_scan_cb = cb;
-    wifi_scan_config_t sc = { .show_hidden = false };
-    esp_wifi_scan_start(&sc, false);
+    s_scan_cb = NULL;  // not used in blocking path
+    xTaskCreate(scan_task, "wifi_scan", 4096, (void *)cb, 5, NULL);
 }
 
 void wifi_manager_connect(const char *ssid, const char *password,

@@ -1,4 +1,4 @@
-// ui_wifi_password.c — WiFi password entry screen (VIEW_WIFI_PASSWORD = 9).
+// ui_wifi_password.c - WiFi password entry screen (VIEW_WIFI_PASSWORD = 9).
 #include "ui_wifi_password.h"
 #include "ui_main.h"
 #include "ui_theme.h"
@@ -12,6 +12,8 @@ static lv_obj_t *s_pwd_ta      = NULL;
 static lv_obj_t *s_kbd         = NULL;
 static lv_obj_t *s_connect_btn = NULL;
 static lv_obj_t *s_connect_lbl = NULL;
+static lv_obj_t *s_show_btn    = NULL;
+static bool      s_pwd_visible  = false;
 
 static char s_pending_ssid[33] = {0};
 
@@ -21,16 +23,25 @@ static void connect_result_cb(bool success, const char *ip)
     if (success) {
         ui_pop_detail();
     } else {
-        lv_label_set_text(s_connect_lbl, "Failed \xe2\x80\x94 retry");
+        lv_label_set_text(s_connect_lbl, "Failed - retry");
         lv_obj_clear_state(s_connect_btn, LV_STATE_DISABLED);
     }
+}
+
+static void show_pwd_cb(lv_event_t *e)
+{
+    (void)e;
+    s_pwd_visible = !s_pwd_visible;
+    lv_textarea_set_password_mode(s_pwd_ta, !s_pwd_visible);
+    lv_obj_t *lbl = lv_obj_get_child(s_show_btn, 0);
+    if (lbl) lv_label_set_text(lbl, s_pwd_visible ? LV_SYMBOL_EYE_CLOSE : LV_SYMBOL_EYE_OPEN);
 }
 
 static void connect_btn_cb(lv_event_t *e)
 {
     (void)e;
     const char *pwd = lv_textarea_get_text(s_pwd_ta);
-    lv_label_set_text(s_connect_lbl, "Connecting\xe2\x80\xa6");
+    lv_label_set_text(s_connect_lbl, "Connecting...");
     lv_obj_add_state(s_connect_btn, LV_STATE_DISABLED);
     wifi_manager_connect(s_pending_ssid, pwd, connect_result_cb);
 }
@@ -69,6 +80,22 @@ void ui_wifi_password_create(lv_obj_t *parent)
     lv_obj_set_style_radius(s_pwd_ta, SZ_RADIUS_SM, 0);
     lv_obj_set_style_shadow_width(s_pwd_ta, 0, 0);
 
+    // Show/hide toggle sits below the textarea
+    s_show_btn = lv_btn_create(s_screen);
+    lv_obj_set_size(s_show_btn, CONTENT_W - SZ_GAP * 2, 40);
+    lv_obj_set_style_bg_color(s_show_btn, COL_BASE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_show_btn, COL_HI_LT, LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(s_show_btn, COL_BD, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_show_btn, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_show_btn, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_shadow_width(s_show_btn, 0, 0);
+    lv_obj_add_event_cb(s_show_btn, show_pwd_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *show_lbl = lv_label_create(s_show_btn);
+    lv_label_set_text(show_lbl, LV_SYMBOL_EYE_OPEN);
+    lv_obj_set_style_text_font(show_lbl, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(show_lbl, COL_TX2, 0);
+    lv_obj_center(show_lbl);
+
     s_kbd = lv_keyboard_create(s_screen);
     lv_obj_set_size(s_kbd, CONTENT_W - SZ_GAP * 2, 280);
     lv_keyboard_set_textarea(s_kbd, s_pwd_ta);
@@ -106,4 +133,10 @@ void ui_wifi_password_activate(const char *ssid)
 
     lv_textarea_set_text(s_pwd_ta, "");
     lv_obj_clear_state(s_connect_btn, LV_STATE_DISABLED);
+
+    // Reset to password-hidden state
+    s_pwd_visible = false;
+    lv_textarea_set_password_mode(s_pwd_ta, true);
+    lv_obj_t *show_lbl = lv_obj_get_child(s_show_btn, 0);
+    if (show_lbl) lv_label_set_text(show_lbl, LV_SYMBOL_EYE_OPEN);
 }

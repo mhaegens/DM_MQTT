@@ -1,33 +1,35 @@
 {
   "project": "DM-MQTT-Firmware",
-  "branchName": "ralph/sim-steady-profile",
-  "description": "Add a fourth simulation profile 'steady' that keeps a metric at its current value with no automatic variation. The value is static over time but remains manually adjustable by the operator. Covers enum, sim_task skip logic, config_loader parsing, JSON config update, and a test-case on the raw tank flowIn metric.",
+  "branchName": "ralph/wifi-provisioning-fixes",
+  "description": "Fix three blocking WiFi provisioning bugs (scan finds nothing, block char in label, captive portal crash) and harden the full AP -> portal -> connect -> STA flow for reliable field demos. WiFi chip is ESP32-C6.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Add SIM_STEADY enum and no-op skip logic in sim_task",
-      "description": "As a firmware developer, I need the SimProfile enum to include SIM_STEADY and sim_metric() to skip value mutation for steady metrics so that the published value never changes between ticks.",
+      "title": "Fix WiFi mode so scanning works in AP+STA coexistence",
+      "description": "As a developer, I need the ESP32 WiFi mode set to WIFI_MODE_APSTA before scanning so that esp_wifi_scan_start() can find networks while the soft-AP is active.",
       "acceptanceCriteria": [
-        "SimProfile enum in main/ui/data.h has SIM_STEADY added as the last value: typedef enum { SIM_RANDOM_WALK = 0, SIM_SINE, SIM_RAMP, SIM_STEADY } SimProfile;",
-        "sim_metric() in sim_task.c does not call metric_push() when sim_profile == SIM_STEADY — preferred: wrap the metric_push call in if (m->sim_profile != SIM_STEADY) after the switch",
-        "case SIM_STEADY: is present in the switch (even if just a break) to suppress compiler warnings about unhandled enum values",
-        "idf.py build succeeds with zero new warnings",
-        "Typecheck passes"
+        "wifi_manager_start_ap() calls esp_wifi_set_mode(WIFI_MODE_APSTA) instead of WIFI_MODE_AP",
+        "wifi_manager_scan() (wifi_manager.c:232) is only called after the AP is started so mode is already APSTA",
+        "WIFI_EVENT_SCAN_DONE fires and scan_done_cb() receives at least one AP entry when a real network is in range",
+        "If scan returns zero APs, scan_done_cb() shows 'No networks found' in the status label instead of an empty list",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_manager.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: tapping Scan on the WiFi setup screen populates a list of nearby networks"
       ],
       "priority": 1,
       "passes": true,
-      "notes": ""
+      "notes": "WiFi chip is ESP32-C6. WIFI_MODE_APSTA coexistence is supported on C6 with ESP-IDF 5.x."
     },
     {
       "id": "US-002",
-      "title": "Parse 'steady' string in config_loader.c",
-      "description": "As a firmware developer, I need config_loader.c to map the JSON string 'steady' to SIM_STEADY so that configs using the new profile are loaded correctly.",
+      "title": "Replace U+2026 ellipsis with ASCII fallback in scan label",
+      "description": "As a user, I want the Scanning... label to display clean text so the UI looks professional during provisioning.",
       "acceptanceCriteria": [
-        "config_loader.c has an explicit else if (!strcmp(v->valuestring, \"steady\")) m->sim_profile = SIM_STEADY; branch in the profile-parsing block",
-        "The new branch is placed before the catch-all fallback that maps unknown strings to SIM_RANDOM_WALK",
-        "Existing branches for 'sine' and 'ramp' are unchanged",
-        "idf.py build succeeds with zero new warnings",
-        "Typecheck passes"
+        "ui_wifi_setup.c:172 uses \"Scanning...\" (three ASCII full stops, no UTF-8 escape \\xe2\\x80\\xa6)",
+        "Search entire main/ui/ directory for any other \\xe2\\x80\\xa6 occurrences and replace all with ...",
+        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_wifi_setup.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: no block character (□) appears on the scan screen during or after scanning"
       ],
       "priority": 2,
       "passes": true,
@@ -35,32 +37,73 @@
     },
     {
       "id": "US-003",
-      "title": "Set raw tank flowIn metric to 'steady' in sapdm_config.json",
-      "description": "As a demo operator, I want the raw tank's flowIn metric set to steady in the JSON config so the fix can be verified by flashing and observing MQTT output.",
+      "title": "Increase HTTP server task stack to prevent portal crash",
+      "description": "As a developer, I need the captive portal HTTP server task to have enough stack so it does not crash when serving the scan-results HTML page.",
       "acceptanceCriteria": [
-        "In main/spiffs_image/sapdm_config.json, the flowIn metric inside the 'raw' tank entry has its sim object changed to {\"profile\":\"steady\"} — no other sim fields needed",
-        "sapdm_config.annotated.json has the same change applied with a brief inline comment noting that 'steady' means no automatic variation",
-        "Both JSON files are valid (no syntax errors — verify with python3 -c 'import json,sys; json.load(open(sys.argv[1]))' on each file)",
-        "Typecheck passes"
+        "wifi_portal.c sets config.stack_size = 8192 on the httpd_config_t before httpd_start()",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: iPhone can navigate to http://192.168.4.1/ and sees the HTML provisioning form without the device rebooting"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Verify default_config.c needs no change",
-      "description": "As a developer, I need to confirm that default_config.c is consistent with the new enum and does not require updates.",
+      "title": "Move blocking scan out of HTTP handler into pre-cached background scan",
+      "description": "As a developer, I need the root HTTP handler to serve a pre-cached scan result instead of blocking the server task with a synchronous scan so we eliminate the stack-depth risk permanently.",
       "acceptanceCriteria": [
-        "Read default_config.c and confirm there is no hard-coded 'steady' string that conflicts with the new profile",
-        "The config_loader.c fallback to SIM_RANDOM_WALK for unknown strings still applies as a safe default — no change needed in default_config.c",
-        "If default_config.c contains any sim profile string other than 'random_walk', 'sine', or 'ramp', flag it in notes — do not change any values",
-        "idf.py build succeeds",
-        "Typecheck passes"
+        "wifi_portal_start() calls wifi_manager_scan() immediately after the AP starts to pre-populate the cache",
+        "A module-level s_cached_aps[] array (max WIFI_SCAN_MAX entries) and s_cached_ap_count counter are added to wifi_portal.c",
+        "A portal_scan_done_cb() callback populates s_cached_aps[] and s_cached_ap_count; registered with wifi_manager_scan()",
+        "get_root_handler() reads from s_cached_aps[] only; it does not call esp_wifi_scan_start() directly",
+        "If s_cached_ap_count == 0 (scan not yet complete), get_root_handler() serves the form with a 'Scanning, please refresh' notice instead of an empty dropdown",
+        "A GET /rescan URI handler is registered before the GET /* wildcard; it calls wifi_manager_scan() and redirects to /",
+        "HTTP server task stack size remains 8192 (set in US-003)",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: portal form shows a populated network dropdown; submitting correct credentials causes the device to connect and iPhone sees a success page"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": "default_config.c uses only random_walk, ramp, and sine profiles — no steady or unknown strings. No change required."
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Add DNS hijack so iOS redirects to portal automatically",
+      "description": "As a user, I want the captive portal to open automatically when I connect to the SAP-DM-Setup hotspot so I do not need to manually type 192.168.4.1.",
+      "acceptanceCriteria": [
+        "A minimal UDP DNS responder task is implemented (port 53, answers all A-record queries with 192.168.4.1)",
+        "DNS responder task is started inside wifi_portal_start() after httpd_start()",
+        "DNS responder task is stopped and deleted inside wifi_portal_stop()",
+        "DNS responder task stack is at least 4096 bytes",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c (or new dns_responder.c if extracted) produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: iOS auto-opens the captive portal UI within ~5 seconds of joining the SAP-DM-Setup network without manually typing the IP"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "ESP32-C6 uses lwIP for networking; standard BSD socket API (recvfrom/sendto on SOCK_DGRAM port 53) works fine."
+    },
+    {
+      "id": "US-006",
+      "title": "Show provisioning status on device display during portal flow",
+      "description": "As a demo operator, I want the device screen to reflect the portal state so I can confirm what is happening without a serial monitor.",
+      "acceptanceCriteria": [
+        "wifi_portal_start() fires an lv_async_call to set the WiFi setup screen status label to 'Hotspot active - connect to SAP-DM-Setup'",
+        "On STA association event (phone joins AP), status label updates to 'Phone connected' via lv_async_call",
+        "On POST /connect received, status label updates to 'Connecting to [SSID]...' via lv_async_call",
+        "On successful STA connection (IP_EVENT_STA_GOT_IP), status label updates to 'Connected!' via lv_async_call and navigates to the main screen after 2 seconds",
+        "On failed STA connection (WIFI_EVENT_STA_DISCONNECTED with non-zero reason), status label updates to 'Connection failed - try again' via lv_async_call",
+        "No direct LVGL API calls from event handlers or HTTP task (all go through lv_async_call)",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c and main/ui/ui_wifi_setup.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: device screen progresses through 'Hotspot active' -> 'Phone connected' -> 'Connecting to [SSID]...' -> 'Connected!' during a full provisioning flow without a serial monitor"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

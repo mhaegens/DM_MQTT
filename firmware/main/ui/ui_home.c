@@ -11,7 +11,7 @@ static void wifi_kpi_cb(lv_event_t *e)  { (void)e; ui_push_wifi_setup(); }
 static void mqtt_kpi_cb(lv_event_t *e)  { (void)e; ui_push_mqtt_detail(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ui_home.c — Home screen: 2×2 KPI grid + status rows.
+//  ui_home.c - Home screen: 2×2 KPI grid + status rows.
 //  Refreshed by a 1500ms LVGL timer (live data), tab activation, and events.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -361,7 +361,7 @@ void ui_home_refresh(void)
     if (s_operator_label) {
         if (g_active_badge >= 0 && g_active_badge < g_badge_count) {
             char op_val[160];
-            snprintf(op_val, sizeof(op_val), "%s  \xe2\x80\x93  %s",
+            snprintf(op_val, sizeof(op_val), "%s  -  %s",
                      g_badges[g_active_badge].name,
                      g_badges[g_active_badge].role);
             lv_label_set_text(s_operator_label, op_val);
