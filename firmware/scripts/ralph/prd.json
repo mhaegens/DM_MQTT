@@ -1,107 +1,108 @@
 {
   "project": "DM-MQTT-Firmware",
-  "branchName": "ralph/unified-sim-control-panel",
-  "description": "Replace the random generator panel in ui_detail.c with a Sim Control Panel that exposes the sim_task parameters for the active profile (random_walk, sine, ramp). The panel is hidden for SIM_STEADY metrics. The random generator (Gen Once, Start Auto, interval buttons) is removed entirely — sim_task is the sole driver of automatic value generation.",
+  "branchName": "ralph/wifi-provisioning-fixes",
+  "description": "Fix three blocking WiFi provisioning bugs (scan finds nothing, block char in label, captive portal crash) and harden the full AP -> portal -> connect -> STA flow for reliable field demos. WiFi chip is ESP32-C6.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Remove random generator section from ui_detail.c",
-      "description": "As a developer, I want to delete the random generator panel from ui_detail.c since sim_task already handles automatic value generation.",
+      "title": "Fix WiFi mode so scanning works in AP+STA coexistence",
+      "description": "As a developer, I need the ESP32 WiFi mode set to WIFI_MODE_APSTA before scanning so that esp_wifi_scan_start() can find networks while the soft-AP is active.",
       "acceptanceCriteria": [
-        "Static variables removed: s_rand_start_btn, s_rand_start_lbl, s_interval_btns[5], s_rand_timer, s_rand_interval_idx, s_intervals[], s_interval_labels[]",
-        "Functions removed: rand_gen_once(), rand_timer_cb(), rand_once_btn_cb(), rand_start_btn_cb(), interval_btn_cb(), update_interval_btns()",
-        "The rand_sect card and its children are removed from ui_detail_create()",
-        "open_context() has the s_rand_timer cleanup block removed",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors and zero new warnings",
-        "Typecheck passes"
+        "wifi_manager_start_ap() calls esp_wifi_set_mode(WIFI_MODE_APSTA) instead of WIFI_MODE_AP",
+        "wifi_manager_scan() (wifi_manager.c:232) is only called after the AP is started so mode is already APSTA",
+        "WIFI_EVENT_SCAN_DONE fires and scan_done_cb() receives at least one AP entry when a real network is in range",
+        "If scan returns zero APs, scan_done_cb() shows 'No networks found' in the status label instead of an empty list",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_manager.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: tapping Scan on the WiFi setup screen populates a list of nearby networks"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "WiFi chip is ESP32-C6. WIFI_MODE_APSTA coexistence is supported on C6 with ESP-IDF 5.x."
     },
     {
       "id": "US-002",
-      "title": "Add s_sim_panel card skeleton and show/hide logic",
-      "description": "As a developer, I need the sim panel card created in ui_detail_create() and shown/hidden by open_context() based on the metric's sim_profile.",
+      "title": "Replace U+2026 ellipsis with ASCII fallback in scan label",
+      "description": "As a user, I want the Scanning... label to display clean text so the UI looks professional during provisioning.",
       "acceptanceCriteria": [
-        "Static variable s_sim_panel (lv_obj_t*) added to ui_detail.c",
-        "s_sim_panel card created in ui_detail_create() in place of rand_sect, full-width, same card styling as other cards in the screen",
-        "open_context() calls a static helper sim_panel_configure(m) that adds LV_OBJ_FLAG_HIDDEN when m->sim_profile == SIM_STEADY and clears it otherwise",
-        "rand_h constant replaced with sim_panel_h = 56 (header row only for now); viz_h formula updated to use sim_panel_h",
-        "viz_h remains >= 80 px after the height change",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors and zero new warnings",
-        "Typecheck passes"
+        "ui_wifi_setup.c:172 uses \"Scanning...\" (three ASCII full stops, no UTF-8 escape \\xe2\\x80\\xa6)",
+        "Search entire main/ui/ directory for any other \\xe2\\x80\\xa6 occurrences and replace all with ...",
+        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_wifi_setup.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: no block character (□) appears on the scan screen during or after scanning"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Add profile badge header row to sim panel",
-      "description": "As a demo operator, I want to see the active sim profile name displayed in the panel header so I know at a glance what is driving this metric.",
+      "title": "Increase HTTP server task stack to prevent portal crash",
+      "description": "As a developer, I need the captive portal HTTP server task to have enough stack so it does not crash when serving the scan-results HTML page.",
       "acceptanceCriteria": [
-        "Static variable s_sim_profile_lbl (lv_obj_t*) added",
-        "Panel contains a header row with a dimmed 'SIM' label (FONT_MONO_XXS, COL_TX3) on the left and a pill badge on the right",
-        "Pill badge: COL_HI background, COL_BASE text, FONT_MONO_XXS, padded, rounded corners (SZ_RADIUS_SM)",
-        "sim_panel_configure() sets badge text to 'RANDOM WALK', 'SINE', or 'RAMP' to match m->sim_profile",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors",
-        "Typecheck passes"
+        "wifi_portal.c sets config.stack_size = 8192 on the httpd_config_t before httpd_start()",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: iPhone can navigate to http://192.168.4.1/ and sees the HTML provisioning form without the device rebooting"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Add rand_min / rand_max parameter rows for SIM_RANDOM_WALK",
-      "description": "As a demo operator, I want to tune the min/max range of a random-walk metric on the fly without editing JSON.",
+      "title": "Move blocking scan out of HTTP handler into pre-cached background scan",
+      "description": "As a developer, I need the root HTTP handler to serve a pre-cached scan result instead of blocking the server task with a synchronous scan so we eliminate the stack-depth risk permanently.",
       "acceptanceCriteria": [
-        "Two +/- rows inside s_sim_panel: 'Min' row for rand_min, 'Max' row for rand_max; each has a key label, a value label (s_sim_rw_min_lbl / s_sim_rw_max_lbl), and − / + buttons",
-        "sim_panel_configure() shows these rows only when m->sim_profile == SIM_RANDOM_WALK; hides them otherwise",
-        "sim_panel_configure() populates value labels with current m->rand_min and m->rand_max",
-        "Tapping − / + updates m->rand_min or m->rand_max on the live Metric struct (via s_ctx_tank / s_ctx_machine / s_ctx_metric) by ±m->step",
-        "Clamp rand_min to [m->min_val, m->rand_max - m->step]; clamp rand_max to [m->rand_min + m->step, m->max_val]",
-        "sim_panel_h updated so viz_h remains >= 80 px with these rows visible",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors",
-        "Typecheck passes"
+        "wifi_portal_start() calls wifi_manager_scan() immediately after the AP starts to pre-populate the cache",
+        "A module-level s_cached_aps[] array (max WIFI_SCAN_MAX entries) and s_cached_ap_count counter are added to wifi_portal.c",
+        "A portal_scan_done_cb() callback populates s_cached_aps[] and s_cached_ap_count; registered with wifi_manager_scan()",
+        "get_root_handler() reads from s_cached_aps[] only; it does not call esp_wifi_scan_start() directly",
+        "If s_cached_ap_count == 0 (scan not yet complete), get_root_handler() serves the form with a 'Scanning, please refresh' notice instead of an empty dropdown",
+        "A GET /rescan URI handler is registered before the GET /* wildcard; it calls wifi_manager_scan() and redirects to /",
+        "HTTP server task stack size remains 8192 (set in US-003)",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: portal form shows a populated network dropdown; submitting correct credentials causes the device to connect and iPhone sees a success page"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-005",
-      "title": "Add amplitude / period / offset parameter rows for SIM_SINE",
-      "description": "As a demo operator, I want to adjust the sine wave shape of a sine-profile metric on the fly.",
+      "title": "Add DNS hijack so iOS redirects to portal automatically",
+      "description": "As a user, I want the captive portal to open automatically when I connect to the SAP-DM-Setup hotspot so I do not need to manually type 192.168.4.1.",
       "acceptanceCriteria": [
-        "Three +/- rows inside s_sim_panel: 'Ampl' (amplitude), 'Period' (period_s), 'Offset'; each has a key label, value label, and − / + buttons",
-        "sim_panel_configure() shows these rows only when m->sim_profile == SIM_SINE; hides them otherwise",
-        "sim_panel_configure() populates labels with current m->sim_amplitude, m->sim_period_s, m->sim_offset",
-        "Tapping − / + updates the corresponding field on the live Metric struct: amplitude step = m->step; period step = 1.0f; offset step = m->step",
-        "Clamp: amplitude >= 0; period >= 1.0f; offset clamped so offset - amplitude >= m->min_val and offset + amplitude <= m->max_val",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors",
-        "Typecheck passes"
+        "A minimal UDP DNS responder task is implemented (port 53, answers all A-record queries with 192.168.4.1)",
+        "DNS responder task is started inside wifi_portal_start() after httpd_start()",
+        "DNS responder task is stopped and deleted inside wifi_portal_stop()",
+        "DNS responder task stack is at least 4096 bytes",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c (or new dns_responder.c if extracted) produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: iOS auto-opens the captive portal UI within ~5 seconds of joining the SAP-DM-Setup network without manually typing the IP"
       ],
       "priority": 5,
-      "passes": true,
-      "notes": ""
+      "passes": false,
+      "notes": "ESP32-C6 uses lwIP for networking; standard BSD socket API (recvfrom/sendto on SOCK_DGRAM port 53) works fine."
     },
     {
       "id": "US-006",
-      "title": "Add step-size parameter row for SIM_RAMP",
-      "description": "As a demo operator, I want to change how fast a ramp metric increments without editing JSON.",
+      "title": "Show provisioning status on device display during portal flow",
+      "description": "As a demo operator, I want the device screen to reflect the portal state so I can confirm what is happening without a serial monitor.",
       "acceptanceCriteria": [
-        "One +/- row inside s_sim_panel: 'Step' row with value label (s_sim_ramp_step_lbl) and − / + buttons",
-        "sim_panel_configure() shows this row only when m->sim_profile == SIM_RAMP; hides it otherwise",
-        "sim_panel_configure() populates value label with current m->step",
-        "Tapping − / + updates m->step on the live Metric struct by ±0.1f",
-        "Clamp: m->step >= 0.1f",
-        "Direct riscv32-esp-elf-gcc compile of main/ui/ui_detail.c produces zero errors",
-        "Typecheck passes"
+        "wifi_portal_start() fires an lv_async_call to set the WiFi setup screen status label to 'Hotspot active - connect to SAP-DM-Setup'",
+        "On STA association event (phone joins AP), status label updates to 'Phone connected' via lv_async_call",
+        "On POST /connect received, status label updates to 'Connecting to [SSID]...' via lv_async_call",
+        "On successful STA connection (IP_EVENT_STA_GOT_IP), status label updates to 'Connected!' via lv_async_call and navigates to the main screen after 2 seconds",
+        "On failed STA connection (WIFI_EVENT_STA_DISCONNECTED with non-zero reason), status label updates to 'Connection failed - try again' via lv_async_call",
+        "No direct LVGL API calls from event handlers or HTTP task (all go through lv_async_call)",
+        "Direct riscv32-esp-elf-gcc compile of main/wifi_portal.c and main/ui/ui_wifi_setup.c produces zero errors",
+        "Typecheck passes",
+        "Flash to device using idf.py flash and human-verify: device screen progresses through 'Hotspot active' -> 'Phone connected' -> 'Connecting to [SSID]...' -> 'Connected!' during a full provisioning flow without a serial monitor"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

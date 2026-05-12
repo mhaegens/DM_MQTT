@@ -1,4 +1,4 @@
-// ui_wifi_setup.c — WiFi setup overlay: Scan & Join mode + Setup via Phone mode.
+// ui_wifi_setup.c - WiFi setup overlay: Scan & Join mode + Setup via Phone mode.
 #include "ui_wifi_setup.h"
 #include "ui_main.h"
 #include "ui_theme.h"
@@ -75,7 +75,7 @@ static void connect_result_cb(bool success, const char *ip)
         if (s_conn_ssid_lbl) lv_label_set_text(s_conn_ssid_lbl, g_wifi_ssid);
         if (s_conn_sub_lbl) {
             char sub[48];
-            snprintf(sub, sizeof(sub), "%d dBm  \xc2\xb7  %s",
+            snprintf(sub, sizeof(sub), "%d dBm  |  %s",
                      wifi_manager_get_rssi(), g_device_ip);
             lv_label_set_text(s_conn_sub_lbl, sub);
         }
@@ -134,10 +134,11 @@ static void scan_done_cb(const wifi_scan_entry_t *results, int count)
             lv_obj_add_event_cb(row, row_tap_cb, LV_EVENT_CLICKED, NULL);
             lv_obj_add_event_cb(row, row_data_free_cb, LV_EVENT_DELETE, NULL);
 
-            // Lock / unlock icon
+            // Network icon: wifi symbol for secured (common), check for open (rare)
             lv_obj_t *lock = lv_label_create(row);
-            lv_label_set_text(lock, rd->open ? "\xf0\x9f\x94\x93" : "\xf0\x9f\x94\x92");
+            lv_label_set_text(lock, rd->open ? LV_SYMBOL_OK : LV_SYMBOL_WIFI);
             lv_obj_set_style_text_font(lock, FONT_SANS_XXS, 0);
+            lv_obj_set_style_text_color(lock, rd->open ? COL_OK : COL_TX2, 0);
             lv_obj_set_width(lock, 28);
 
             // SSID label
@@ -149,14 +150,19 @@ static void scan_done_cb(const wifi_scan_entry_t *results, int count)
             lv_label_set_long_mode(ssid_lbl, LV_LABEL_LONG_DOT);
             lv_obj_set_width(ssid_lbl, LV_PCT(55));
 
-            // Signal strength
+            // Signal strength — battery symbols repurposed as signal bars (4/3/2/1)
             int8_t rssi = results[i].rssi;
             int bars = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
+            static const char *bar_syms[] = {
+                LV_SYMBOL_BATTERY_EMPTY,   // bars=0 (unused)
+                LV_SYMBOL_BATTERY_1,       // bars=1
+                LV_SYMBOL_BATTERY_2,       // bars=2
+                LV_SYMBOL_BATTERY_3,       // bars=3
+                LV_SYMBOL_BATTERY_FULL,    // bars=4
+            };
             lv_obj_t *rssi_lbl = lv_label_create(row);
-            char rs[12];
-            snprintf(rs, sizeof(rs), "%d dBm", rssi);
-            lv_label_set_text(rssi_lbl, rs);
-            lv_obj_set_style_text_font(rssi_lbl, FONT_MONO_XXS, 0);
+            lv_label_set_text(rssi_lbl, bar_syms[bars]);
+            lv_obj_set_style_text_font(rssi_lbl, FONT_SANS_XXS, 0);
             lv_obj_set_style_text_color(rssi_lbl,
                 bars >= 3 ? COL_OK : bars >= 2 ? COL_WARN : COL_ERR, 0);
         }
@@ -169,7 +175,7 @@ static void scan_done_cb(const wifi_scan_entry_t *results, int count)
 static void scan_btn_cb(lv_event_t *e)
 {
     (void)e;
-    if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Scanning\xe2\x80\xa6");
+    if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Scanning...");
     if (s_scan_btn) lv_obj_add_state(s_scan_btn, LV_STATE_DISABLED);
     wifi_manager_scan(scan_done_cb);
 }
@@ -195,7 +201,7 @@ static void hotspot_btn_cb(lv_event_t *e)
         if (s_hotspot_btn_lbl) lv_label_set_text(s_hotspot_btn_lbl, "Stop Hotspot");
         if (s_ap_status_lbl) {
             lv_label_set_text(s_ap_status_lbl,
-                              "Hotspot active \xe2\x80\x94 connect to " PROV_AP_SSID);
+                              "Hotspot active - connect to " PROV_AP_SSID);
             lv_obj_set_style_text_color(s_ap_status_lbl, COL_OK, 0);
         }
     } else {
@@ -407,7 +413,7 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     lv_obj_set_scroll_dir(s_scan_list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(s_scan_list, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_flex_flow(s_scan_list, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(s_scan_list, LV_FLEX_ALIGN_CENTER,
+    lv_obj_set_flex_align(s_scan_list, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t *placeholder = lv_label_create(s_scan_list);
@@ -515,7 +521,7 @@ void ui_wifi_setup_activate(void)
         if (s_conn_ssid_lbl) lv_label_set_text(s_conn_ssid_lbl, g_wifi_ssid);
         if (s_conn_sub_lbl) {
             char sub[48];
-            snprintf(sub, sizeof(sub), "%d dBm  \xc2\xb7  %s",
+            snprintf(sub, sizeof(sub), "%d dBm  |  %s",
                      wifi_manager_get_rssi(), g_device_ip);
             lv_label_set_text(s_conn_sub_lbl, sub);
         }
