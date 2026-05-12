@@ -46,7 +46,7 @@
         "Flash to device using idf.py flash and human-verify: iPhone can navigate to http://192.168.4.1/ and sees the HTML provisioning form without the device rebooting"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -66,7 +66,7 @@
         "Flash to device using idf.py flash and human-verify: portal form shows a populated network dropdown; submitting correct credentials causes the device to connect and iPhone sees a success page"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -83,7 +83,7 @@
         "Flash to device using idf.py flash and human-verify: iOS auto-opens the captive portal UI within ~5 seconds of joining the SAP-DM-Setup network without manually typing the IP"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "ESP32-C6 uses lwIP for networking; standard BSD socket API (recvfrom/sendto on SOCK_DGRAM port 53) works fine."
     },
     {
