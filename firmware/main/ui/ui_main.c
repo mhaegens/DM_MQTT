@@ -535,6 +535,7 @@ void ui_pop_detail(void)
         if (s_crumb_label) lv_label_set_text(s_crumb_label, s_tank_ovw_crumb);
         g_prev_view    = VIEW_TANKS;
         g_current_view = VIEW_TANK_OVW;
+        ui_tank_overview_activate(s_tank_ovw_idx);  // refresh metric tiles with current values
     } else {
         // Standard: hide crumb bar, return to tab view
         if (g_crumb_bar) lv_obj_add_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
