@@ -288,7 +288,9 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     lv_obj_set_style_outline_width(s_screen, 0, 0);
     lv_obj_set_style_shadow_width(s_screen, 0, 0);
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(s_screen, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_screen, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_flex_flow(s_screen, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_screen, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -444,7 +446,23 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     lv_obj_t *hotspot_btn = make_action_btn(s_ap_panel, "Start Hotspot", hotspot_btn_cb);
     s_hotspot_btn_lbl = lv_obj_get_child(hotspot_btn, 0);
 
-    // ── QR code ───────────────────────────────────────────────────────────────
+    // ── Status card — always visible, right below the button ─────────────────
+    lv_obj_t *status_card = lv_obj_create(s_ap_panel);
+    lv_obj_set_size(status_card, CONTENT_W - SZ_GAP * 2, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(status_card, COL_BASE2, 0);
+    lv_obj_set_style_border_color(status_card, COL_BD, 0);
+    lv_obj_set_style_border_width(status_card, 1, 0);
+    lv_obj_set_style_radius(status_card, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(status_card, SZ_CARD_PAD, 0);
+    lv_obj_set_style_shadow_width(status_card, 0, 0);
+    lv_obj_clear_flag(status_card, LV_OBJ_FLAG_SCROLLABLE);
+
+    s_ap_status_lbl = lv_label_create(status_card);
+    lv_label_set_text(s_ap_status_lbl, "Hotspot inactive");
+    lv_obj_set_style_text_font(s_ap_status_lbl, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(s_ap_status_lbl, COL_TX3, 0);
+    lv_obj_set_width(s_ap_status_lbl, LV_PCT(100));
+    lv_label_set_long_mode(s_ap_status_lbl, LV_LABEL_LONG_WRAP);
     char wifi_qr[64];
     snprintf(wifi_qr, sizeof(wifi_qr), "WIFI:T:nopass;S:%s;;", PROV_AP_SSID);
 
@@ -505,15 +523,29 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     make_step(info_card, "2.  Open a browser and go to:\n    " PROV_PORTAL_URL);
     make_step(info_card, "3.  Enter your WiFi network name\n    and password, then tap Submit");
 
-    s_ap_status_lbl = lv_label_create(s_ap_panel);
-    lv_label_set_text(s_ap_status_lbl, "Hotspot inactive");
-    lv_obj_set_style_text_font(s_ap_status_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(s_ap_status_lbl, COL_TX3, 0);
-
     set_mode(0);
 }
 
 // ─── Activate (called by ui_push_wifi_setup) ──────────────────────────────────
+
+// Thread-safe AP status update — can be called from any task.
+typedef struct { char msg[64]; } ap_status_async_t;
+
+static void ap_status_dispatch(void *p)
+{
+    ap_status_async_t *a = (ap_status_async_t *)p;
+    if (s_ap_status_lbl) lv_label_set_text(s_ap_status_lbl, a->msg);
+    free(a);
+}
+
+void ui_wifi_setup_set_ap_status(const char *msg)
+{
+    ap_status_async_t *a = malloc(sizeof(*a));
+    if (!a) return;
+    strncpy(a->msg, msg, sizeof(a->msg) - 1);
+    a->msg[sizeof(a->msg) - 1] = '\0';
+    if (lv_async_call(ap_status_dispatch, a) != LV_RESULT_OK) free(a);
+}
 
 void ui_wifi_setup_activate(void)
 {

@@ -1,8 +1,11 @@
 // wifi_portal.c - Captive portal: HTTP server at 192.168.4.1 for WiFi provisioning.
 #include "wifi_portal.h"
 #include "wifi_manager.h"
+#include "ui/ui_wifi_setup.h"
+#include "config.h"
 #include "esp_http_server.h"
 #include "esp_wifi.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,8 +17,9 @@
 
 static const char *TAG = "wifi_portal";
 
-static httpd_handle_t s_server     = NULL;
-static TimerHandle_t  s_stop_timer = NULL;
+static httpd_handle_t s_server          = NULL;
+static TimerHandle_t  s_stop_timer      = NULL;
+static bool           s_portal_connecting = false;
 
 // ─── DNS hijack ───────────────────────────────────────────────────────────────
 
@@ -254,11 +258,15 @@ static esp_err_t post_connect_handler(httpd_req_t *req)
     }
     ESP_LOGI(TAG, "portal connect: ssid='%s'", raw_ssid);
 
+    char status[72];
+    snprintf(status, sizeof(status), "Connecting to %.48s...", raw_ssid);
+    ui_wifi_setup_set_ap_status(status);
+    s_portal_connecting = true;
+
     httpd_resp_set_type(req, "text/html");
     httpd_resp_sendstr(req, HTML_OK);
 
     wifi_manager_connect(raw_ssid, raw_pass, NULL);
-    if (s_stop_timer) xTimerStart(s_stop_timer, 0);
     return ESP_OK;
 }
 
@@ -277,6 +285,27 @@ static void stop_timer_cb(TimerHandle_t t)
     (void)t;
     wifi_portal_stop();
     wifi_manager_stop_ap();
+}
+
+// ─── Portal WiFi event handler ────────────────────────────────────────────────
+
+static void portal_event_handler(void *arg, esp_event_base_t base,
+                                 int32_t id, void *data)
+{
+    if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
+        ui_wifi_setup_set_ap_status("Phone connected");
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && s_portal_connecting) {
+        wifi_event_sta_disconnected_t *ev = data;
+        if (ev->reason != WIFI_REASON_ASSOC_LEAVE) {
+            s_portal_connecting = false;
+            ui_wifi_setup_set_ap_status("Connection failed - try again");
+        }
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP && s_portal_connecting) {
+        s_portal_connecting = false;
+        ui_wifi_setup_set_ap_status("Connected!");
+        // Stop the portal a moment after showing success
+        if (s_stop_timer) xTimerStart(s_stop_timer, 0);
+    }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -314,6 +343,13 @@ void wifi_portal_start(void)
 
     dns_start();
 
+    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                portal_event_handler, NULL);
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                portal_event_handler, NULL);
+
+    ui_wifi_setup_set_ap_status("Hotspot active - connect to " PROV_AP_SSID);
+
     ESP_LOGI(TAG, "captive portal started at http://192.168.4.1/");
 }
 
@@ -321,6 +357,10 @@ void wifi_portal_stop(void)
 {
     if (!s_server) return;
     dns_stop();
+    esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                  portal_event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                  portal_event_handler);
     httpd_stop(s_server);
     s_server = NULL;
     if (s_stop_timer) {
