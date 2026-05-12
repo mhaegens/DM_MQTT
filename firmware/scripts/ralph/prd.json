@@ -102,7 +102,7 @@
         "Flash to device using idf.py flash and human-verify: device screen progresses through 'Hotspot active' -> 'Phone connected' -> 'Connecting to [SSID]...' -> 'Connected!' during a full provisioning flow without a serial monitor"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
