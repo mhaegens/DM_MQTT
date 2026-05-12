@@ -17,7 +17,7 @@
         "Flash to device using idf.py flash and human-verify: tapping Scan on the WiFi setup screen populates a list of nearby networks"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "WiFi chip is ESP32-C6. WIFI_MODE_APSTA coexistence is supported on C6 with ESP-IDF 5.x."
     },
     {
@@ -32,7 +32,7 @@
         "Flash to device using idf.py flash and human-verify: no block character (□) appears on the scan screen during or after scanning"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
