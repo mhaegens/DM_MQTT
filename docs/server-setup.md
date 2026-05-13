@@ -1,6 +1,6 @@
 # Server Stack Setup
 
-The server stack runs three Docker containers on a single Ubuntu 24.04 LXC (or VM): Mosquitto (MQTT broker), Nginx (web dashboard and editor), and Cloudflared (public tunnel). A single command installs and starts everything.
+The server stack runs three Docker containers on a single Debian 13 (Trixie) LXC (or VM): Mosquitto (MQTT broker), Nginx (web dashboard and editor), and Cloudflared (public tunnel). A single command installs and starts everything.
 
 This setup differs from typical self-hosted setups in one important way: Cloudflared does not run as its own container. Instead, the three ingress rules for this stack are added to an existing Cloudflare Tunnel that is already running on the Proxmox host.
 
@@ -8,7 +8,7 @@ This setup differs from typical self-hosted setups in one important way: Cloudfl
 
 ## Prerequisites
 
-- Ubuntu 24.04 LXC or VM, accessible on the LAN
+- Debian 13 (Trixie) LXC or VM, accessible on the LAN
 - Root or sudo access
 - Port 80 open on the LXC (for Nginx, LAN access only)
 - Port 1883 open on the LXC (for Mosquitto TCP, LAN only)
@@ -28,7 +28,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/mhaegens/DM_MQTT/main/instal
 
 What `install.sh` does, in order:
 
-1. **OS check:** warns if not Ubuntu, fails if not root.
+1. **OS check:** warns if not Debian, fails if not root.
 2. **Base packages:** installs `curl`, `git`, `ca-certificates`, `gnupg`.
 3. **Docker Engine:** installs Docker via `get.docker.com` if not already present. Checks that the Docker Compose plugin is available.
 4. **Repo clone:** clones `mhaegens/DM_MQTT` to `/opt/sapdm-demo`. If already cloned, runs `git pull`.

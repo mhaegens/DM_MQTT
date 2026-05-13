@@ -55,7 +55,7 @@ When it asks `Proceed? [y/N]`, type `y` and press Enter.
 
 ### What the script does
 
-- Downloads the Ubuntu 24.04 container template (if not already cached)
+- Downloads the Debian 13 (Trixie) container template (if not already cached)
 - Creates an LXC with 2 CPU cores, 2 GB RAM, and 16 GB disk
 - Enables **nesting** (Docker requires this to run inside an LXC)
 - Starts the container
@@ -87,7 +87,7 @@ pct exec 200 -- hostname -I
 
 ## Part 2: Install the stack
 
-> **Note:** If you ran `create-lxc.sh` in Part 1, the install script already ran automatically inside the LXC. You can skip to **Step 2.4** to verify the result. Only follow Steps 2.1 to 2.3 if you are installing on an existing Ubuntu 24.04 server without using the Proxmox script.
+> **Note:** If you ran `create-lxc.sh` in Part 1, the install script already ran automatically inside the LXC. You can skip to **Step 2.4** to verify the result. Only follow Steps 2.1 to 2.3 if you are installing on an existing Debian 13 server without using the Proxmox script.
 
 ### Step 2.1: Open a terminal on your computer
 

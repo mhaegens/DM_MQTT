@@ -6,7 +6,7 @@
 #
 # What it does:
 #   1. Prompts for LXC settings (all have sensible defaults)
-#   2. Downloads the Debian 12 (Bookworm) CT template if not already cached
+#   2. Downloads the Debian 13 (Trixie) CT template if not already cached
 #   3. Creates the LXC with nesting enabled (required for Docker)
 #   4. Starts it and runs install.sh inside to bring up the full demo stack
 

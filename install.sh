@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — One-shot installer for the SAP DM MQTT demo stack
-# Run on a fresh Ubuntu 24.04 LXC as root (or with sudo).
+# Run on a fresh Debian 13 (Trixie) LXC as root (or with sudo).
 # Usage: bash install.sh
 
 set -euo pipefail
