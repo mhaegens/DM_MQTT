@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shop Floor Monitor · SAP DM</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF; --hi-mid:#C5DCFF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --warn:#E76500; --warn-lt:#FEF0E5; --warn-bd:#F8C07E;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --sh:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.05);
+  --sh-md:0 4px 20px rgba(0,0,0,.1);
+  --r:12px; --rsm:8px;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);color:var(--tx);background:var(--bg);display:flex;flex-direction:column}
+
+/* ── HEADER ── */
+.shell{background:var(--base);border-bottom:2px solid var(--hi);height:56px;padding:0 24px;
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:20;
+  box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.shell-l{display:flex;align-items:center;gap:14px}
+.sap-badge{width:40px;height:40px;background:var(--hi);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sap-badge svg{width:30px;height:20px}
+.shell-title{font-size:18px;font-weight:600;color:var(--tx);line-height:1.2}
+.shell-sub{font-family:var(--mono);font-size:12px;color:var(--tx2);letter-spacing:.05em}
+.shell-r{display:flex;align-items:center;gap:12px}
+.os{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:12px;
+  font-weight:500;padding:5px 12px;border-radius:24px;letter-spacing:.06em;text-transform:uppercase}
+.os.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.os.hi{background:var(--hi-lt);color:var(--hi);border:1px solid var(--hi-mid)}
+.os.err{background:var(--err-lt);color:var(--err);border:1px solid var(--err-bd)}
+.osd{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pdot 2s ease-in-out infinite}
+@keyframes pdot{0%,100%{opacity:1}50%{opacity:.25}}
+.raw-link{font-family:var(--mono);font-size:12px;color:var(--hi);text-decoration:none;
+  padding:5px 10px;border:1px solid var(--hi-mid);border-radius:var(--rsm);
+  background:var(--hi-lt);letter-spacing:.04em;transition:all .15s}
+.raw-link:hover{background:var(--hi);color:#fff}
+
+/* ── MAIN LAYOUT ── */
+.main{flex:1;overflow:hidden;display:flex;gap:0}
+.col-left{flex:1 1 0;min-width:0;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.col-right{width:360px;flex-shrink:0;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;border-left:1px solid var(--bd);background:var(--base2)}
+
+@media(max-width:1280px){
+  .main{flex-direction:column;overflow:visible}
+  html,body{height:auto;overflow:auto}
+  .col-left,.col-right{width:100%;overflow:visible}
+  .col-right{border-left:none;border-top:1px solid var(--bd)}
+}
+
+/* ── SECTION LABELS ── */
+.section-label{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--tx3);margin-bottom:4px}
+
+/* ── MACHINE CARDS ── */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.mc{background:var(--base);border:1.5px solid var(--bd);border-radius:14px;display:flex;flex-direction:column;
+  box-shadow:var(--sh);overflow:hidden;transition:border-color .25s,box-shadow .25s}
+.mc.running{border-color:var(--ok-bd);box-shadow:0 0 0 3px var(--ok-lt),var(--sh)}
+.mc.stopped{border-color:var(--err-bd);box-shadow:0 0 0 2px var(--err-lt),var(--sh)}
+.mc-hdr{padding:12px 14px 10px;display:flex;align-items:flex-start;justify-content:space-between;
+  border-bottom:1px solid var(--bd);gap:8px}
+.mc-hdr-l{display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1}
+.mc-name{font-size:16px;font-weight:600;color:var(--tx);text-transform:uppercase;line-height:1.2}
+.mc-type{font-family:var(--mono);font-size:11px;color:var(--tx3);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+.mc-hdr-r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mc-pulses{font-family:var(--mono);font-size:11px;color:var(--tx2);background:var(--base2);
+  border:1px solid var(--bd);border-radius:20px;padding:3px 9px;white-space:nowrap}
+.sdot{width:14px;height:14px;border-radius:50%;flex-shrink:0;margin-top:3px;transition:background .3s}
+.sdot.green{background:var(--ok);box-shadow:0 0 0 4px var(--ok-lt),0 0 10px rgba(16,126,62,.3);animation:sdp 2s ease-in-out infinite}
+.sdot.red{background:var(--err);box-shadow:0 0 0 3px var(--err-lt)}
+@keyframes sdp{0%,100%{box-shadow:0 0 0 4px var(--ok-lt),0 0 10px rgba(16,126,62,.3)}50%{box-shadow:0 0 0 5px var(--ok-lt),0 0 4px rgba(16,126,62,.15)}}
+.mc-body{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.mc-placeholder{font-family:var(--mono);font-size:12px;color:var(--tx3);letter-spacing:.06em;
+  padding:12px 0;text-align:center}
+.mc-status-badge{font-family:var(--mono);font-size:11px;font-weight:500;padding:3px 9px;
+  border-radius:20px;letter-spacing:.06em;text-transform:uppercase}
+.mc-status-badge.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.mc-status-badge.err{background:var(--err-lt);color:var(--err);border:1px solid var(--err-bd)}
+
+/* ── METRIC TILES ── */
+.tiles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.mtile{background:var(--base2);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-height:60px}
+.mt-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--tx3);text-transform:uppercase;line-height:1.2}
+.mt-val{font-family:var(--mono);font-size:20px;font-weight:500;line-height:1.15}
+.mt-val.ok{color:var(--ok)}.mt-val.warn{color:var(--warn)}.mt-val.err{color:var(--err)}.mt-val.hi{color:var(--hi)}
+.mt-unit{font-family:var(--mono);font-size:10px;color:var(--tx3)}
+
+/* ── BADGE (generic) ── */
+.badge{font-family:var(--mono);font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rsm);
+  letter-spacing:.05em;text-transform:uppercase}
+.badge.ok{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.badge.hi{background:var(--hi-lt);color:var(--hi);border:1px solid var(--hi-mid)}
+.badge.warn{background:var(--warn-lt);color:var(--warn);border:1px solid var(--warn-bd)}
+.badge.err{background:var(--err-lt);color:var(--err);border:1px solid var(--err-bd)}
+
+/* ── TANKS ── */
+.tanks-row{display:flex;gap:14px;flex-wrap:wrap}
+.tank-col{flex:1;min-width:90px;max-width:160px;display:flex;flex-direction:column;gap:8px}
+.tank-wrap{flex:0 0 200px;position:relative;filter:drop-shadow(0 0 1.5px rgba(80,110,170,.28))}
+.tank-body{height:200px;background:#ECF0F8;overflow:hidden;position:relative;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpath fill='black' d='M 0,78 L 100,78 L 67,96 Q 63,100 59,100 L 41,100 Q 37,100 33,96 L 0,78 Z'/%3E%3C/svg%3E");
+  -webkit-mask-size:100% 100%;mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect fill='black' x='0' y='0' width='100' height='82' rx='7'/%3E%3Cpath fill='black' d='M 0,78 L 100,78 L 67,96 Q 63,100 59,100 L 41,100 Q 37,100 33,96 L 0,78 Z'/%3E%3C/svg%3E");
+  mask-size:100% 100%;mask-repeat:no-repeat;
+  box-shadow:inset 0 2px 8px rgba(30,50,100,.09)}
+.tank-body::after{content:'';position:absolute;top:0;left:5px;right:5px;bottom:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.3) 0%,transparent 35%);pointer-events:none;z-index:4}
+.tsvg{position:absolute;bottom:0;left:0;right:0;width:100%;z-index:2}
+.tank-pct-overlay{position:absolute;bottom:24%;left:0;right:0;text-align:center;
+  font-family:var(--mono);font-size:26px;font-weight:500;
+  color:rgba(255,255,255,.95);z-index:6;
+  text-shadow:0 1px 4px rgba(0,0,0,.4);pointer-events:none}
+.tank-pct-overlay.dark{color:var(--tx);text-shadow:none}
+.tank-name-badge{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--tx);text-align:center;padding:4px 0}
+.tank-indicator-strip{display:flex;flex-direction:column;gap:5px}
+.tank-metric-btn{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:6px 8px;display:flex;flex-direction:column;gap:2px;
+  box-shadow:var(--sh);min-height:48px;align-items:flex-start}
+.tmb-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.07em;color:var(--tx3);text-transform:uppercase;line-height:1}
+.tmb-val{font-family:var(--mono);font-size:16px;font-weight:500;line-height:1.2}
+.tmb-unit{font-family:var(--mono);font-size:10px;color:var(--tx3)}
+
+/* ── OPERATOR CARD ── */
+.opcard{background:var(--base);border:2px solid var(--ok-bd);border-radius:var(--r);
+  padding:16px 18px;display:flex;align-items:center;gap:14px;
+  box-shadow:0 0 0 4px var(--ok-lt),var(--sh)}
+.opcard-placeholder{background:var(--base);border:1.5px dashed var(--bd-str);border-radius:var(--r);
+  padding:20px 18px;display:flex;align-items:center;gap:14px;color:var(--tx3)}
+.opcard-placeholder-icon{width:44px;height:44px;border-radius:50%;background:var(--base3);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.opav{width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,var(--hi) 0%,#5BB2FF 100%);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);
+  font-size:18px;font-weight:600;color:#fff;box-shadow:0 2px 8px rgba(0,112,242,.25)}
+.opname{font-size:18px;font-weight:600;color:var(--tx)}
+.opmeta{font-family:var(--mono);font-size:11px;color:var(--tx2);letter-spacing:.07em;margin-top:3px;line-height:1.7}
+.op-info{flex:1;min-width:0}
+.op-badges{display:flex;gap:6px;margin-top:6px;align-items:center}
+.op-time{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:2px}
+
+/* ── EMPTY STATES ── */
+.empty-state{text-align:center;padding:40px 20px;color:var(--tx3);font-family:var(--mono);
+  font-size:12px;letter-spacing:.06em;border:1.5px dashed var(--bd-str);border-radius:var(--r)}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="shell">
+  <div class="shell-l">
+    <div class="sap-badge">
+      <svg viewBox="0 0 64 44" fill="none">
+        <text x="0" y="38" font-family="'IBM Plex Sans',sans-serif" font-weight="600" font-size="38" fill="white" letter-spacing="2">SAP</text>
+      </svg>
+    </div>
+    <div>
+      <div class="shell-title">Shop Floor Monitor</div>
+      <div class="shell-sub">SAP Digital Manufacturing · Plant BE01</div>
+    </div>
+  </div>
+  <div class="shell-r">
+    <a class="raw-link" href="/dashboard/">&#8592; Raw Feed</a>
+    <div class="os err" id="conn-badge"><span class="osd"></span><span id="conn-text">Disconnected</span></div>
+  </div>
+</div>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="main">
+
+  <!-- LEFT: Machine cards -->
+  <div class="col-left">
+    <div class="section-label">Machines</div>
+    <div class="mgrid" id="mgrid">
+      <div class="empty-state" id="machines-empty">Waiting for MQTT data...</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Tanks + Operator -->
+  <div class="col-right">
+
+    <!-- TANKS -->
+    <div class="section-label">Tanks</div>
+    <div id="tanks-container">
+      <div class="empty-state" id="tanks-empty">Waiting for tank data...</div>
+    </div>
+
+    <!-- OPERATOR -->
+    <div class="section-label" style="margin-top:8px">Operator</div>
+    <div id="operator-container">
+      <div class="opcard-placeholder" id="op-placeholder">
+        <div class="opcard-placeholder-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--tx3)" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:500;color:var(--tx2)">Waiting for operator login...</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--tx3);margin-top:4px;letter-spacing:.05em">Tap NFC badge on device</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   UNIT MAP
+═══════════════════════════════════════════════ */
+const UNITS = {
+  machTemp:    { unit:'°C',    label:'Temperature',   warn:50,  err:65  },
+  rpm:         { unit:'RPM',   label:'Spindle RPM',   warn:6000,err:7500 },
+  spindleLoad: { unit:'%',     label:'Spindle Load',  warn:70,  err:90  },
+  toolWear:    { unit:'%',     label:'Tool Wear',     warn:60,  err:80  },
+  feedRate:    { unit:'mm/m',  label:'Feed Rate',     warn:null          },
+  flowRate:    { unit:'L/min', label:'Flow Rate',     warn:null          },
+  lineSpeed:   { unit:'u/min', label:'Line Speed',    warn:null          },
+  oee:         { unit:'%',     label:'OEE',           warn:80,  err:60, invert:true },
+  level:       { unit:'%',     label:'Level',         warn:30,  err:15  },
+  tankTemp:    { unit:'°C',    label:'Temperature',   warn:45,  err:60  },
+  flowIn:      { unit:'L/min', label:'Flow In',       warn:null          },
+  flowOut:     { unit:'L/min', label:'Flow Out',      warn:null          },
+  ph:          { unit:'pH',    label:'pH',            warn:null          },
+  pressure:    { unit:'bar',   label:'Pressure',      warn:3.5, err:4.5 },
+  pulses:      { unit:'',      label:'Pulses',        warn:null          },
+};
+
+function metricColor(key, val) {
+  const u = UNITS[key];
+  if (!u) return 'hi';
+  if (u.warn === null) return 'hi';
+  if (u.invert) {
+    // higher is better (OEE)
+    if (u.err != null && val < u.err) return 'err';
+    if (val < u.warn) return 'warn';
+    return 'ok';
+  } else {
+    if (u.err != null && val >= u.err) return 'err';
+    if (val >= u.warn) return 'warn';
+    return 'ok';
+  }
+}
+
+function fmtVal(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return String(v);
+  if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, {maximumFractionDigits:0});
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(1);
+}
+
+function initCap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* ═══════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════ */
+const machines = {};  // keyed by id: { id, status, pulses, metrics: {key: value} }
+const tanks = {};     // keyed by id: { id, level, metrics: {key: value} }
+let operator = null;
+
+/* ═══════════════════════════════════════════════
+   TANK ANIMATION STATE
+═══════════════════════════════════════════════ */
+const tankAnim = {}; // keyed by id: { phase, slosh }
+
+function ensureTankAnim(id) {
+  if (!tankAnim[id]) {
+    tankAnim[id] = { phase: Math.random() * Math.PI * 2, slosh: 0 };
+  }
+}
+
+function tcol(pct) {
+  if (pct < 15) return { fill:'#BB0000', dark:'#8A0000' };
+  if (pct < 30) return { fill:'#E76500', dark:'#B84D00' };
+  if (pct < 75) return { fill:'#0070F2', dark:'#0050BE' };
+  return { fill:'#0092D1', dark:'#006A9A' };
+}
+
+function renderTankSVG(id) {
+  const svg = document.getElementById('tsvg-' + id);
+  const body = document.getElementById('tbody-' + id);
+  if (!svg || !body) return;
+  const t = tanks[id];
+  if (!t) return;
+  const anim = tankAnim[id];
+  if (!anim) return;
+  const W = body.clientWidth || 120;
+  const H = body.clientHeight || 200;
+  const pct = t.level != null ? t.level : 0;
+  const lH = Math.max(0, (pct / 100) * H);
+  const c = tcol(pct);
+  const amp = 2.5, so = anim.slosh * 12;
+  const pts = [];
+  for (let x = 0; x <= W + 3; x += 4) {
+    const y = Math.sin((x / W) * Math.PI * 4 + anim.phase) * amp +
+              Math.sin((x / W) * Math.PI * 6 + anim.phase * 0.7) * amp * 0.4 + so;
+    pts.push([x, y]);
+  }
+  let wp = `M -2 ${lH} L -2 ${pts[0][1]} `;
+  pts.forEach(([x, y]) => wp += `L ${x} ${y} `);
+  wp += `L ${W + 2} ${lH} Z`;
+  svg.style.height = lH + 'px';
+  svg.setAttribute('viewBox', `0 0 ${W} ${lH}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', lH);
+  svg.innerHTML = `<defs><linearGradient id="lg${id}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="${c.fill}" stop-opacity=".8"/>
+    <stop offset="100%" stop-color="${c.dark}"/></linearGradient></defs>
+    <rect x="0" y="0" width="${W}" height="${lH}" fill="url(#lg${id})"/>
+    <path d="${wp}" fill="${c.fill}" opacity=".6"/>
+    <path d="${wp}" fill="rgba(255,255,255,.16)" transform="translate(0,-3)"/>`;
+
+  const pctEl = document.getElementById('tpct-' + id);
+  if (pctEl) {
+    pctEl.textContent = Math.round(pct) + '%';
+    pctEl.className = 'tank-pct-overlay' + (pct < 25 ? ' dark' : '');
+  }
+}
+
+(function animLoop() {
+  const dt = 0.016;
+  for (const id in tankAnim) {
+    const a = tankAnim[id];
+    a.phase += dt * 1.2;
+    a.slosh *= 0.93;
+  }
+  for (const id in tanks) {
+    renderTankSVG(id);
+  }
+  requestAnimationFrame(animLoop);
+})();
+
+/* ═══════════════════════════════════════════════
+   DOM RENDERING — MACHINES
+═══════════════════════════════════════════════ */
+function upsertMachineCard(id) {
+  const mc = machines[id];
+  const isRunning = mc.status === 'RUNNING';
+  const cardId = 'mc-' + id;
+
+  // Remove empty state
+  const emp = document.getElementById('machines-empty');
+  if (emp) emp.remove();
+
+  let card = document.getElementById(cardId);
+  if (!card) {
+    card = document.createElement('div');
+    card.id = cardId;
+    card.className = 'mc';
+    document.getElementById('mgrid').appendChild(card);
+  }
+
+  // Status class
+  card.className = 'mc ' + (isRunning ? 'running' : 'stopped');
+
+  // Build header
+  const statusBadge = isRunning
+    ? `<span class="mc-status-badge ok">Running</span>`
+    : `<span class="mc-status-badge err">Stopped</span>`;
+  const pulseBadge = mc.pulses != null
+    ? `<span class="mc-pulses">&#8679; ${Number(mc.pulses).toLocaleString()} pulses</span>`
+    : '';
+  const sdotClass = isRunning ? 'green' : 'red';
+
+  // Build metric tiles
+  let tilesHTML = '';
+  const metricKeys = Object.keys(mc.metrics);
+  if (metricKeys.length === 0) {
+    tilesHTML = `<div class="mc-placeholder">Waiting for data...</div>`;
+  } else {
+    tilesHTML = `<div class="tiles-grid">`;
+    metricKeys.forEach(key => {
+      const val = mc.metrics[key];
+      const u = UNITS[key] || { unit: '', label: initCap(key) };
+      const cls = metricColor(key, val);
+      const elemId = `mv-${id}-${key}`;
+      tilesHTML += `<div class="mtile">
+        <span class="mt-lbl">${u.label}</span>
+        <span class="mt-val ${cls}" id="${elemId}">${fmtVal(val)}</span>
+        <span class="mt-unit">${u.unit}</span>
+      </div>`;
+    });
+    tilesHTML += `</div>`;
+  }
+
+  card.innerHTML = `
+    <div class="mc-hdr">
+      <div class="mc-hdr-l">
+        <div class="sdot ${sdotClass}"></div>
+        <div>
+          <div class="mc-name">${id.toUpperCase()}</div>
+          <div class="mc-type">${statusBadge}</div>
+        </div>
+      </div>
+      <div class="mc-hdr-r">
+        ${pulseBadge}
+      </div>
+    </div>
+    <div class="mc-body">${tilesHTML}</div>`;
+}
+
+function updateMachineMetric(id, key, val) {
+  // Try in-place update first
+  const elem = document.getElementById(`mv-${id}-${key}`);
+  if (elem) {
+    const cls = metricColor(key, val);
+    elem.textContent = fmtVal(val);
+    elem.className = 'mt-val ' + cls;
+    return;
+  }
+  // Fall back to full re-render (new metric key appeared)
+  upsertMachineCard(id);
+}
+
+/* ═══════════════════════════════════════════════
+   DOM RENDERING — TANKS
+═══════════════════════════════════════════════ */
+function upsertTankCard(id) {
+  const t = tanks[id];
+  const colId = 'tcol-' + id;
+
+  // Remove empty state
+  const emp = document.getElementById('tanks-empty');
+  if (emp) emp.remove();
+
+  // Ensure anim state
+  ensureTankAnim(id);
+
+  // Ensure tanks row exists
+  let row = document.getElementById('tanks-row');
+  if (!row) {
+    row = document.createElement('div');
+    row.id = 'tanks-row';
+    row.className = 'tanks-row';
+    document.getElementById('tanks-container').appendChild(row);
+  }
+
+  let col = document.getElementById(colId);
+  if (!col) {
+    col = document.createElement('div');
+    col.id = colId;
+    col.className = 'tank-col';
+    row.appendChild(col);
+  }
+
+  // Build metric strip for non-level metrics
+  let metricsHTML = '';
+  const metricKeys = Object.keys(t.metrics).filter(k => k !== 'level');
+  if (metricKeys.length > 0) {
+    metricsHTML = `<div class="tank-indicator-strip">`;
+    metricKeys.forEach(key => {
+      const val = t.metrics[key];
+      const u = UNITS[key] || { unit: '', label: initCap(key) };
+      const cls = metricColor(key, val);
+      const elemId = `tmv-${id}-${key}`;
+      metricsHTML += `<div class="tank-metric-btn">
+        <span class="tmb-lbl">${u.label}</span>
+        <span class="tmb-val col-${cls}" id="${elemId}">${fmtVal(val)}</span>
+        <span class="tmb-unit">${u.unit}</span>
+      </div>`;
+    });
+    metricsHTML += `</div>`;
+  }
+
+  col.innerHTML = `
+    <div class="tank-name-badge">${id.toUpperCase()}</div>
+    <div class="tank-wrap">
+      <div class="tank-body" id="tbody-${id}">
+        <svg class="tsvg" id="tsvg-${id}" preserveAspectRatio="none"></svg>
+        <div class="tank-pct-overlay" id="tpct-${id}">${Math.round(t.level || 0)}%</div>
+      </div>
+    </div>
+    ${metricsHTML}`;
+}
+
+function updateTankMetric(id, key, val) {
+  if (key === 'level') {
+    // Level is updated in the animation loop — just update state
+    return;
+  }
+  const elem = document.getElementById(`tmv-${id}-${key}`);
+  if (elem) {
+    const cls = metricColor(key, val);
+    elem.textContent = fmtVal(val);
+    elem.className = `tmb-val col-${cls}`;
+    return;
+  }
+  upsertTankCard(id);
+}
+
+/* ═══════════════════════════════════════════════
+   DOM RENDERING — OPERATOR
+═══════════════════════════════════════════════ */
+function renderOperator() {
+  if (!operator) return;
+  const op = operator;
+  const initials = op.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const timeStr = op.loginTime.toTimeString().slice(0, 8);
+  const ph = document.getElementById('op-placeholder');
+  if (ph) ph.style.display = 'none';
+
+  let card = document.getElementById('op-card');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'op-card';
+    document.getElementById('operator-container').appendChild(card);
+  }
+
+  card.className = 'opcard';
+  card.innerHTML = `
+    <div class="opav">${initials}</div>
+    <div class="op-info">
+      <div class="opname">${op.name}</div>
+      <div class="opmeta">${op.role} &middot; ${op.id} &middot; ${op.dept}</div>
+      <div class="opmeta">${op.plant}</div>
+      <div class="op-badges">
+        <span class="badge ok">Active</span>
+      </div>
+      <div class="op-time">Logged in at ${timeStr}</div>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   MQTT MESSAGE PARSER
+═══════════════════════════════════════════════ */
+function handleMessage(topic, payload) {
+  const parts = topic.split('/');
+  // factory/machines/{id}/status|pulses|{metric}
+  // factory/tanks/{id}/level|{metric}
+  // factory/operators/login
+  if (parts.length < 3) return;
+  if (parts[0] !== 'factory') return;
+
+  const domain = parts[1];
+
+  if (domain === 'operators' && parts[2] === 'login') {
+    try {
+      const obj = JSON.parse(payload);
+      operator = {
+        id: obj.id || '',
+        name: obj.name || 'Unknown',
+        role: obj.role || '',
+        uid: obj.uid || '',
+        dept: obj.dept || '',
+        plant: obj.plant || '',
+        loginTime: new Date(),
+      };
+      renderOperator();
+    } catch(e) {}
+    return;
+  }
+
+  if (domain === 'machines' && parts.length >= 4) {
+    const machId = parts[2];
+    const metricKey = parts[3];
+    if (!machines[machId]) {
+      machines[machId] = { id: machId, status: null, pulses: null, metrics: {} };
+    }
+    const mc = machines[machId];
+
+    if (metricKey === 'status') {
+      mc.status = payload.trim();
+      upsertMachineCard(machId);
+    } else if (metricKey === 'pulses') {
+      mc.pulses = parseInt(payload, 10);
+      upsertMachineCard(machId);
+    } else {
+      const val = parseFloat(payload);
+      if (!isNaN(val)) {
+        mc.metrics[metricKey] = val;
+        updateMachineMetric(machId, metricKey, val);
+      }
+    }
+    return;
+  }
+
+  if (domain === 'tanks' && parts.length >= 4) {
+    const tankId = parts[2];
+    const metricKey = parts[3];
+    if (!tanks[tankId]) {
+      tanks[tankId] = { id: tankId, level: 0, metrics: {} };
+    }
+    const t = tanks[tankId];
+    const val = parseFloat(payload);
+    if (!isNaN(val)) {
+      if (metricKey === 'level') {
+        t.level = val;
+        t.metrics['level'] = val;
+        upsertTankCard(tankId);
+      } else {
+        t.metrics[metricKey] = val;
+        updateTankMetric(tankId, metricKey, val);
+      }
+    }
+    return;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   MQTT CONNECTION
+═══════════════════════════════════════════════ */
+const mqttUrl = window.location.protocol === 'https:'
+  ? 'wss://' + window.location.hostname
+  : 'ws://' + window.location.hostname + ':9001';
+
+const connBadge = document.getElementById('conn-badge');
+const connText = document.getElementById('conn-text');
+
+function setConnStatus(connected) {
+  if (connected) {
+    connBadge.className = 'os ok';
+    connText.textContent = 'Connected';
+  } else {
+    connBadge.className = 'os err';
+    connText.textContent = 'Disconnected';
+  }
+}
+
+let client;
+try {
+  client = mqtt.connect(mqttUrl, {
+    reconnectPeriod: 3000,
+    connectTimeout: 10000,
+  });
+
+  client.on('connect', () => {
+    setConnStatus(true);
+    client.subscribe('#', err => {
+      if (err) console.warn('Subscribe error:', err);
+    });
+  });
+
+  client.on('close', () => setConnStatus(false));
+  client.on('offline', () => setConnStatus(false));
+  client.on('error', err => {
+    console.warn('MQTT error:', err.message);
+    setConnStatus(false);
+  });
+
+  client.on('message', (topic, message) => {
+    const payload = message.toString();
+    handleMessage(topic, payload);
+  });
+} catch(e) {
+  console.error('MQTT connect failed:', e);
+  setConnStatus(false);
+}
+</script>
+</body>
+</html>
