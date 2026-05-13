@@ -54,6 +54,7 @@ prompt     LXC_ID    "LXC container ID"          "200"
 prompt     HOSTNAME  "Container hostname"         "sapdm-demo"
 prompt     IP_CIDR   "IP address (with prefix)"  "192.168.1.60/24"
 prompt     GW        "Gateway"                   "192.168.1.1"
+prompt     DNS       "DNS server"                "1.1.1.1"
 prompt     BRIDGE    "Network bridge"            "vmbr0"
 prompt     STORAGE   "Storage target"            "local-lvm"
 prompt_required ROOT_PASS "Root password for the LXC (hidden)"
@@ -64,6 +65,7 @@ echo "  LXC ID   : ${LXC_ID}"
 echo "  Hostname : ${HOSTNAME}"
 echo "  IP/CIDR  : ${IP_CIDR}"
 echo "  Gateway  : ${GW}"
+echo "  DNS      : ${DNS}"
 echo "  Bridge   : ${BRIDGE}"
 echo "  Storage  : ${STORAGE}"
 echo ""
@@ -110,6 +112,7 @@ pct create "$LXC_ID" "local:vztmpl/${TEMPLATE_NAME}" \
   --cores 2 \
   --rootfs "${STORAGE}:16" \
   --net0 "name=eth0,bridge=${BRIDGE},ip=${IP_CIDR},gw=${GW}" \
+  --nameserver "${DNS}" \
   --unprivileged 1 \
   --start 0
 ok "LXC created."
