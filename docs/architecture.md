@@ -33,7 +33,7 @@ This document explains how the system fits together and why each major architect
 └─────────────────────┘
 ```
 
-All three server components (Mosquitto, Nginx, Cloudflared) run as Docker containers on a single Ubuntu 24.04 LXC host using Docker Compose.
+All three server components (Mosquitto, Nginx, Cloudflared) run as Docker containers on a single Debian 13 (Trixie) LXC host using Docker Compose.
 
 ---
 
