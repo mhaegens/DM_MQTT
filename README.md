@@ -62,22 +62,27 @@ Internet access is provided by the **existing Cloudflare Tunnel on the Proxmox h
 
 ### Cloudflare Tunnel setup
 
-Add these rules to your existing tunnel `config.yml` on the Proxmox host. Replace `192.168.x.x` with this LXC's LAN IP. Rule order matters — Cloudflare evaluates top-to-bottom and stops at the first match:
+Add these rules to `/etc/cloudflared/config.yml` on the Proxmox host, above the `http_status:404` catch-all. Rule order matters — Cloudflare evaluates top-to-bottom and stops at the first match:
 
 ```yaml
 - hostname: mqttfordm.haegens.be
   path: /editor.*
-  service: http://192.168.x.x:80
+  service: http://192.168.0.60:80
 
 - hostname: mqttfordm.haegens.be
   path: /dashboard.*
-  service: http://192.168.x.x:80
+  service: http://192.168.0.60:80
 
 - hostname: mqttfordm.haegens.be
-  service: ws://192.168.x.x:9001
+  service: ws://192.168.0.60:9001
 ```
 
-Then reload: `systemctl reload cloudflared`
+Then create the DNS record and reload:
+
+```bash
+cloudflared tunnel route dns homelab mqttfordm.haegens.be
+systemctl restart cloudflared
+```
 
 
 ---

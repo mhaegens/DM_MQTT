@@ -23,7 +23,7 @@ An **LXC** is a lightweight virtual machine. Proxmox is the hypervisor (the soft
 
 ### Step 1.1: Open the Proxmox web interface
 
-Open a browser and go to your Proxmox web UI (for example `https://192.168.1.1:8006`). Log in as `root`.
+Open a browser and go to your Proxmox web UI: `https://192.168.0.200:8006`. Log in as `root`.
 
 ### Step 1.2: Open the Proxmox Shell
 
@@ -45,8 +45,8 @@ The script will ask you a few questions. The default values (shown in square bra
 |---|---|---|
 | LXC container ID | `200` | If you already have an LXC with ID 200 |
 | Container hostname | `sapdm-demo` | If you want a different name |
-| IP address | `192.168.1.60/24` | If that IP is already taken on your network |
-| Gateway | `192.168.1.1` | If your router has a different IP |
+| IP address | `192.168.0.60/24` | If that IP is already taken on your network |
+| Gateway | `192.168.0.1` | If your router has a different IP |
 | Network bridge | `vmbr0` | Almost never |
 | Storage target | `local-lvm` | If your Proxmox uses a different storage name |
 | Root password | *(required)* | Type any password, it will not be shown on screen |
@@ -70,7 +70,7 @@ This takes about 2 to 5 minutes depending on your internet speed.
 At the end of the script output, you will see a line like:
 
 ```
-Dashboard : http://192.168.1.60
+Dashboard : http://192.168.0.60
 ```
 
 Note this IP address. You will need it throughout this guide. Replace `<lxc-ip>` with your actual IP in every step below.
@@ -106,7 +106,7 @@ ssh root@<lxc-ip>
 Replace `<lxc-ip>` with the IP address from Step 1.4. For example:
 
 ```bash
-ssh root@192.168.1.60
+ssh root@192.168.0.60
 ```
 
 When prompted, type the root password you chose in Step 1.3 and press Enter. (The password will not be shown on screen.)
@@ -179,35 +179,34 @@ nano /etc/cloudflared/config.yml
 
 ### Step 3.2: Add the three ingress rules
 
-Inside the `ingress:` section, add these three rules. They must go **above** the existing catch-all rule (the one with no `hostname` or the final `service: http_status:404` line). Replace `192.168.x.x` with the LAN IP of your sapdm-demo LXC (the one you noted in Step 1.4).
+Inside the `ingress:` section, add these three rules. They must go **above** the existing catch-all rule (the one with no `hostname` or the final `service: http_status:404` line).
 
 ```yaml
   - hostname: mqttfordm.haegens.be
     path: /editor.*
-    service: http://192.168.x.x:80
+    service: http://192.168.0.60:80
 
   - hostname: mqttfordm.haegens.be
     path: /dashboard.*
-    service: http://192.168.x.x:80
+    service: http://192.168.0.60:80
 
   - hostname: mqttfordm.haegens.be
-    service: ws://192.168.x.x:9001
+    service: ws://192.168.0.60:9001
 ```
 
 > **Rule ordering matters.** Cloudflare evaluates rules from top to bottom and stops at the first match. The `/editor` and `/dashboard` path rules must come before the WebSocket catch-all (the one with no `path:` field), otherwise all traffic for this hostname goes to the MQTT broker and the dashboard never loads.
 
 Save the file with `Ctrl + X`, then `Y`, then Enter.
 
-### Step 3.3: Add the DNS record in Cloudflare
+### Step 3.3: Add the DNS record
 
-The hostname `mqttfordm.haegens.be` needs a DNS record pointing to your tunnel. In the Cloudflare dashboard:
+Run this on the Proxmox host:
 
-1. Go to **Websites**, select `haegens.be`.
-2. Go to **DNS** > **Records**.
-3. Click **Add record**.
-4. Type: `CNAME`, Name: `mqttfordm`, Target: `<your-tunnel-id>.cfargotunnel.com`, Proxied: on.
+```bash
+cloudflared tunnel route dns homelab mqttfordm.haegens.be
+```
 
-You can find your tunnel ID by running `cloudflared tunnel list` on the Proxmox host.
+This creates the CNAME record in Cloudflare automatically. You should see `Added CNAME mqttfordm.haegens.be` in the output.
 
 ### Step 3.4: Reload the tunnel
 
