@@ -52,9 +52,9 @@ prompt_required() {
 # ── Collect settings ─────────────────────────────────────────────────────────
 prompt     LXC_ID    "LXC container ID"          "200"
 prompt     HOSTNAME  "Container hostname"         "sapdm-demo"
-prompt     IP_CIDR   "IP address (with prefix)"  "192.168.1.60/24"
-prompt     GW        "Gateway"                   "192.168.1.1"
-prompt     DNS       "DNS server"                "1.1.1.1"
+prompt     IP_CIDR   "IP address (with prefix)"  "192.168.0.60/24"
+prompt     GW        "Gateway"                   "192.168.0.1"
+prompt     DNS       "DNS server"                "192.168.0.1"
 prompt     BRIDGE    "Network bridge"            "vmbr0"
 prompt     STORAGE   "Storage target"            "local-lvm"
 prompt_required ROOT_PASS "Root password for the LXC (hidden)"
