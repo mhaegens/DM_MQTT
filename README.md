@@ -55,10 +55,9 @@ bash /opt/sapdm-demo/update.sh
 
 | Service     | Port(s)    | Purpose                                           |
 |-------------|------------|---------------------------------------------------|
-| Mosquitto   | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel) |
-| Cloudflared | —          | Exposes Mosquitto WSS to SAP DM cloud             |
-| Node-RED    | 1880       | Flow management + simulation fallback             |
-| Dashboard   | 80         | Web UI for live monitoring                        |
+| Mosquitto   | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel)          |
+| Cloudflared | —          | Routes tunnel traffic: `/editor` and `/dashboard` to nginx, WS catch-all to Mosquitto |
+| Dashboard   | 80         | nginx serving `/dashboard` (live monitor) and `/editor` (JSON config editor) |
 
 ### Cloudflare Tunnel setup
 
@@ -68,6 +67,14 @@ cp /opt/sapdm-demo/cloudflared/config.yml.example /opt/sapdm-demo/cloudflared/co
 nano /opt/sapdm-demo/cloudflared/config.yml   # fill in tunnel ID and hostname
 cd /opt/sapdm-demo && docker compose restart cloudflared
 ```
+
+The tunnel uses three ingress rules (order matters — Cloudflare evaluates top-to-bottom and stops at the first match):
+
+1. `path: /editor.*` → `http://dashboard:80` — JSON config editor
+2. `path: /dashboard.*` → `http://dashboard:80` — live MQTT monitor
+3. catch-all (no path) → `ws://mosquitto:9001` — WebSocket MQTT for SAP DM
+
+The HTTP path rules must come before the WS catch-all, otherwise all traffic for the hostname is forwarded to Mosquitto and the dashboard and editor become unreachable.
 
 ---
 

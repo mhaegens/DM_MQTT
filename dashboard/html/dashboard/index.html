@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP DM MQTT Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--tx);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+header {
+  background: var(--base);
+  border-bottom: 1px solid var(--bd);
+  padding: 0 24px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tx);
+  letter-spacing: -.01em;
+}
+
+.header-title span {
+  color: var(--hi);
+}
+
+/* ── Connection badge ────────────────────────────────────── */
+#status-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 20px;
+  transition: background .2s, color .2s;
+}
+
+#status-badge.connected {
+  background: var(--ok-lt);
+  color: var(--ok);
+  border: 1px solid var(--ok-bd);
+}
+
+#status-badge.disconnected {
+  background: var(--err-lt);
+  color: var(--err);
+  border: 1px solid var(--err-bd);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+#status-badge.connected .status-dot { background: var(--ok); }
+#status-badge.disconnected .status-dot { background: var(--err); }
+
+#status-ts {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: .8;
+}
+
+/* ── Main layout ─────────────────────────────────────────── */
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px 24px 24px;
+  min-height: 0;
+}
+
+@media (max-width: 1279px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Panel base ─────────────────────────────────────────── */
+.panel {
+  background: var(--base);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 3px 12px rgba(0,0,0,.04);
+}
+
+.panel-header {
+  padding: 12px 16px 11px;
+  border-bottom: 1px solid var(--bd);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.panel-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tx3);
+  font-family: var(--mono);
+}
+
+/* ── Live feed ───────────────────────────────────────────── */
+#feed-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  min-height: 200px;
+  max-height: calc(100vh - 160px);
+}
+
+.feed-row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 0 10px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--base2);
+  font-size: 12px;
+  line-height: 1.4;
+  animation: fadeIn .15s ease;
+}
+
+.feed-row:last-child { border-bottom: none; }
+
+@keyframes fadeIn {
+  from { background: var(--hi-lt); }
+  to   { background: transparent; }
+}
+
+.feed-ts {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--tx3);
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+.feed-body { overflow: hidden; }
+
+.feed-topic {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--hi-dk);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-payload {
+  color: var(--tx2);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--tx3);
+  font-size: 13px;
+}
+
+/* ── Topic table ─────────────────────────────────────────── */
+#topic-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  max-height: calc(100vh - 160px);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--base2);
+  padding: 8px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+}
+
+thead th:last-child { text-align: right; }
+
+tbody tr {
+  border-bottom: 1px solid var(--base2);
+  transition: background .1s;
+}
+
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--hi-lt); }
+
+tbody td {
+  padding: 7px 16px;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+.td-topic {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--hi-dk);
+  font-weight: 500;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.td-value {
+  color: var(--tx);
+  font-family: var(--mono);
+  font-size: 11px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.td-ago {
+  text-align: right;
+  color: var(--tx3);
+  font-size: 11px;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+
+.table-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--tx3);
+  font-size: 13px;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+#feed-list::-webkit-scrollbar,
+#topic-table-wrap::-webkit-scrollbar { width: 5px; }
+#feed-list::-webkit-scrollbar-track,
+#topic-table-wrap::-webkit-scrollbar-track { background: transparent; }
+#feed-list::-webkit-scrollbar-thumb,
+#topic-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--bd-str);
+  border-radius: 3px;
+}
+
+/* ── Publish panel ───────────────────────────────────────── */
+#publish-panel {
+  background: var(--base);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 3px 12px rgba(0,0,0,.04);
+  margin: 0 24px 24px;
+}
+
+.publish-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.publish-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.publish-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.publish-field input,
+.publish-field select {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd-str);
+  border-radius: 6px;
+  background: var(--base);
+  color: var(--tx);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.publish-field input:focus,
+.publish-field select:focus {
+  border-color: var(--hi);
+}
+
+#pub-topic  { width: 200px; }
+#pub-payload { width: 320px; }
+#pub-qos    { width: 72px; }
+
+#pub-btn {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 20px;
+  border: none;
+  border-radius: 6px;
+  background: var(--hi);
+  color: #fff;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+#pub-btn:hover:not(:disabled) { background: var(--hi-dk); }
+
+#pub-btn:disabled {
+  background: var(--base3);
+  color: var(--tx3);
+  cursor: not-allowed;
+}
+
+/* OUT badge in feed */
+.feed-row.feed-out { background: #FFFBF0; }
+.feed-row.feed-out .feed-ts  { color: #B06000; }
+.feed-row.feed-out .feed-topic { color: #B06000; }
+.feed-row.feed-out .feed-payload { color: var(--tx2); }
+.feed-out-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: #FFF0C0;
+  color: #7A4500;
+  border: 1px solid #F0CC70;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">SAP DM <span>MQTT</span> Monitor</div>
+  <div id="status-badge" class="disconnected">
+    <div class="status-dot"></div>
+    <span id="status-label">Disconnected</span>
+    <span id="status-ts"></span>
+  </div>
+</header>
+
+<main>
+  <!-- Live Feed -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Feed</span>
+      <span class="panel-count" id="feed-count">0 messages</span>
+    </div>
+    <div id="feed-list">
+      <div class="feed-empty" id="feed-empty">Waiting for messages&hellip;</div>
+    </div>
+  </div>
+
+  <!-- Topic Last Values -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Topic Last Values</span>
+      <span class="panel-count" id="topic-count">0 topics</span>
+    </div>
+    <div id="topic-table-wrap">
+      <table id="topic-table">
+        <thead>
+          <tr>
+            <th>Topic</th>
+            <th>Last Value</th>
+            <th>Time Ago</th>
+          </tr>
+        </thead>
+        <tbody id="topic-tbody">
+          <tr><td colspan="3" class="table-empty" id="topic-empty">Waiting for messages&hellip;</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Publish panel -->
+<div id="publish-panel" class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Publish Message</span>
+  </div>
+  <div class="publish-form">
+    <div class="publish-field">
+      <label for="pub-topic">Topic</label>
+      <input id="pub-topic" type="text" placeholder="factory/test" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="publish-field">
+      <label for="pub-payload">Payload</label>
+      <input id="pub-payload" type="text" placeholder='{"value":1}' autocomplete="off" spellcheck="false">
+    </div>
+    <div class="publish-field">
+      <label for="pub-qos">QoS</label>
+      <select id="pub-qos">
+        <option value="0">0</option>
+        <option value="1">1</option>
+      </select>
+    </div>
+    <button id="pub-btn" disabled>Not connected</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Broker URL ──────────────────────────────────────────
+  const url = window.location.protocol === 'https:'
+    ? 'wss://' + window.location.hostname
+    : 'ws://' + window.location.hostname + ':9001';
+
+  // ── State ───────────────────────────────────────────────
+  const feedItems = [];           // [{ts, topic, payload}], newest first
+  const topicMap  = new Map();    // topic → {value, time: Date.now()}
+  const MAX_FEED  = 100;
+
+  // ── DOM refs ────────────────────────────────────────────
+  const badge      = document.getElementById('status-badge');
+  const statusLbl  = document.getElementById('status-label');
+  const statusTs   = document.getElementById('status-ts');
+  const feedList   = document.getElementById('feed-list');
+  const feedEmpty  = document.getElementById('feed-empty');
+  const feedCount  = document.getElementById('feed-count');
+  const topicTbody = document.getElementById('topic-tbody');
+  const topicEmpty = document.getElementById('topic-empty');
+  const topicCount = document.getElementById('topic-count');
+  const pubTopic   = document.getElementById('pub-topic');
+  const pubPayload = document.getElementById('pub-payload');
+  const pubQos     = document.getElementById('pub-qos');
+  const pubBtn     = document.getElementById('pub-btn');
+
+  // ── Helpers ─────────────────────────────────────────────
+  function nowHMS() {
+    const d = new Date();
+    return d.toTimeString().slice(0, 8);   // HH:MM:SS
+  }
+
+  function isoNow() {
+    return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  }
+
+  function timeAgo(ts) {
+    const secs = Math.floor((Date.now() - ts) / 1000);
+    if (secs < 60)  return secs + 's ago';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    return Math.floor(secs / 3600) + 'h ago';
+  }
+
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max) + '…' : str;
+  }
+
+  function esc(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Status ──────────────────────────────────────────────
+  function setConnected() {
+    badge.className = 'connected';
+    statusLbl.textContent = 'Connected';
+    statusTs.textContent = isoNow();
+    pubBtn.disabled = false;
+    pubBtn.textContent = 'Publish';
+  }
+
+  function setDisconnected() {
+    badge.className = 'disconnected';
+    statusLbl.textContent = 'Disconnected';
+    statusTs.textContent = '';
+    pubBtn.disabled = true;
+    pubBtn.textContent = 'Not connected';
+  }
+
+  // ── Feed ────────────────────────────────────────────────
+  function addFeedItem(topic, payload, isOut) {
+    const item = { ts: nowHMS(), topic, payload };
+    feedItems.unshift(item);
+    if (feedItems.length > MAX_FEED) feedItems.pop();
+
+    if (feedEmpty) feedEmpty.remove();
+
+    const row = document.createElement('div');
+    row.className = 'feed-row' + (isOut ? ' feed-out' : '');
+    const outBadge = isOut ? '<span class="feed-out-badge">OUT</span>' : '';
+    row.innerHTML =
+      '<div class="feed-ts">' + esc(item.ts) + '</div>' +
+      '<div class="feed-body">' +
+        '<div class="feed-topic">' + esc(item.topic) + outBadge + '</div>' +
+        '<div class="feed-payload">' + esc(truncate(item.payload, 120)) + '</div>' +
+      '</div>';
+
+    // Insert at top
+    feedList.insertBefore(row, feedList.firstChild);
+
+    // Remove excess DOM rows (keep MAX_FEED)
+    const rows = feedList.querySelectorAll('.feed-row');
+    if (rows.length > MAX_FEED) {
+      rows[rows.length - 1].remove();
+    }
+
+    feedCount.textContent = feedItems.length + ' message' + (feedItems.length !== 1 ? 's' : '');
+  }
+
+  // ── Topic table ─────────────────────────────────────────
+  function updateTopicTable(topic, value) {
+    topicMap.set(topic, { value, time: Date.now() });
+    renderTopicTable();
+  }
+
+  function renderTopicTable() {
+    const sorted = Array.from(topicMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+    if (sorted.length === 0) {
+      topicTbody.innerHTML = '<tr><td colspan="3" class="table-empty">Waiting for messages&hellip;</td></tr>';
+      topicCount.textContent = '0 topics';
+      return;
+    }
+
+    topicCount.textContent = sorted.length + ' topic' + (sorted.length !== 1 ? 's' : '');
+
+    topicTbody.innerHTML = sorted.map(([t, d]) =>
+      '<tr>' +
+        '<td class="td-topic" title="' + esc(t) + '">' + esc(t) + '</td>' +
+        '<td class="td-value" title="' + esc(d.value) + '">' + esc(truncate(d.value, 60)) + '</td>' +
+        '<td class="td-ago">' + timeAgo(d.time) + '</td>' +
+      '</tr>'
+    ).join('');
+  }
+
+  // ── Tick (update Time Ago column every second) ──────────
+  setInterval(function () {
+    if (topicMap.size > 0) renderTopicTable();
+  }, 1000);
+
+  // ── MQTT ─────────────────────────────────────────────────
+  const client = mqtt.connect(url, {
+    reconnectPeriod: 3000,
+    connectTimeout: 10000,
+    keepalive: 30,
+  });
+
+  client.on('connect', function () {
+    setConnected();
+    client.subscribe('#', { qos: 0 }, function (err) {
+      if (err) console.error('Subscribe error:', err);
+    });
+  });
+
+  client.on('reconnect', function () {
+    setDisconnected();
+  });
+
+  client.on('disconnect', function () {
+    setDisconnected();
+  });
+
+  client.on('offline', function () {
+    setDisconnected();
+  });
+
+  client.on('error', function (err) {
+    setDisconnected();
+    console.error('MQTT error:', err);
+  });
+
+  client.on('message', function (topic, message) {
+    const payload = message.toString();
+    addFeedItem(topic, payload, false);
+    updateTopicTable(topic, payload);
+  });
+
+  // ── Publish ──────────────────────────────────────────────
+  pubBtn.addEventListener('click', function () {
+    const topic   = pubTopic.value.trim();
+    const payload = pubPayload.value;
+    const qos     = parseInt(pubQos.value, 10);
+
+    if (!topic) {
+      pubTopic.focus();
+      return;
+    }
+
+    client.publish(topic, payload, { qos: qos }, function (err) {
+      if (err) {
+        console.error('Publish error:', err);
+        return;
+      }
+      addFeedItem(topic, payload, true);
+      updateTopicTable(topic, payload);
+    });
+  });
+
+}());
+</script>
+</body>
+</html>

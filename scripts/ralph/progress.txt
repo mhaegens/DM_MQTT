@@ -1,0 +1,43 @@
+# Ralph Progress Log
+Started: 2026-05-13
+
+## Codebase Patterns
+
+---
+
+## US-001 — Remove Node-RED from the stack (2026-05-13)
+- Removed `nodered` service block from `docker-compose.yml` (exactly 3 services remain: mosquitto, cloudflared, dashboard)
+- Removed `nodered/data` from `mkdir -p` line in `install.sh`; removed Node-RED from Access URLs output
+- Removed Node-RED row from Services table in `README.md`
+- Removed `sapdm-nodered` from EXPECTED array in `scripts/smoke-test.sh`; removed "3. Node-RED HTTP" section; renumbered remaining sections 3-5
+- Committed: aaf1339
+- passes: true
+
+## US-002 — Add nginx config to serve /dashboard and /editor paths (2026-05-13)
+- Created `dashboard/nginx/default.conf` with location blocks for `/dashboard/` and `/editor/` using `alias` + `try_files`; root `/` returns 404
+- Updated `docker-compose.yml` dashboard service to mount both `./dashboard/html:/usr/share/nginx/html:ro` and `./dashboard/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro`
+- YAML validated via python3 yaml.safe_load; both mounts confirmed present
+- Committed: ff73b0e
+- passes: true
+
+## US-003 — Move editor to /editor path and update cloudflared config (2026-05-13)
+- `git mv dashboard/html/editor.html dashboard/html/editor/index.html` — editor now served at /editor/
+- Updated `cloudflared/config.yml.example`: hostname changed to `mqttfordm.haegens.be`; three ordered ingress rules: /editor.* and /dashboard.* route to http://dashboard:80, catch-all routes to ws://mosquitto:9001; fallback http_status:404 retained
+- Added comment block explaining that HTTP path rules must precede the WS catch-all to avoid all traffic going to Mosquitto
+- YAML validated via python3 yaml.safe_load
+- Committed: 9c30bf2
+- passes: true
+
+## US-004 — Build live MQTT dashboard monitoring view (2026-05-13)
+- Created `dashboard/html/dashboard/index.html` as a single self-contained HTML file (no build step)
+- mqtt.js loaded from CDN: https://unpkg.com/mqtt/dist/mqtt.min.js
+- Broker URL derived on load using window.location.protocol for ws:// vs wss://
+- Connection status badge: green "Connected" with ISO timestamp on connect, red "Disconnected" otherwise
+- Subscribes to `#` immediately on connect
+- Live message feed: newest at top, capped at 100 entries, scrollable; each row shows HH:MM:SS timestamp, topic, payload (truncated at 120 chars); fade-in animation on new rows
+- Per-topic last-value table: Topic | Last Value | Time Ago columns; sorted alphabetically; Time Ago updates every second via setInterval
+- Visual style: IBM Plex Sans + IBM Plex Mono (Google Fonts CDN), full SAP Fiori CSS variable set (--hi, --ok, --err, --bg, --tx, etc.)
+- Two-column layout at 1280px+, single column on narrow viewports
+- No publish panel (deferred to US-005)
+- Committed: c51cea4
+- passes: true

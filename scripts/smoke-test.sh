@@ -34,7 +34,7 @@ done
 echo "1. Docker containers"
 cd "$INSTALL_DIR"
 
-EXPECTED=("sapdm-mosquitto" "sapdm-cloudflared" "sapdm-nodered" "sapdm-dashboard")
+EXPECTED=("sapdm-mosquitto" "sapdm-cloudflared" "sapdm-dashboard")
 for name in "${EXPECTED[@]}"; do
   state=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "missing")
   if [[ "$state" == "running" ]]; then
@@ -44,22 +44,22 @@ for name in "${EXPECTED[@]}"; do
   fi
 done
 
-# ── 2. Dashboard HTTP ────────────────────────────────────────────────────────
+# ── 2. Dashboard path HTTP 200 ───────────────────────────────────────────────
 echo ""
-echo "2. Dashboard (Nginx :80)"
-if curl -sf --max-time 5 http://localhost/ -o /dev/null; then
-  pass "HTTP 200 on port 80"
+echo "2. Dashboard path (/dashboard/)"
+if curl -sf --max-time 5 http://localhost/dashboard/ -o /dev/null; then
+  pass "HTTP 200 on /dashboard/"
 else
-  fail "No HTTP response on port 80"
+  fail "No HTTP 200 response on /dashboard/"
 fi
 
-# ── 3. Node-RED HTTP ─────────────────────────────────────────────────────────
+# ── 3. Editor path HTTP 200 ──────────────────────────────────────────────────
 echo ""
-echo "3. Node-RED (:1880)"
-if curl -sf --max-time 5 http://localhost:1880/ -o /dev/null; then
-  pass "HTTP 200 on port 1880"
+echo "3. Editor path (/editor/)"
+if curl -sf --max-time 5 http://localhost/editor/ -o /dev/null; then
+  pass "HTTP 200 on /editor/"
 else
-  fail "No HTTP response on port 1880"
+  fail "No HTTP 200 response on /editor/"
 fi
 
 # ── 4. MQTT TCP publish/subscribe ────────────────────────────────────────────

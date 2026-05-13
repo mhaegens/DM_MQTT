@@ -6,13 +6,24 @@
 #   1. Create a tunnel in Cloudflare Zero Trust > Networks > Tunnels
 #   2. Copy the tunnel credentials JSON to this directory
 #   3. cp config.yml.example config.yml
-#   4. Replace <your-tunnel-id> and mqtt.yourdomain.com below
+#   4. Replace <your-tunnel-id> and mqttfordm.haegens.be below
 #   5. docker compose restart cloudflared
 
 tunnel: <your-tunnel-id>
 credentials-file: /etc/cloudflared/<your-tunnel-id>.json
 
+# Ingress rule ordering matters: Cloudflare evaluates rules top-to-bottom and
+# stops at the first match. The HTTP path rules (/editor, /dashboard) must come
+# BEFORE the WebSocket catch-all rule (no path field), otherwise all traffic
+# for this hostname is forwarded to Mosquitto and the dashboard/editor are
+# unreachable.
 ingress:
-  - hostname: mqtt.yourdomain.com
+  - hostname: mqttfordm.haegens.be
+    path: /editor.*
+    service: http://dashboard:80
+  - hostname: mqttfordm.haegens.be
+    path: /dashboard.*
+    service: http://dashboard:80
+  - hostname: mqttfordm.haegens.be
     service: ws://mosquitto:9001
   - service: http_status:404
