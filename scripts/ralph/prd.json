@@ -1,0 +1,128 @@
+{
+  "project": "DM-MQTT-Server",
+  "branchName": "ralph/server-stack",
+  "description": "Stand up the complete server-side demo infrastructure: Mosquitto MQTT broker, Cloudflare Tunnel, a live browser dashboard, and a hosted JSON config editor. Node-RED removed. Dashboard at mqttfordm.haegens.be/dashboard. Config editor at mqttfordm.haegens.be/editor.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Remove Node-RED from the stack",
+      "description": "As a developer, I want Node-RED removed from docker-compose.yml and install.sh so the stack is leaner and there is no confusion about its role.",
+      "acceptanceCriteria": [
+        "nodered service removed from docker-compose.yml",
+        "nodered/data directory creation removed from install.sh",
+        "Node-RED port 1880 removed from README access URLs table",
+        "smoke-test.sh no longer checks port 1880 or the sapdm-nodered container",
+        "docker-compose.yml has exactly three services: mosquitto, cloudflared, dashboard",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add nginx config to serve /dashboard and /editor paths",
+      "description": "As a developer, I want the nginx container to serve the dashboard and editor HTML at their respective paths so that Cloudflare path routing works correctly for both.",
+      "acceptanceCriteria": [
+        "dashboard/nginx/default.conf added to repo with a location /dashboard block serving files from /usr/share/nginx/html/dashboard/",
+        "dashboard/nginx/default.conf also has a location /editor block serving files from /usr/share/nginx/html/editor/",
+        "docker-compose.yml dashboard service mounts ./dashboard/html:/usr/share/nginx/html:ro AND ./dashboard/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro",
+        "Requesting GET /dashboard/ on port 80 returns HTTP 200",
+        "Requesting GET /editor/ on port 80 returns HTTP 200",
+        "Requesting GET / on port 80 returns HTTP 404 (root is reserved for Cloudflare WS passthrough)",
+        "docker compose config validates without errors",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "The HTML files for dashboard and editor are added in later stories. This story only wires up nginx routing so both paths are ready."
+    },
+    {
+      "id": "US-003",
+      "title": "Move editor to /editor path and update cloudflared config",
+      "description": "As a developer, I want the existing JSON config editor hosted at /editor so it is reachable remotely via the Cloudflare Tunnel.",
+      "acceptanceCriteria": [
+        "dashboard/html/editor.html moved to dashboard/html/editor/index.html",
+        "Requesting GET /editor/ on port 80 returns HTTP 200 with the editor HTML",
+        "cloudflared/config.yml.example ingress section updated to three rules in order: (1) hostname mqttfordm.haegens.be path /editor.* → http://dashboard:80; (2) hostname mqttfordm.haegens.be path /dashboard.* → http://dashboard:80; (3) hostname mqttfordm.haegens.be (catch-all, no path) → ws://mosquitto:9001",
+        "A comment in config.yml.example explains rule ordering: HTTP path rules must come before the WS catch-all or all traffic goes to Mosquitto",
+        "Fallback rule (http_status:404) remains as the final entry for unmatched hostnames",
+        "docker compose config validates without errors",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "The editor already exists at dashboard/html/editor.html — this story relocates it and wires up Cloudflare routing. No changes to editor functionality."
+    },
+    {
+      "id": "US-004",
+      "title": "Build live MQTT dashboard — connection, feed, and topic table",
+      "description": "As an operator, I want to open /dashboard in a browser and see live MQTT messages from the broker so I can verify the ESP32 is publishing correctly.",
+      "acceptanceCriteria": [
+        "dashboard/html/dashboard/index.html created as a single self-contained HTML file",
+        "mqtt.js loaded from CDN https://unpkg.com/mqtt/dist/mqtt.min.js — no build step",
+        "On load, broker URL is derived as: window.location.protocol === 'https:' ? 'wss://' + window.location.hostname : 'ws://' + window.location.hostname + ':9001'",
+        "Connection status indicator shows green 'Connected' with ISO timestamp on connect, red 'Disconnected' on disconnect",
+        "Client subscribes to # immediately on connect",
+        "Live message feed shows timestamp, topic, payload — newest entry at top, capped at 100 entries, scrollable",
+        "Per-topic last-value table updates as messages arrive: columns are Topic, Last Value, Time Ago — sorted alphabetically by topic",
+        "Visual style uses IBM Plex Sans and IBM Plex Mono fonts (Google Fonts CDN) and the same SAP Fiori CSS color tokens as dashboard/html/index.html (--hi, --ok, --err, --bg, --tx, etc.)",
+        "Page is usable at 1280px+ viewport width",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Publish panel is handled separately in US-005. This story delivers the read-only monitoring view."
+    },
+    {
+      "id": "US-005",
+      "title": "Add publish panel to dashboard",
+      "description": "As an operator, I want to send MQTT messages from the browser dashboard so I can inject test values without needing mosquitto_pub on the command line.",
+      "acceptanceCriteria": [
+        "Publish panel added to dashboard/html/dashboard/index.html below the topic table",
+        "Panel contains: Topic text input (placeholder 'factory/test'), Payload text input, QoS dropdown with options 0 and 1, Publish button",
+        "Clicking Publish sends the message via the existing MQTT connection",
+        "After a successful publish, the sent message appears in the live feed with a distinct 'OUT' label or color to distinguish it from received messages",
+        "If the client is disconnected, the Publish button is disabled and shows 'Not connected'",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Update smoke test for trimmed stack",
+      "description": "As a developer, I want the smoke test to validate the updated three-service stack so I can confirm everything is wired up correctly after deploy.",
+      "acceptanceCriteria": [
+        "smoke-test.sh expected container list is exactly: sapdm-mosquitto sapdm-cloudflared sapdm-dashboard",
+        "Smoke test checks http://localhost/dashboard/ returns HTTP 200",
+        "Smoke test checks http://localhost/editor/ returns HTTP 200",
+        "Smoke test still checks MQTT TCP pub/sub round-trip on port 1883",
+        "Smoke test still checks WebSocket port 9001 is open with nc",
+        "Smoke test still checks Cloudflare Tunnel connectivity as an optional/skip check",
+        "Running bash scripts/smoke-test.sh exits 0 when all required checks pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Update README and install.sh for new stack",
+      "description": "As a new user, I want the README and install.sh to reflect the current three-service stack so I can follow accurate setup instructions.",
+      "acceptanceCriteria": [
+        "README Services table has three rows: Mosquitto, Cloudflared, Dashboard — Node-RED row removed",
+        "README dashboard row shows port 80 and paths /dashboard and /editor",
+        "README Cloudflare Tunnel setup section updated to describe the three-ingress routing (/editor, /dashboard, WS catch-all)",
+        "install.sh runtime directory creation creates only mosquitto/data and mosquitto/log — nodered/data removed",
+        "install.sh success output Access URLs section shows: Dashboard at http://<ip>/dashboard/, Editor at http://<ip>/editor/, MQTT TCP at <ip>:1883, MQTT WS at <ip>:9001",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
