@@ -5,7 +5,7 @@
 #   bash /opt/sapdm-demo/scripts/smoke-test.sh
 #
 # Checks: container health, HTTP endpoints, MQTT TCP pub/sub, WebSocket port,
-#         and (optional) Cloudflare Tunnel connectivity.
+#         and (optional) external tunnel URL reachability.
 
 set -uo pipefail
 
@@ -34,7 +34,7 @@ done
 echo "1. Docker containers"
 cd "$INSTALL_DIR"
 
-EXPECTED=("sapdm-mosquitto" "sapdm-cloudflared" "sapdm-dashboard")
+EXPECTED=("sapdm-mosquitto" "sapdm-dashboard")
 for name in "${EXPECTED[@]}"; do
   state=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "missing")
   if [[ "$state" == "running" ]]; then
@@ -104,19 +104,14 @@ else
   fail "Port 9001 is not reachable"
 fi
 
-# ── 6. Cloudflare Tunnel (optional) ──────────────────────────────────────────
+# ── 6. External tunnel URL (optional) ────────────────────────────────────────
 echo ""
-echo "6. Cloudflare Tunnel (optional)"
-if [[ -f "${INSTALL_DIR}/cloudflared/config.yml" ]]; then
-  if docker logs sapdm-cloudflared 2>&1 | grep -q "Registered tunnel connection"; then
-    pass "Tunnel is connected"
-  elif docker logs sapdm-cloudflared 2>&1 | grep -qi "error\|failed"; then
-    fail "Tunnel container has errors — run: docker logs sapdm-cloudflared"
-  else
-    warn "Tunnel container running but no connection confirmed yet — check: docker logs sapdm-cloudflared"
-  fi
+echo "6. External tunnel URL (optional)"
+TUNNEL_URL="https://mqttfordm.haegens.be/dashboard/"
+if curl -sf --max-time 8 "$TUNNEL_URL" -o /dev/null; then
+  pass "Tunnel URL reachable: $TUNNEL_URL"
 else
-  warn "cloudflared/config.yml not found — tunnel not yet configured (expected for first-time setup)"
+  warn "Tunnel URL not reachable: $TUNNEL_URL — check your Proxmox cloudflared config"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

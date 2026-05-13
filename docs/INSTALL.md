@@ -6,13 +6,14 @@ This guide walks you through setting up the complete demo server stack from scra
 
 ## What you are building
 
-Three programs run together on a small virtual server (called an LXC container) inside Proxmox:
+Two programs run together on a small virtual server (called an LXC container) inside Proxmox:
 
 | Service | What it does | Where it is reachable |
 |---|---|---|
-| **Mosquitto** | Receives and delivers MQTT messages | Port 1883 (local) and port 9001 (WebSocket) |
-| **Cloudflared** | Connects your server to the internet through Cloudflare | `mqttfordm.haegens.be` |
+| **Mosquitto** | Receives and delivers MQTT messages | Port 1883 (local TCP) and port 9001 (WebSocket) |
 | **Dashboard** (nginx) | Shows a live MQTT monitor and a config editor in your browser | `/dashboard` and `/editor` |
+
+Internet access is provided by **your existing Cloudflare Tunnel** already running on the Proxmox host (the same one that serves `jellyfin.haegens.be` and other services). You will add three new ingress rules to it, pointing at this LXC's LAN IP. No second cloudflared instance is needed.
 
 ---
 
@@ -140,102 +141,95 @@ Run:
 docker compose -f /opt/sapdm-demo/docker-compose.yml ps
 ```
 
-✅ **You should see** three rows, each with `running` in the Status column:
+✅ **You should see** two rows, each with `running` in the Status column:
 
 ```
 NAME                 STATUS
-sapdm-cloudflared    running
 sapdm-dashboard      running
 sapdm-mosquitto      running
 ```
 
-> **Note:** `sapdm-cloudflared` may show a different status at this point because the tunnel is not configured yet. That is normal. You will fix it in Part 3.
-
 ---
 
-## Part 3: Configure the Cloudflare Tunnel
+## Part 3: Add ingress rules to your existing Cloudflare Tunnel
 
-The Cloudflare Tunnel makes your MQTT broker reachable from the internet without opening firewall ports. This is what allows the ESP32 device and SAP DM to connect from anywhere.
+You already have a Cloudflare Tunnel running on the Proxmox host that serves other services like `jellyfin.haegens.be`. You do not need to create a new tunnel or run cloudflared again inside this LXC. Instead, you add three ingress rules to the existing tunnel config so traffic for `mqttfordm.haegens.be` is routed to the new LXC.
 
-### Step 3.1: Log in to Cloudflare Zero Trust
+> **Why three rules, not one?** The MQTT dashboard and editor are served over HTTP by nginx. The MQTT broker itself talks WebSocket. A single catch-all rule cannot handle both, so we need one rule per path for HTTP and one catch-all for WebSocket.
 
-Open a browser and go to [one.dash.cloudflare.com](https://one.dash.cloudflare.com). Log in with your Cloudflare account.
+### Step 3.1: Find your existing tunnel config file
 
-### Step 3.2: Create a new tunnel
-
-1. In the left sidebar, click **Networks**, then click **Tunnels**.
-2. Click **Create a tunnel**.
-3. Choose **Cloudflared** as the connector type, then click **Next**.
-4. Give the tunnel the name `sapdm-demo`, then click **Save tunnel**.
-5. On the next screen, Cloudflare shows you a **Connector ID** and a credentials file. Click **Docker** to see the run command — you do not need to run it. Instead, look for a button or link that says **Download credentials** or shows a JSON block.
-
-> **Note:** The tunnel credentials are a JSON file that acts like a password for your tunnel. Keep it safe and do not share it publicly.
-
-### Step 3.3: Copy the credentials JSON to the LXC
-
-You need to place the credentials file at `/opt/sapdm-demo/cloudflared/<tunnel-id>.json` on the LXC. There are two ways to do this.
-
-**Option A: Copy-paste the content (easiest)**
-
-On the LXC (in your SSH session), run:
+On the **Proxmox host** (in the Proxmox shell or via SSH to the host), run:
 
 ```bash
-nano /opt/sapdm-demo/cloudflared/<tunnel-id>.json
+cloudflared tunnel list
 ```
 
-Replace `<tunnel-id>` with the UUID shown in your Cloudflare tunnel dashboard (it looks like `a1b2c3d4-...`). Paste the full JSON content from the Cloudflare dashboard, then press `Ctrl + X`, then `Y`, then Enter to save.
-
-**Option B: Transfer the file from your computer using `scp`**
-
-Open a **second terminal** on your computer (keep the SSH session open in the first one). Run:
+Note the name of the tunnel you use (for example `proxmox-tunnel` or similar). Then find its config file:
 
 ```bash
-scp /path/to/<tunnel-id>.json root@<lxc-ip>:/opt/sapdm-demo/cloudflared/
+cloudflared tunnel info <your-tunnel-name>
 ```
 
-Replace `/path/to/<tunnel-id>.json` with the path to the file you downloaded, and `<lxc-ip>` with your LXC IP.
-
-### Step 3.4: Configure the tunnel
-
-In your SSH session on the LXC, run:
+The config file is usually at `/etc/cloudflared/config.yml` or `~/.cloudflared/config.yml`. Open it with:
 
 ```bash
-cp /opt/sapdm-demo/cloudflared/config.yml.example /opt/sapdm-demo/cloudflared/config.yml
-nano /opt/sapdm-demo/cloudflared/config.yml
+nano /etc/cloudflared/config.yml
 ```
 
-The file looks like this:
+### Step 3.2: Add the three ingress rules
+
+Inside the `ingress:` section, add these three rules. They must go **above** the existing catch-all rule (the one with no `hostname` or the final `service: http_status:404` line). Replace `192.168.x.x` with the LAN IP of your sapdm-demo LXC (the one you noted in Step 1.4).
 
 ```yaml
-tunnel: <your-tunnel-id>
-credentials-file: /etc/cloudflared/<your-tunnel-id>.json
+  - hostname: mqttfordm.haegens.be
+    path: /editor.*
+    service: http://192.168.x.x:80
+
+  - hostname: mqttfordm.haegens.be
+    path: /dashboard.*
+    service: http://192.168.x.x:80
+
+  - hostname: mqttfordm.haegens.be
+    service: ws://192.168.x.x:9001
 ```
 
-Replace both occurrences of `<your-tunnel-id>` with your actual tunnel UUID. Save the file with `Ctrl + X`, then `Y`, then Enter.
+> **Rule ordering matters.** Cloudflare evaluates rules from top to bottom and stops at the first match. The `/editor` and `/dashboard` path rules must come before the WebSocket catch-all (the one with no `path:` field), otherwise all traffic for this hostname goes to the MQTT broker and the dashboard never loads.
 
-> **Note:** The hostname `mqttfordm.haegens.be` is already in the example config. If you are using a different hostname, update it in the `ingress` section as well. The rule ordering matters: the `/editor` and `/dashboard` path rules must stay above the WebSocket catch-all rule.
+Save the file with `Ctrl + X`, then `Y`, then Enter.
 
-### Step 3.5: Restart cloudflared
+### Step 3.3: Add the DNS record in Cloudflare
+
+The hostname `mqttfordm.haegens.be` needs a DNS record pointing to your tunnel. In the Cloudflare dashboard:
+
+1. Go to **Websites**, select `haegens.be`.
+2. Go to **DNS** > **Records**.
+3. Click **Add record**.
+4. Type: `CNAME`, Name: `mqttfordm`, Target: `<your-tunnel-id>.cfargotunnel.com`, Proxied: on.
+
+You can find your tunnel ID by running `cloudflared tunnel list` on the Proxmox host.
+
+### Step 3.4: Reload the tunnel
 
 ```bash
-docker compose -f /opt/sapdm-demo/docker-compose.yml restart cloudflared
+systemctl reload cloudflared
 ```
 
-Wait about 10 seconds, then move to Step 3.6.
-
-### Step 3.6: Verify the tunnel is connected
+If that does not work on your setup, restart it instead:
 
 ```bash
-docker logs sapdm-cloudflared 2>&1 | tail -20
+systemctl restart cloudflared
 ```
 
-✅ **You should see** a line containing:
+### Step 3.5: Verify the tunnel routes traffic
+
+From any device, open:
 
 ```
-Registered tunnel connection
+https://mqttfordm.haegens.be/dashboard/
 ```
 
-If you see `error` or `failed` lines instead, double-check that the tunnel ID in `config.yml` matches the filename of your credentials JSON, and that the JSON file is not empty.
+✅ **You should see** the MQTT monitor dashboard loading over HTTPS.
 
 ---
 
@@ -296,11 +290,11 @@ This script checks every component automatically: containers running, HTTP endpo
 ✅ **You should see** a result like:
 
 ```
-  Result: 6/6 checks passed
+  Result: 5/5 checks passed
   All checks passed.
 ```
 
-⚠️ If any check shows `FAIL`, read the message next to it. The most common issues are: a container that is not running (`docker compose up -d` to fix), or the tunnel not yet configured (expected on first run, see Part 3).
+⚠️ If any check shows `FAIL`, read the message next to it. The most common issues are: a container that is not running (`docker compose up -d` to fix), or the tunnel URL not reachable (check Step 3.5).
 
 ---
 
@@ -339,10 +333,9 @@ Open the dashboard and look for topics starting with `sapdm/`. You should see re
 
 | Symptom | Most likely cause | Fix |
 |---|---|---|
-| `sapdm-cloudflared` not running | Missing or invalid `config.yml` | Redo Part 3 |
 | Dashboard returns 502 or blank | nginx container stopped | `docker compose -f /opt/sapdm-demo/docker-compose.yml up -d` |
 | MQTT pub/sub test fails | Mosquitto container stopped | Same as above |
-| Tunnel URL does not work | Tunnel not registered | Check `docker logs sapdm-cloudflared` |
+| Tunnel URL does not work | Ingress rules not added or DNS record missing | Redo Part 3 |
 | Device does not show in dashboard | Device not connected to WiFi yet | Redo Step 5.1 |
 | LXC IP unknown | Need to look it up | `pct exec 200 -- hostname -I` on Proxmox shell |
 

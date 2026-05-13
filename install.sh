@@ -55,36 +55,25 @@ info "Creating runtime directories..."
 mkdir -p mosquitto/data mosquitto/log
 ok "Runtime directories ready."
 
-# ── 6. Cloudflare Tunnel config check ───────────────────────────────────────
-if [[ ! -f cloudflared/config.yml ]]; then
-  warn "cloudflared/config.yml not found."
-  warn "The cloudflared container will start but fail until you configure the tunnel."
-  warn "After setup:"
-  warn "  1. Copy your tunnel credentials JSON to ${INSTALL_DIR}/cloudflared/"
-  warn "  2. cp cloudflared/config.yml.example cloudflared/config.yml"
-  warn "  3. Edit cloudflared/config.yml — fill in tunnel ID and hostname"
-  warn "  4. docker compose restart cloudflared"
-fi
-
-# ── 7. Pull images & start stack ────────────────────────────────────────────
+# ── 6. Pull images & start stack ────────────────────────────────────────────
 info "Pulling Docker images (this may take a minute)..."
 docker compose pull
 info "Starting stack..."
 docker compose up -d
 
-# ── 8. Status ───────────────────────────────────────────────────────────────
+# ── 7. Status ───────────────────────────────────────────────────────────────
 echo ""
 docker compose ps
 echo ""
 ok "Stack is up."
 echo ""
-echo -e "${BOLD}Access URLs:${NC}"
+echo -e "${BOLD}Access URLs (LAN):${NC}"
 LAN_IP=$(hostname -I | awk '{print $1}')
 echo "  Dashboard : http://${LAN_IP}/dashboard/"
 echo "  Editor    : http://${LAN_IP}/editor/"
 echo "  MQTT TCP  : ${LAN_IP}:1883  (internal only)"
 echo "  MQTT WS   : ${LAN_IP}:9001  (LAN + Cloudflare Tunnel)"
 echo ""
-if [[ ! -f cloudflared/config.yml ]]; then
-  warn "Cloudflare Tunnel not yet configured — SAP DM cannot connect until tunnel is set up."
-fi
+echo -e "${BOLD}Next step:${NC}"
+echo "  Add the Cloudflare Tunnel ingress rules from cloudflared/config.yml.example"
+echo "  to your existing tunnel config on the Proxmox host, then reload cloudflared."
