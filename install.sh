@@ -17,7 +17,7 @@ die()   { echo -e "${RED}[FAIL]${NC}  $*" >&2; exit 1; }
 # ── 1. OS check ─────────────────────────────────────────────────────────────
 info "Checking OS..."
 [[ "$(id -u)" -eq 0 ]] || die "Run as root or with sudo."
-grep -qi "ubuntu" /etc/os-release || warn "Not Ubuntu — proceeding anyway."
+grep -qi "debian" /etc/os-release || warn "Not Debian — proceeding anyway."
 
 # ── 2. Base packages ────────────────────────────────────────────────────────
 info "Installing base packages (curl, git, ca-certificates, gnupg)..."

@@ -6,7 +6,7 @@
 #
 # What it does:
 #   1. Prompts for LXC settings (all have sensible defaults)
-#   2. Downloads the Ubuntu 24.04 CT template if not already cached
+#   2. Downloads the Debian 12 (Bookworm) CT template if not already cached
 #   3. Creates the LXC with nesting enabled (required for Docker)
 #   4. Starts it and runs install.sh inside to bring up the full demo stack
 
@@ -79,22 +79,22 @@ if pct status "$LXC_ID" &>/dev/null; then
   die "LXC ${LXC_ID} already exists. Choose a different ID."
 fi
 
-# ── Find or download Ubuntu 24.04 template ───────────────────────────────────
-info "Looking for Ubuntu 24.04 CT template..."
+# ── Find or download Debian 13 (Trixie) template ────────────────────────────
+info "Looking for Debian 13 (Trixie) CT template..."
 
-TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "ubuntu-24.04-standard_*.tar.*" 2>/dev/null | sort -V | tail -1)
+TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-13-standard_*.tar.*" 2>/dev/null | sort -V | tail -1)
 
 if [[ -z "$TEMPLATE_FILE" ]]; then
   info "Template not cached — fetching available templates list..."
   pveam update
 
-  TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "^ubuntu-24.04-standard_" | sort -V | tail -1)
-  [[ -n "$TEMPLATE_NAME" ]] || die "Could not find an ubuntu-24.04-standard template via pveam. Check your Proxmox template repository."
+  TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "^debian-13-standard_" | sort -V | tail -1)
+  [[ -n "$TEMPLATE_NAME" ]] || die "Could not find a debian-13-standard template via pveam. Check your Proxmox template repository."
 
   info "Downloading ${TEMPLATE_NAME}..."
   pveam download local "$TEMPLATE_NAME" || die "Template download failed."
 
-  TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "ubuntu-24.04-standard_*.tar.*" | sort -V | tail -1)
+  TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-13-standard_*.tar.*" | sort -V | tail -1)
   [[ -n "$TEMPLATE_FILE" ]] || die "Template file not found after download."
 fi
 
@@ -106,7 +106,7 @@ info "Creating LXC ${LXC_ID}..."
 pct create "$LXC_ID" "local:vztmpl/${TEMPLATE_NAME}" \
   --hostname "$HOSTNAME" \
   --password "$ROOT_PASS" \
-  --ostype ubuntu \
+  --ostype debian \
   --memory 2048 \
   --swap 512 \
   --cores 2 \
