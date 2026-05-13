@@ -30,6 +30,7 @@ services:
       - "80:80"
     volumes:
       - ./dashboard/html:/usr/share/nginx/html:ro
+      - ./dashboard/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
 
 networks:
   default:
