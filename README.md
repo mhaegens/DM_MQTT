@@ -53,28 +53,31 @@ bash /opt/sapdm-demo/update.sh
 
 ### Services
 
-| Service     | Port(s)    | Purpose                                           |
-|-------------|------------|---------------------------------------------------|
-| Mosquitto   | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel)          |
-| Cloudflared | —          | Routes tunnel traffic: `/editor` and `/dashboard` to nginx, WS catch-all to Mosquitto |
-| Dashboard   | 80         | nginx serving `/dashboard` (live monitor) and `/editor` (JSON config editor) |
+| Service   | Port(s)    | Purpose |
+|-----------|------------|---------|
+| Mosquitto | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel) |
+| Dashboard | 80         | nginx serving `/dashboard` (live monitor) and `/editor` (JSON config editor) |
+
+Internet access is provided by the **existing Cloudflare Tunnel on the Proxmox host** — no cloudflared container runs in this stack. Add three ingress rules to your existing tunnel config pointing at this LXC's LAN IP (see `cloudflared/config.yml.example` and `docs/INSTALL.md` Part 3).
 
 ### Cloudflare Tunnel setup
 
-```bash
-cp /path/to/<tunnel-id>.json /opt/sapdm-demo/cloudflared/
-cp /opt/sapdm-demo/cloudflared/config.yml.example /opt/sapdm-demo/cloudflared/config.yml
-nano /opt/sapdm-demo/cloudflared/config.yml   # fill in tunnel ID and hostname
-cd /opt/sapdm-demo && docker compose restart cloudflared
+Add these rules to your existing tunnel `config.yml` on the Proxmox host. Replace `192.168.x.x` with this LXC's LAN IP. Rule order matters — Cloudflare evaluates top-to-bottom and stops at the first match:
+
+```yaml
+- hostname: mqttfordm.haegens.be
+  path: /editor.*
+  service: http://192.168.x.x:80
+
+- hostname: mqttfordm.haegens.be
+  path: /dashboard.*
+  service: http://192.168.x.x:80
+
+- hostname: mqttfordm.haegens.be
+  service: ws://192.168.x.x:9001
 ```
 
-The tunnel uses three ingress rules (order matters — Cloudflare evaluates top-to-bottom and stops at the first match):
-
-1. `path: /editor.*` → `http://dashboard:80` — JSON config editor
-2. `path: /dashboard.*` → `http://dashboard:80` — live MQTT monitor
-3. catch-all (no path) → `ws://mosquitto:9001` — WebSocket MQTT for SAP DM
-
-The HTTP path rules must come before the WS catch-all, otherwise all traffic for the hostname is forwarded to Mosquitto and the dashboard and editor become unreachable.
+Then reload: `systemctl reload cloudflared`
 
 ---
 

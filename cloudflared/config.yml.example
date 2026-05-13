@@ -1,29 +1,37 @@
-# Cloudflare Tunnel configuration template
-# Copy this file to config.yml and fill in your values.
-# Do NOT commit config.yml — it contains your tunnel ID.
+# Cloudflare Tunnel ingress rules for the SAP DM MQTT stack
 #
-# Steps:
-#   1. Create a tunnel in Cloudflare Zero Trust > Networks > Tunnels
-#   2. Copy the tunnel credentials JSON to this directory
-#   3. cp config.yml.example config.yml
-#   4. Replace <your-tunnel-id> and mqttfordm.haegens.be below
-#   5. docker compose restart cloudflared
+# This stack does NOT run its own cloudflared container.
+# Add the rules below to your EXISTING Cloudflare Tunnel config
+# (the one already serving jellyfin.haegens.be and other services).
+#
+# Find your tunnel config at the path shown by:
+#   cloudflared tunnel info <your-tunnel-name>
+# Typically: ~/.cloudflared/config.yml  or  /etc/cloudflared/config.yml
+#
+# Paste these three ingress rules into the existing ingress: list.
+# Rule ordering matters: Cloudflare evaluates rules top-to-bottom and stops
+# at the first match. The HTTP path rules (/editor, /dashboard) must come
+# BEFORE the WebSocket catch-all (no path field), otherwise all traffic for
+# this hostname goes to Mosquitto and the dashboard/editor are unreachable.
+#
+# Replace 192.168.x.x with the LAN IP of the sapdm-demo LXC.
 
-tunnel: <your-tunnel-id>
-credentials-file: /etc/cloudflared/<your-tunnel-id>.json
-
-# Ingress rule ordering matters: Cloudflare evaluates rules top-to-bottom and
-# stops at the first match. The HTTP path rules (/editor, /dashboard) must come
-# BEFORE the WebSocket catch-all rule (no path field), otherwise all traffic
-# for this hostname is forwarded to Mosquitto and the dashboard/editor are
-# unreachable.
-ingress:
-  - hostname: mqttfordm.haegens.be
-    path: /editor.*
-    service: http://dashboard:80
-  - hostname: mqttfordm.haegens.be
-    path: /dashboard.*
-    service: http://dashboard:80
-  - hostname: mqttfordm.haegens.be
-    service: ws://mosquitto:9001
-  - service: http_status:404
+# --- paste into your existing ingress: list ---
+#
+#   - hostname: mqttfordm.haegens.be
+#     path: /editor.*
+#     service: http://192.168.x.x:80
+#
+#   - hostname: mqttfordm.haegens.be
+#     path: /dashboard.*
+#     service: http://192.168.x.x:80
+#
+#   - hostname: mqttfordm.haegens.be
+#     service: ws://192.168.x.x:9001
+#
+# --- end of rules to paste ---
+#
+# After editing, reload your tunnel:
+#   cloudflared tunnel reload
+# or restart the cloudflared service:
+#   systemctl restart cloudflared
