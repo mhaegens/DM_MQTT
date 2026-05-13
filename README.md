@@ -81,6 +81,18 @@ Then reload: `systemctl reload cloudflared`
 
 ---
 
+## Key Decisions
+
+**WSS over plain MQTT TCP:** The broker endpoint uses WebSocket over TLS on port 443. SAP DM and browser clients connect directly over the public internet without a VPN or firewall change. Port 443 is open in every enterprise network.
+
+**Docker Compose on an LXC:** A single `docker compose up` starts the full stack reproducibly. The install script handles Docker setup, repo clone, and volume creation. No VM overhead, no manual service configuration.
+
+**JSON config on SD card:** The demo scenario (machines, tanks, operators, metrics) lives in a single JSON file. Swapping scenarios for a different customer requires copying a new file to the SD card and rebooting. No reflashing or recompile needed.
+
+**PSRAM for large data arrays:** All entity arrays and display framebuffers are allocated in SPIRAM. The ESP32-P4 has ~8 MB of PSRAM; internal SRAM is reserved for DMA operations (SDIO driver ring buffers and the LVGL draw buffer).
+
+---
+
 ## Firmware
 
 See [firmware/README.md](firmware/README.md) for build, flash, and configuration instructions.
@@ -99,3 +111,19 @@ See [firmware/README.md](firmware/README.md) for build, flash, and configuration
 | WiFi      | Network scan, join, soft-AP hotspot toggle, QR code            |
 
 All demo data (machines, tanks, operators, topics) is driven by a JSON config file on the SD card — no reflashing needed to change the demo scenario.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+|----------|---------------|
+| [docs/architecture.md](docs/architecture.md) | System design, key decisions, task map, memory layout, thread safety |
+| [docs/mqtt-topic-reference.md](docs/mqtt-topic-reference.md) | Full MQTT topic schema, payload formats, SAP DM integration |
+| [docs/config-schema.md](docs/config-schema.md) | JSON config file fields, capacity limits, annotated example |
+| [docs/server-setup.md](docs/server-setup.md) | Server stack install, Cloudflare Tunnel setup, verification |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Known issues with root causes and fixes |
+| [docs/demo-runbook.md](docs/demo-runbook.md) | Operational guide for running the rig at a demo |
+| [firmware/docs/firmware-architecture.md](firmware/docs/firmware-architecture.md) | Firmware boot sequence, tasks, data layer, UI architecture |
+| [firmware/docs/sdkconfig-reference.md](firmware/docs/sdkconfig-reference.md) | Rationale for every non-obvious sdkconfig.defaults entry |
+| [dashboard/README.md](dashboard/README.md) | Dashboard and editor web apps |

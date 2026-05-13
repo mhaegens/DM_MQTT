@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DM_MQTT Config Editor · PREVIEW</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* PREVIEW BANNER */
+.preview-banner{background:#1D2D3E;color:#FFF;text-align:center;padding:8px 24px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.1em;position:sticky;top:0;z-index:200}
+.preview-banner span{background:#E76500;color:#fff;padding:2px 8px;border-radius:4px;font-weight:600;margin-right:8px}
+
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF; --hi-mid:#C5DCFF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --warn:#E76500; --warn-lt:#FEF0E5; --warn-bd:#F8C07E;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --teal:#045B7A; --pur:#6A28C8;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --sh:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.05);
+  --sh-md:0 4px 20px rgba(0,0,0,.1);
+  --r:12px; --rsm:8px;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+  --ts:80px; --ts-sm:64px;
+  --f-xl:40px; --f-lg:32px; --f-md:26px; --f-sm:22px; --f-xs:18px; --f-xxs:15px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:var(--font);color:var(--tx);padding:20px}
+.container{max-width:1200px;margin:0 auto}
+.shell{background:var(--base);border-bottom:2px solid var(--hi);padding:20px;border-radius:var(--rsm);
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;box-shadow:var(--sh)}
+.shell-left{display:flex;align-items:center;gap:16px;flex:1}
+.sap-badge{width:48px;height:48px;background:var(--hi);border-radius:8px;display:flex;
+  align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px;flex-shrink:0}
+.shell-title{display:flex;flex-direction:column;gap:4px}
+.shell-h{font-size:var(--f-sm);font-weight:600}
+.shell-sub{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx2);letter-spacing:.05em}
+.shell-right{display:flex;align-items:center;gap:12px}
+.size-indicator{font-family:var(--mono);font-size:var(--f-xs);color:var(--tx2)}
+.btn{min-height:var(--ts);padding:0 20px;border-radius:var(--rsm);font:inherit;
+  font-size:var(--f-xs);font-weight:600;cursor:pointer;border:1.5px solid;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .12s;line-height:1}
+.btn.primary{background:var(--hi);border-color:var(--hi-dk);color:#fff}
+.btn.primary:hover{background:var(--hi-dk)}
+.btn.ghost{background:var(--base);border-color:var(--bd-str);color:var(--tx2)}
+.btn.ghost:hover{border-color:var(--hi);color:var(--hi);background:var(--hi-lt)}
+.btn.danger{background:var(--err-lt);border-color:var(--err-bd);color:var(--err)}
+.btn.sm{min-height:var(--ts-sm);font-size:var(--f-xxs);padding:0 12px}
+.tabs{display:flex;gap:2px;background:var(--base);border-radius:var(--rsm);padding:8px;
+  margin-bottom:20px;box-shadow:var(--sh)}
+.tab-btn{padding:12px 20px;background:transparent;border:none;cursor:pointer;color:var(--tx2);
+  font-size:var(--f-xs);font-weight:500;border-radius:6px;transition:all .12s;font-family:var(--font)}
+.tab-btn.active{background:var(--hi);color:#fff}
+.tab-btn:hover:not(.active){background:var(--hi-lt);color:var(--hi)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:20px}
+.card{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:16px;box-shadow:var(--sh)}
+.card:hover{border-color:var(--hi);box-shadow:var(--sh-md)}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:var(--f-sm);font-weight:600;flex:1}
+.card-status{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:var(--f-xxs);
+  text-transform:uppercase;color:var(--tx2)}
+.card-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.card-status-dot.running{background:var(--ok)}
+.card-status-dot.stopped{background:var(--err)}
+.card-info{font-family:var(--mono);font-size:var(--f-xxs);color:var(--tx3);margin:8px 0}
+.card-actions{display:flex;gap:8px;margin-top:12px}
+.card-actions .btn{flex:1}
+.form{background:var(--base);border:1px solid var(--bd);border-radius:var(--rsm);
+  padding:24px;box-shadow:var(--sh);max-width:600px}
+.form-group{margin-bottom:20px}
+.form-label{display:block;font-size:var(--f-xs);font-weight:600;margin-bottom:8px;color:var(--tx)}
+input[type="text"]{width:100%;padding:12px;font-family:var(--font);font-size:var(--f-xs);
+  border:1px solid var(--bd);border-radius:var(--rsm);background:var(--base);color:var(--tx)}
+.section-controls{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="preview-banner"><span>PREVIEW</span> Sample config pre-loaded — use Import JSON to load your own</div>
+
+<div class="container">
+  <div class="shell">
+    <div class="shell-left">
+      <div class="sap-badge">SAP</div>
+      <div class="shell-title">
+        <div class="shell-h">Config Editor</div>
+        <div class="shell-sub">DM_MQTT Plant Configuration</div>
+      </div>
+    </div>
+    <div class="shell-right">
+      <div class="size-indicator" id="sizeIndicator">1,247 bytes</div>
+      <button class="btn primary">Import JSON</button>
+      <button class="btn primary">Export JSON</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('plant', this)">Plant Info</button>
+    <button class="tab-btn" onclick="switchTab('machines', this)">Machines</button>
+    <button class="tab-btn" onclick="switchTab('tanks', this)">Tanks</button>
+    <button class="tab-btn" onclick="switchTab('people', this)">People</button>
+    <button class="tab-btn" onclick="switchTab('json', this)">Raw JSON</button>
+  </div>
+
+  <!-- Plant Info Tab -->
+  <div id="plant" class="tab-content active">
+    <div class="form">
+      <h2 style="margin-bottom:20px;font-size:var(--f-lg)">Plant Configuration</h2>
+      <div class="form-group">
+        <label class="form-label">Plant Name</label>
+        <input type="text" id="plantName" value="Plant BE01">
+      </div>
+      <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--bd);color:var(--tx2);font-size:var(--f-xs)">
+        <strong>Configuration Status:</strong> <span style="color:var(--ok)">Ready — 2 machines, 1 tank, 1 person</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Machines Tab -->
+  <div id="machines" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary">+ Add Machine</button>
+      <button class="btn ghost">Load Sample Config</button>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">CNC-01</div>
+            <div class="card-info">CNC Machining</div>
+          </div>
+          <div class="card-status">
+            <div class="card-status-dot running"></div>Running
+          </div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">cnc01</code></div>
+        <div class="card-info">2 metrics &middot; 1,247 pulses</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">CNC-02</div>
+            <div class="card-info">CNC Machining</div>
+          </div>
+          <div class="card-status">
+            <div class="card-status-dot stopped"></div>Stopped
+          </div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">cnc02</code></div>
+        <div class="card-info">2 metrics &middot; 892 pulses</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Fill Line 01</div>
+            <div class="card-info">Filling</div>
+          </div>
+          <div class="card-status">
+            <div class="card-status-dot running"></div>Running
+          </div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">fill01</code></div>
+        <div class="card-info">3 metrics &middot; 3,102 pulses</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tanks Tab -->
+  <div id="tanks" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary">+ Add Tank</button>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Raw Material</div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">raw</code></div>
+        <div class="card-info">3 metrics &middot; Level: 68%</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Product Tank</div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">prod</code></div>
+        <div class="card-info">3 metrics &middot; Level: 28%</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Waste Tank</div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">waste</code></div>
+        <div class="card-info">2 metrics &middot; Level: 11%</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- People Tab -->
+  <div id="people" class="tab-content">
+    <div class="section-controls">
+      <button class="btn primary">+ Add Person</button>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Michiel Haegens</div>
+            <div class="card-info">Shift Lead</div>
+          </div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">EMP-0042</code></div>
+        <div class="card-info">Dept: Production | 3 certs</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Sophie Claes</div>
+            <div class="card-info">CNC Operator</div>
+          </div>
+        </div>
+        <div class="card-info">ID: <code style="background:var(--base2);padding:2px 6px">EMP-0017</code></div>
+        <div class="card-info">Dept: Machining | 1 cert</div>
+        <div class="card-actions">
+          <button class="btn ghost">Edit</button>
+          <button class="btn danger">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw JSON Tab -->
+  <div id="json" class="tab-content">
+    <div class="form">
+      <h2 style="margin-bottom:20px;font-size:var(--f-lg)">Raw JSON</h2>
+      <div class="form-group">
+        <label class="form-label">JSON Content</label>
+        <textarea id="jsonRaw" style="font-family:var(--mono);font-size:14px;line-height:1.5;resize:vertical;min-height:300px;width:100%;padding:12px;border:1px solid var(--bd);border-radius:var(--rsm);background:var(--base);color:var(--tx)"></textarea>
+      </div>
+      <button class="btn primary" style="margin-right:8px">Load from JSON</button>
+      <button class="btn ghost">Refresh from Editor</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  btn.classList.add('active');
+}
+
+const SAMPLE_CONFIG = {
+  plant_name: "Plant BE01",
+  machines: [
+    { id:"cnc01", name:"CNC-01", type:"CNC Machining", running:true, pulses:1247,
+      metrics:[
+        {key:"rpm",label:"Spindle RPM",unit:"RPM",viz:"spark",input:"step",color:"0x0070F2",init_val:4850,min_val:0,max_val:8000,step:50,sim:{profile:"random_walk",rand_min:2000,rand_max:7000}},
+        {key:"spindleLoad",label:"Spindle Load",unit:"%",viz:"arc",input:"slider",init_val:62,min_val:0,max_val:100,step:1,thresholds:[{limit:40,color:"0x107E3E"},{limit:70,color:"0xE76500"},{limit:100,color:"0xBB0000"}],sim:{profile:"random_walk",rand_min:20,rand_max:95}}
+      ]},
+    { id:"cnc02", name:"CNC-02", type:"CNC Machining", running:false, pulses:892,
+      metrics:[
+        {key:"rpm",label:"Spindle RPM",unit:"RPM",viz:"spark",input:"step",color:"0x0070F2",init_val:0,min_val:0,max_val:8000,step:50,sim:{profile:"steady"}},
+        {key:"toolWear",label:"Tool Wear",unit:"%",viz:"arc",input:"slider",init_val:71,min_val:0,max_val:100,step:1,sim:{profile:"steady"}}
+      ]},
+    { id:"fill01", name:"Fill Line 01", type:"Filling", running:true, pulses:3102,
+      metrics:[
+        {key:"lineSpeed",label:"Line Speed",unit:"u/min",viz:"spark",input:"step",color:"0x107E3E",init_val:142,min_val:0,max_val:300,step:5,sim:{profile:"random_walk",rand_min:120,rand_max:180}},
+        {key:"flowRate",label:"Flow Rate",unit:"L/min",viz:"spark",input:"step",color:"0x0070F2",init_val:18.4,min_val:0,max_val:40,step:0.5,sim:{profile:"sine",amplitude:3,period_s:120,offset:18}},
+        {key:"oee",label:"OEE",unit:"%",viz:"arc",input:"slider",init_val:83,min_val:0,max_val:100,step:1,sim:{profile:"random_walk",rand_min:75,rand_max:95}}
+      ]}
+  ],
+  tanks: [
+    { id:"raw", name:"Raw Material",
+      metrics:[
+        {key:"level",label:"Fill Level",unit:"%",viz:"tank",input:"slider",init_val:68,min_val:0,max_val:100,step:1,sim:{profile:"random_walk",rand_min:60,rand_max:80}},
+        {key:"tankTemp",label:"Temperature",unit:"°C",viz:"thermo",input:"step",init_val:22.4,min_val:0,max_val:80,step:0.5,sim:{profile:"sine",amplitude:2,period_s:300,offset:22}},
+        {key:"flowIn",label:"Flow In",unit:"L/min",viz:"spark",input:"step",color:"0x0070F2",init_val:12.1,min_val:0,max_val:30,step:0.5,sim:{profile:"random_walk",rand_min:8,rand_max:18}}
+      ]},
+    { id:"prod", name:"Product Tank",
+      metrics:[
+        {key:"level",label:"Fill Level",unit:"%",viz:"tank",input:"slider",init_val:28,min_val:0,max_val:100,step:1,sim:{profile:"random_walk",rand_min:20,rand_max:40}},
+        {key:"tankTemp",label:"Temperature",unit:"°C",viz:"thermo",input:"step",init_val:41.8,min_val:0,max_val:80,step:0.5,sim:{profile:"steady"}},
+        {key:"flowIn",label:"Flow In",unit:"L/min",viz:"spark",input:"step",color:"0x107E3E",init_val:8.6,min_val:0,max_val:30,step:0.5,sim:{profile:"sine",amplitude:1.5,period_s:180,offset:8}}
+      ]},
+    { id:"waste", name:"Waste Tank",
+      metrics:[
+        {key:"level",label:"Fill Level",unit:"%",viz:"tank",input:"slider",init_val:11,min_val:0,max_val:100,step:1,sim:{profile:"random_walk",rand_min:5,rand_max:20}},
+        {key:"tankTemp",label:"Temperature",unit:"°C",viz:"thermo",input:"step",init_val:19.2,min_val:0,max_val:80,step:0.5,sim:{profile:"steady"}}
+      ]}
+  ],
+  people: [
+    {id:"EMP-0042",name:"Michiel Haegens",role:"Shift Lead",role_key:"lead",dept:"Production",plant:"Plant BE01",uid:"A3:F7:C2:91",avatar_color:"0x0050BE",certs:["ISO 9001","Lean","PLC Certified"]},
+    {id:"EMP-0017",name:"Sophie Claes",role:"CNC Operator",role_key:"operator",dept:"Machining",plant:"Plant BE01",uid:"B7:2D:E1:04",avatar_color:"0x107E3E",certs:["CNC Level 2"]}
+  ]
+};
+
+const json = JSON.stringify(SAMPLE_CONFIG, null, 2);
+document.getElementById('jsonRaw').value = json;
+const bytes = new TextEncoder().encode(json).length;
+document.getElementById('sizeIndicator').textContent = bytes.toLocaleString() + ' bytes';
+</script>
+</body>
+</html>

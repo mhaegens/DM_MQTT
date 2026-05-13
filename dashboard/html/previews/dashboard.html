@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAP DM MQTT Monitor · PREVIEW</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* PREVIEW BANNER */
+.preview-banner{background:#1D2D3E;color:#FFF;text-align:center;padding:8px 24px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.1em}
+.preview-banner span{background:#E76500;color:#fff;padding:2px 8px;border-radius:4px;font-weight:600;margin-right:8px}
+
+:root {
+  --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF;
+  --ok:#107E3E; --ok-lt:#E3F5EC; --ok-bd:#9ADDB8;
+  --err:#BB0000; --err-lt:#FFE8E8; --err-bd:#FFAAAA;
+  --bg:#F2F4FA; --base:#FFF; --base2:#EEF1F8; --base3:#E3E6EF;
+  --bd:#DDE1EA; --bd-str:#B8BFCC;
+  --tx:#1D2D3E; --tx2:#4A6080; --tx3:#8090A8;
+  --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--tx);min-height:100vh;display:flex;flex-direction:column}
+
+header{background:var(--base);border-bottom:1px solid var(--bd);padding:0 24px;height:52px;
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+  box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.header-title{font-size:16px;font-weight:600;color:var(--tx);letter-spacing:-.01em}
+.header-title span{color:var(--hi)}
+
+#status-badge{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;
+  padding:5px 12px;border-radius:20px}
+#status-badge.connected{background:var(--ok-lt);color:var(--ok);border:1px solid var(--ok-bd)}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--ok)}
+#status-ts{font-family:var(--mono);font-size:11px;opacity:.8}
+
+main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px 24px 24px;min-height:0}
+@media(max-width:1279px){main{grid-template-columns:1fr}}
+
+.panel{background:var(--base);border:1px solid var(--bd);border-radius:10px;display:flex;
+  flex-direction:column;overflow:hidden;
+  box-shadow:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.04)}
+.panel-header{padding:12px 16px 11px;border-bottom:1px solid var(--bd);display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0}
+.panel-title{font-size:13px;font-weight:600;color:var(--tx);text-transform:uppercase;letter-spacing:.06em}
+.panel-count{font-size:11px;font-weight:500;color:var(--tx3);font-family:var(--mono)}
+
+#feed-list{flex:1;overflow-y:auto;padding:4px 0;min-height:200px;max-height:calc(100vh - 200px)}
+
+.feed-row{display:grid;grid-template-columns:62px 1fr;gap:0 10px;padding:6px 16px;
+  border-bottom:1px solid var(--base2);font-size:12px;line-height:1.4}
+.feed-row:last-child{border-bottom:none}
+.feed-ts{font-family:var(--mono);font-size:11px;color:var(--tx3);white-space:nowrap;padding-top:1px}
+.feed-body{overflow:hidden}
+.feed-topic{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--hi-dk);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-payload{color:var(--tx2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+#topic-table-wrap{flex:1;overflow-y:auto;min-height:200px;max-height:calc(100vh - 200px)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:var(--base2);padding:8px 16px;text-align:left;
+  font-size:11px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid var(--bd);white-space:nowrap}
+thead th:last-child{text-align:right}
+tbody tr{border-bottom:1px solid var(--base2)}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--hi-lt)}
+tbody td{padding:7px 16px;vertical-align:middle;line-height:1.3}
+.td-topic{font-family:var(--mono);font-size:11px;color:var(--hi-dk);font-weight:500;
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-value{color:var(--tx);font-family:var(--mono);font-size:11px;
+  max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-ago{text-align:right;color:var(--tx3);font-size:11px;white-space:nowrap;font-family:var(--mono)}
+
+#publish-panel{background:var(--base);border:1px solid var(--bd);border-radius:10px;
+  box-shadow:0 1px 4px rgba(0,0,0,.07),0 3px 12px rgba(0,0,0,.04);margin:0 24px 24px}
+.publish-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;padding:12px 16px}
+.publish-field{display:flex;flex-direction:column;gap:4px}
+.publish-field label{font-size:11px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em}
+.publish-field input,.publish-field select{font-family:var(--mono);font-size:12px;padding:6px 10px;
+  border:1px solid var(--bd-str);border-radius:6px;background:var(--base);color:var(--tx)}
+#pub-topic{width:200px}
+#pub-payload{width:320px}
+#pub-qos{width:72px}
+#pub-btn{font-family:var(--font);font-size:13px;font-weight:500;padding:6px 20px;border:none;
+  border-radius:6px;background:var(--hi);color:#fff;cursor:pointer;white-space:nowrap;align-self:flex-end}
+</style>
+</head>
+<body>
+
+<div class="preview-banner"><span>PREVIEW</span> Static mock data — no MQTT connection</div>
+
+<header>
+  <div class="header-title">SAP DM <span>MQTT</span> Monitor</div>
+  <div id="status-badge" class="connected">
+    <div class="status-dot"></div>
+    <span>Connected</span>
+    <span id="status-ts">2026-05-13 08:14:33</span>
+  </div>
+</header>
+
+<main>
+  <!-- Live Feed -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Live Feed</span>
+      <span class="panel-count" id="feed-count">0 messages</span>
+    </div>
+    <div id="feed-list"></div>
+  </div>
+
+  <!-- Topic Last Values -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Topic Last Values</span>
+      <span class="panel-count" id="topic-count">0 topics</span>
+    </div>
+    <div id="topic-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Topic</th><th>Last Value</th><th>Time Ago</th></tr>
+        </thead>
+        <tbody id="topic-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Publish panel -->
+<div id="publish-panel" class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Publish Message</span>
+  </div>
+  <div class="publish-form">
+    <div class="publish-field">
+      <label for="pub-topic">Topic</label>
+      <input id="pub-topic" type="text" placeholder="factory/test" value="factory/machines/cnc01/status">
+    </div>
+    <div class="publish-field">
+      <label for="pub-payload">Payload</label>
+      <input id="pub-payload" type="text" placeholder='{"value":1}' value="RUNNING">
+    </div>
+    <div class="publish-field">
+      <label for="pub-qos">QoS</label>
+      <select id="pub-qos"><option value="0">0</option><option value="1">1</option></select>
+    </div>
+    <button id="pub-btn">Publish</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* ── MOCK DATA ── */
+  const MOCK_MESSAGES = [
+    { topic:'factory/machines/cnc01/status',    payload:'RUNNING',                    secsAgo:1 },
+    { topic:'factory/machines/cnc01/rpm',       payload:'4850',                        secsAgo:2 },
+    { topic:'factory/machines/cnc01/spindleLoad', payload:'62',                        secsAgo:2 },
+    { topic:'factory/machines/cnc02/status',    payload:'STOPPED',                    secsAgo:3 },
+    { topic:'factory/machines/fill01/status',   payload:'RUNNING',                    secsAgo:4 },
+    { topic:'factory/machines/fill01/lineSpeed',payload:'142',                         secsAgo:4 },
+    { topic:'factory/tanks/raw/level',          payload:'68',                          secsAgo:5 },
+    { topic:'factory/tanks/prod/level',         payload:'28',                          secsAgo:5 },
+    { topic:'factory/tanks/waste/level',        payload:'11',                          secsAgo:6 },
+    { topic:'factory/operators/login',          payload:'{"id":"EMP-0042","name":"Michiel Haegens","role":"Shift Lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91"}', secsAgo:120 },
+    { topic:'factory/machines/pack01/status',   payload:'RUNNING',                    secsAgo:7 },
+    { topic:'factory/machines/pack01/oee',      payload:'91',                          secsAgo:7 },
+    { topic:'factory/machines/cnc01/toolWear',  payload:'38',                          secsAgo:8 },
+    { topic:'factory/machines/cnc01/machTemp',  payload:'44',                          secsAgo:9 },
+    { topic:'factory/machines/cnc02/toolWear',  payload:'71',                          secsAgo:10 },
+    { topic:'factory/tanks/raw/tankTemp',       payload:'22.4',                        secsAgo:11 },
+    { topic:'factory/tanks/raw/flowIn',         payload:'12.1',                        secsAgo:11 },
+    { topic:'factory/machines/cnc01/pulses',    payload:'1247',                        secsAgo:12 },
+    { topic:'factory/machines/fill01/oee',      payload:'83',                          secsAgo:13 },
+    { topic:'factory/machines/fill01/flowRate', payload:'18.4',                        secsAgo:14 },
+  ];
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function nowMinus(secs) {
+    const d = new Date(Date.now() - secs * 1000);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function timeAgo(secsAgo) {
+    if (secsAgo < 60)  return secsAgo + 's ago';
+    if (secsAgo < 3600) return Math.floor(secsAgo / 60) + 'm ago';
+    return Math.floor(secsAgo / 3600) + 'h ago';
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max) + '…' : str;
+  }
+
+  /* ── POPULATE FEED ── */
+  const feedList = document.getElementById('feed-list');
+  const feedCount = document.getElementById('feed-count');
+  MOCK_MESSAGES.forEach(m => {
+    const row = document.createElement('div');
+    row.className = 'feed-row';
+    row.innerHTML =
+      '<div class="feed-ts">' + nowMinus(m.secsAgo) + '</div>' +
+      '<div class="feed-body">' +
+        '<div class="feed-topic">' + esc(m.topic) + '</div>' +
+        '<div class="feed-payload">' + esc(truncate(m.payload, 120)) + '</div>' +
+      '</div>';
+    feedList.appendChild(row);
+  });
+  feedCount.textContent = MOCK_MESSAGES.length + ' messages';
+
+  /* ── POPULATE TOPIC TABLE ── */
+  const topicMap = new Map();
+  MOCK_MESSAGES.forEach(m => topicMap.set(m.topic, { value: m.payload, secsAgo: m.secsAgo }));
+
+  const topicTbody = document.getElementById('topic-tbody');
+  const topicCount = document.getElementById('topic-count');
+  const sorted = Array.from(topicMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  topicCount.textContent = sorted.length + ' topics';
+  topicTbody.innerHTML = sorted.map(([t, d]) =>
+    '<tr>' +
+      '<td class="td-topic" title="' + esc(t) + '">' + esc(t) + '</td>' +
+      '<td class="td-value" title="' + esc(d.value) + '">' + esc(truncate(d.value, 60)) + '</td>' +
+      '<td class="td-ago">' + timeAgo(d.secsAgo) + '</td>' +
+    '</tr>'
+  ).join('');
+}());
+</script>
+</body>
+</html>

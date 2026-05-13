@@ -27,6 +27,14 @@ bash generate_fonts.sh
 
 ---
 
+## Boot Sequence
+
+`app_main` runs in this order: NVS init, network subsystem init, PSRAM entity allocation (`data_init_psram`), JSON config load, BSP display start (LVGL render task pinned to CPU 1), root screen background color pre-set, UI build, WiFi init, sim task start, button and console tasks. MQTT starts only after WiFi gets an IP.
+
+Full details: [docs/firmware-architecture.md](docs/firmware-architecture.md#boot-sequence).
+
+---
+
 ## Build & Flash
 
 ```bash
@@ -71,6 +79,18 @@ to the hotspot, a captive portal serves the credential entry page.
 
 ---
 
+## Task Map
+
+| Task | Stack | CPU | Wake |
+|------|-------|-----|------|
+| LVGL render (BSP) | 20 KB | 1 | 20ms period |
+| sim | 8 KB | 0 | 1500ms |
+| btn | 2 KB | 0 | 20ms poll |
+| con (console) | 2 KB | 0 | 50ms poll |
+| MQTT internal (esp_mqtt) | esp_mqtt default | 0 | event-driven |
+
+LVGL is on CPU 1. All other application tasks are on CPU 0.
+
 ## Project structure
 
 ```
@@ -102,7 +122,8 @@ main/
 
 - **Display:** MIPI-DSI ST7703 720×720 — uses Waveshare BSP, not generic RGB
 - **WiFi:** ESP32-C6 SDIO companion chip — do not use native P4 WiFi APIs
-- **PSRAM:** machine/tank/badge arrays allocated in SPIRAM; draw buffer stays in internal SRAM
+- **PSRAM:** machine/tank/badge arrays allocated in SPIRAM; draw buffer stays in internal SRAM. `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=81920` reserves 80 KB of internal SRAM for the SDIO DMA ring buffers used by the esp_hosted driver.
+- **sdkconfig.defaults:** rationale for every non-obvious entry is in [docs/sdkconfig-reference.md](docs/sdkconfig-reference.md).
 - **Double framebuffer:** `BSP_LCD_DPI_BUFFER_NUMS=2` + `AVOID_TEAR` + `FULL_REFRESH` — both 720×720 framebuffers live in PSRAM, swapped on vsync
 - **BOOT button:** GPIO35 — short press = back/home, long press = detail step
 - **SD card:** SDIO 4-bit on GPIO39–44
@@ -111,12 +132,14 @@ main/
 
 ## Known issues
 
+For root causes and fixes: [../docs/troubleshooting.md](../docs/troubleshooting.md)
+
 | # | Area | Description |
 |---|------|-------------|
-| 1 | Display | Occasional cyan frame flash under LVGL full-refresh + avoid-tearing mode. Root cause: LVGL port does not pre-initialise PSRAM framebuffers before first render. |
-| 2 | WiFi | Soft-AP hotspot visible on iPhone but captive portal page does not load — DHCP or DNS redirect issue on the ESP32-C6 SDIO path. |
-| 3 | WiFi | WiFi scan from the WiFi tab returns no results — scan callback not firing over the SDIO hosted path. |
-| 4 | Machines | Vertical scroll on the machines tab is sluggish. Suspected cause: LVGL full-refresh mode repaints the entire 720×720 framebuffer on every scroll tick even for a small dirty region. |
+| 1 | Display | Occasional cyan frame flash on boot. Mitigated by pre-setting root screen background before UI init. |
+| 2 | WiFi | Soft-AP hotspot visible on iPhone but captive portal page does not load. Navigate manually to `http://192.168.4.1`. |
+| 3 | WiFi | WiFi scan from the WiFi tab returns no results. Known issue with scan callback delivery over the SDIO hosted path. |
+| 4 | Machines | Vertical scroll on the machines tab is sluggish. LVGL full-refresh mode repaints the entire 720x720 framebuffer on every scroll tick. |
 
 ---
 
