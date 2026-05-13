@@ -57,7 +57,6 @@ bash /opt/sapdm-demo/update.sh
 |-------------|------------|---------------------------------------------------|
 | Mosquitto   | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel) |
 | Cloudflared | —          | Exposes Mosquitto WSS to SAP DM cloud             |
-| Node-RED    | 1880       | Flow management + simulation fallback             |
 | Dashboard   | 80         | Web UI for live monitoring                        |
 
 ### Cloudflare Tunnel setup

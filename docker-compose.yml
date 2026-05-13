@@ -5,7 +5,7 @@ services:
     container_name: sapdm-mosquitto
     restart: unless-stopped
     ports:
-      - "1883:1883"   # plain TCP — Node-RED and local tools (internal only)
+      - "1883:1883"   # plain TCP — local tools (internal only)
       - "9001:9001"   # WebSocket — ESP32-P4 + SAP DM (via Cloudflare Tunnel) + browser dashboard
     volumes:
       - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
@@ -19,17 +19,6 @@ services:
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared:/etc/cloudflared:ro
-    depends_on:
-      - mosquitto
-
-  nodered:
-    image: nodered/node-red:latest
-    container_name: sapdm-nodered
-    restart: unless-stopped
-    ports:
-      - "1880:1880"
-    volumes:
-      - ./nodered/data:/data
     depends_on:
       - mosquitto
 

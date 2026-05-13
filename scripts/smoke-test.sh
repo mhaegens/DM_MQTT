@@ -34,7 +34,7 @@ done
 echo "1. Docker containers"
 cd "$INSTALL_DIR"
 
-EXPECTED=("sapdm-mosquitto" "sapdm-cloudflared" "sapdm-nodered" "sapdm-dashboard")
+EXPECTED=("sapdm-mosquitto" "sapdm-cloudflared" "sapdm-dashboard")
 for name in "${EXPECTED[@]}"; do
   state=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "missing")
   if [[ "$state" == "running" ]]; then
@@ -53,18 +53,9 @@ else
   fail "No HTTP response on port 80"
 fi
 
-# ── 3. Node-RED HTTP ─────────────────────────────────────────────────────────
+# ── 3. MQTT TCP publish/subscribe ────────────────────────────────────────────
 echo ""
-echo "3. Node-RED (:1880)"
-if curl -sf --max-time 5 http://localhost:1880/ -o /dev/null; then
-  pass "HTTP 200 on port 1880"
-else
-  fail "No HTTP response on port 1880"
-fi
-
-# ── 4. MQTT TCP publish/subscribe ────────────────────────────────────────────
-echo ""
-echo "4. MQTT TCP pub/sub (:1883)"
+echo "3. MQTT TCP pub/sub (:1883)"
 TEST_TOPIC="sapdm/smoketest/$$"
 TEST_MSG="smoke-$(date +%s)"
 RECV_FILE=$(mktemp)
@@ -95,18 +86,18 @@ else
   fail "Did not receive MQTT message within 3s (got: '${RECV:-<empty>}')"
 fi
 
-# ── 5. MQTT WebSocket port open ───────────────────────────────────────────────
+# ── 4. MQTT WebSocket port open ───────────────────────────────────────────────
 echo ""
-echo "5. MQTT WebSocket (:9001)"
+echo "4. MQTT WebSocket (:9001)"
 if nc -z -w3 localhost 9001 2>/dev/null; then
   pass "Port 9001 is open"
 else
   fail "Port 9001 is not reachable"
 fi
 
-# ── 6. Cloudflare Tunnel (optional) ──────────────────────────────────────────
+# ── 5. Cloudflare Tunnel (optional) ──────────────────────────────────────────
 echo ""
-echo "6. Cloudflare Tunnel (optional)"
+echo "5. Cloudflare Tunnel (optional)"
 if [[ -f "${INSTALL_DIR}/cloudflared/config.yml" ]]; then
   if docker logs sapdm-cloudflared 2>&1 | grep -q "Registered tunnel connection"; then
     pass "Tunnel is connected"

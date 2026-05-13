@@ -52,7 +52,7 @@ cd "${INSTALL_DIR}"
 
 # ── 5. Runtime directories ──────────────────────────────────────────────────
 info "Creating runtime directories..."
-mkdir -p mosquitto/data mosquitto/log nodered/data
+mkdir -p mosquitto/data mosquitto/log
 ok "Runtime directories ready."
 
 # ── 6. Cloudflare Tunnel config check ───────────────────────────────────────
@@ -81,8 +81,7 @@ echo ""
 echo -e "${BOLD}Access URLs:${NC}"
 LAN_IP=$(hostname -I | awk '{print $1}')
 echo "  Dashboard : http://${LAN_IP}"
-echo "  Node-RED  : http://${LAN_IP}:1880"
-echo "  MQTT TCP  : ${LAN_IP}:1883  (internal / Node-RED only)"
+echo "  MQTT TCP  : ${LAN_IP}:1883  (internal only)"
 echo "  MQTT WS   : ${LAN_IP}:9001  (LAN + Cloudflare Tunnel)"
 echo ""
 if [[ ! -f cloudflared/config.yml ]]; then
