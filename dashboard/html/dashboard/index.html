@@ -296,6 +296,101 @@ tbody td {
   background: var(--bd-str);
   border-radius: 3px;
 }
+
+/* ── Publish panel ───────────────────────────────────────── */
+#publish-panel {
+  background: var(--base);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 3px 12px rgba(0,0,0,.04);
+  margin: 0 24px 24px;
+}
+
+.publish-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.publish-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.publish-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tx3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.publish-field input,
+.publish-field select {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--bd-str);
+  border-radius: 6px;
+  background: var(--base);
+  color: var(--tx);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.publish-field input:focus,
+.publish-field select:focus {
+  border-color: var(--hi);
+}
+
+#pub-topic  { width: 200px; }
+#pub-payload { width: 320px; }
+#pub-qos    { width: 72px; }
+
+#pub-btn {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 20px;
+  border: none;
+  border-radius: 6px;
+  background: var(--hi);
+  color: #fff;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+
+#pub-btn:hover:not(:disabled) { background: var(--hi-dk); }
+
+#pub-btn:disabled {
+  background: var(--base3);
+  color: var(--tx3);
+  cursor: not-allowed;
+}
+
+/* OUT badge in feed */
+.feed-row.feed-out { background: #FFFBF0; }
+.feed-row.feed-out .feed-ts  { color: #B06000; }
+.feed-row.feed-out .feed-topic { color: #B06000; }
+.feed-row.feed-out .feed-payload { color: var(--tx2); }
+.feed-out-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: #FFF0C0;
+  color: #7A4500;
+  border: 1px solid #F0CC70;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
 </style>
 </head>
 <body>
@@ -344,6 +439,31 @@ tbody td {
   </div>
 </main>
 
+<!-- Publish panel -->
+<div id="publish-panel" class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Publish Message</span>
+  </div>
+  <div class="publish-form">
+    <div class="publish-field">
+      <label for="pub-topic">Topic</label>
+      <input id="pub-topic" type="text" placeholder="factory/test" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="publish-field">
+      <label for="pub-payload">Payload</label>
+      <input id="pub-payload" type="text" placeholder='{"value":1}' autocomplete="off" spellcheck="false">
+    </div>
+    <div class="publish-field">
+      <label for="pub-qos">QoS</label>
+      <select id="pub-qos">
+        <option value="0">0</option>
+        <option value="1">1</option>
+      </select>
+    </div>
+    <button id="pub-btn" disabled>Not connected</button>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -368,6 +488,10 @@ tbody td {
   const topicTbody = document.getElementById('topic-tbody');
   const topicEmpty = document.getElementById('topic-empty');
   const topicCount = document.getElementById('topic-count');
+  const pubTopic   = document.getElementById('pub-topic');
+  const pubPayload = document.getElementById('pub-payload');
+  const pubQos     = document.getElementById('pub-qos');
+  const pubBtn     = document.getElementById('pub-btn');
 
   // ── Helpers ─────────────────────────────────────────────
   function nowHMS() {
@@ -399,16 +523,20 @@ tbody td {
     badge.className = 'connected';
     statusLbl.textContent = 'Connected';
     statusTs.textContent = isoNow();
+    pubBtn.disabled = false;
+    pubBtn.textContent = 'Publish';
   }
 
   function setDisconnected() {
     badge.className = 'disconnected';
     statusLbl.textContent = 'Disconnected';
     statusTs.textContent = '';
+    pubBtn.disabled = true;
+    pubBtn.textContent = 'Not connected';
   }
 
   // ── Feed ────────────────────────────────────────────────
-  function addFeedItem(topic, payload) {
+  function addFeedItem(topic, payload, isOut) {
     const item = { ts: nowHMS(), topic, payload };
     feedItems.unshift(item);
     if (feedItems.length > MAX_FEED) feedItems.pop();
@@ -416,11 +544,12 @@ tbody td {
     if (feedEmpty) feedEmpty.remove();
 
     const row = document.createElement('div');
-    row.className = 'feed-row';
+    row.className = 'feed-row' + (isOut ? ' feed-out' : '');
+    const outBadge = isOut ? '<span class="feed-out-badge">OUT</span>' : '';
     row.innerHTML =
       '<div class="feed-ts">' + esc(item.ts) + '</div>' +
       '<div class="feed-body">' +
-        '<div class="feed-topic">' + esc(item.topic) + '</div>' +
+        '<div class="feed-topic">' + esc(item.topic) + outBadge + '</div>' +
         '<div class="feed-payload">' + esc(truncate(item.payload, 120)) + '</div>' +
       '</div>';
 
@@ -500,8 +629,29 @@ tbody td {
 
   client.on('message', function (topic, message) {
     const payload = message.toString();
-    addFeedItem(topic, payload);
+    addFeedItem(topic, payload, false);
     updateTopicTable(topic, payload);
+  });
+
+  // ── Publish ──────────────────────────────────────────────
+  pubBtn.addEventListener('click', function () {
+    const topic   = pubTopic.value.trim();
+    const payload = pubPayload.value;
+    const qos     = parseInt(pubQos.value, 10);
+
+    if (!topic) {
+      pubTopic.focus();
+      return;
+    }
+
+    client.publish(topic, payload, { qos: qos }, function (err) {
+      if (err) {
+        console.error('Publish error:', err);
+        return;
+      }
+      addFeedItem(topic, payload, true);
+      updateTopicTable(topic, payload);
+    });
   });
 
 }());
