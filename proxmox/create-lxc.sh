@@ -137,6 +137,10 @@ done
 ok "LXC is up."
 
 # ── Run install.sh inside the LXC ────────────────────────────────────────────
+info "Ensuring DNS is available inside the LXC..."
+pct exec "$LXC_ID" -- bash -c "echo 'nameserver ${DNS}' > /etc/resolv.conf"
+ok "DNS set to ${DNS}."
+
 info "Running install.sh inside the LXC..."
 echo ""
 pct exec "$LXC_ID" -- bash -c \
