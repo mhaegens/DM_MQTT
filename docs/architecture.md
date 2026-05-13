@@ -33,7 +33,7 @@ This document explains how the system fits together and why each major architect
 └─────────────────────┘
 ```
 
-All three server components (Mosquitto, Nginx, Cloudflared) run as Docker containers on a single Debian 13 (Trixie) LXC host using Docker Compose.
+All server components run on the homelab Proxmox node (`pve-homelab`, `192.168.0.200`). Mosquitto and Nginx run as Docker containers in a Debian 13 LXC (`192.168.0.60`). `cloudflared` runs as a host service on `pve-homelab` — the existing `homelab` tunnel is reused, with three new ingress rules added for this demo.
 
 ---
 
@@ -45,7 +45,7 @@ The public broker endpoint uses WebSocket over TLS (`wss://`) on port 443. This 
 
 ### Why Docker Compose on an LXC, not bare metal
 
-Docker Compose makes the stack fully reproducible. A single `docker compose up -d` starts Mosquitto, Nginx, and Cloudflared in the correct order with all networking pre-wired. The entire install is scripted in `install.sh`. Using a Proxmox LXC instead of a VM avoids hypervisor overhead while still keeping the stack isolated from the host OS.
+Docker Compose makes the stack fully reproducible. A single `docker compose up -d` starts Mosquitto and Nginx in the correct order with all networking pre-wired. The entire install is scripted in `install.sh`. Using a Proxmox LXC instead of a VM avoids hypervisor overhead while still keeping the stack isolated from the host OS.
 
 ### Why no reverse proxy like Traefik or Caddy
 
@@ -59,21 +59,24 @@ The entire demo scenario (machines, tanks, operators, simulation profiles) is in
 
 ## Cloudflare Tunnel Ingress Rules
 
-The `config.yml` for Cloudflared contains three rules. The order is critical because Cloudflared stops at the first match and applies it.
+The `homelab` tunnel on `pve-homelab` (`/etc/cloudflared/config.yml`) needs three rules for the demo. The order is critical — Cloudflared stops at the first match.
 
 ```yaml
 ingress:
+  # ... existing homelab rules ...
+
+  # SAP DM MQTT demo stack
   - hostname: mqttfordm.haegens.be
     path: /editor.*
-    service: http://dashboard:80
+    service: http://192.168.0.60:80
   - hostname: mqttfordm.haegens.be
     path: /dashboard.*
-    service: http://dashboard:80
+    service: http://192.168.0.60:80
   - hostname: mqttfordm.haegens.be
-    service: ws://mosquitto:9001
-```
+    service: ws://192.168.0.60:9001
 
-The path-specific rules must come before the catch-all. If the catch-all rule is placed first, it matches every request for the hostname and forwards it to Mosquitto. The dashboard and editor become unreachable with no error message: the browser just gets a WebSocket upgrade response instead of HTML.
+  - service: http_status:404
+```
 
 ---
 

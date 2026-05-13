@@ -1,8 +1,8 @@
 # Server Stack Setup
 
-The server stack runs three Docker containers on a single Debian 13 (Trixie) LXC (or VM): Mosquitto (MQTT broker), Nginx (web dashboard and editor), and Cloudflared (public tunnel). A single command installs and starts everything.
+The server stack runs two Docker containers on a single Debian 13 (Trixie) LXC: Mosquitto (MQTT broker) and Nginx (web dashboard and editor). Public internet access is provided by the existing `homelab` Cloudflare Tunnel running on `pve-homelab` — no cloudflared container is needed in the LXC. A single command installs and starts everything.
 
-This setup differs from typical self-hosted setups in one important way: Cloudflared does not run as its own container. Instead, the three ingress rules for this stack are added to an existing Cloudflare Tunnel that is already running on the Proxmox host.
+This setup matches the homelab architecture: `cloudflared` runs as a host service on `pve-homelab` (`192.168.0.200`), and the demo stack adds its ingress rules to `/etc/cloudflared/config.yml` on that host.
 
 ---
 
@@ -42,52 +42,49 @@ After the install, the dashboard and editor are accessible on LAN at `http://<LX
 
 ## Cloudflare Tunnel Setup
 
-The stack uses an existing Cloudflare Tunnel running on the Proxmox host. You add three ingress rules for the demo hostname to that tunnel's config.
+The demo stack reuses the existing `homelab` tunnel running on `pve-homelab`. Add the ingress rules to `/etc/cloudflared/config.yml` on the Proxmox host.
 
-### Step 1: Find your tunnel config
+### Step 1: Edit the tunnel config on pve-homelab
 
 ```bash
-cloudflared tunnel info <your-tunnel-name>
+# On pve-homelab
+nano /etc/cloudflared/config.yml
 ```
 
-The config is usually at `~/.cloudflared/config.yml` or `/etc/cloudflared/config.yml`.
-
-### Step 2: Add the ingress rules
-
-Open the config and add these three rules to the `ingress:` list. Replace `192.168.x.x` with the LXC's LAN IP.
+Add these rules above the final `http_status:404` catch-all. Replace `192.168.0.60` with the LXC IP if you used a different one.
 
 ```yaml
 ingress:
-  # ... your existing rules above ...
+  # ... existing rules ...
 
   # SAP DM MQTT demo stack
   - hostname: mqttfordm.haegens.be
     path: /editor.*
-    service: http://192.168.x.x:80
+    service: http://192.168.0.60:80
 
   - hostname: mqttfordm.haegens.be
     path: /dashboard.*
-    service: http://192.168.x.x:80
+    service: http://192.168.0.60:80
 
   - hostname: mqttfordm.haegens.be
-    service: ws://192.168.x.x:9001
+    service: ws://192.168.0.60:9001
 
-  # ... your existing catch-all rule below (must stay last) ...
+  - service: http_status:404
 ```
 
-**Rule ordering is critical.** Cloudflare evaluates rules top-to-bottom and stops at the first match. The `/editor.*` and `/dashboard.*` path rules must come before the pathless WebSocket catch-all. If the catch-all is listed first, it matches every request for the hostname and forwards everything to Mosquitto. The dashboard and editor become unreachable with no error message.
+**Rule ordering is critical.** The `/editor.*` and `/dashboard.*` path rules must come before the pathless WebSocket catch-all. If the catch-all is listed first, it matches every request for the hostname and forwards everything to Mosquitto — the dashboard and editor become unreachable with no error.
+
+### Step 2: Create the DNS record
+
+```bash
+cloudflared tunnel route dns homelab mqttfordm.haegens.be
+```
 
 ### Step 3: Reload the tunnel
 
 ```bash
-cloudflared tunnel reload
-# or
 systemctl restart cloudflared
 ```
-
-### Step 4: DNS
-
-In the Cloudflare dashboard, add a CNAME record for `mqttfordm.haegens.be` pointing to your tunnel ID (e.g. `<tunnel-id>.cfargotunnel.com`).
 
 ---
 
@@ -136,7 +133,7 @@ After install and tunnel setup, verify each component:
 docker compose -f /opt/sapdm-demo/docker-compose.yml ps
 ```
 
-All three services (mosquitto, dashboard, cloudflared) should show `Up`.
+All two services (mosquitto, dashboard) should show `Up`.
 
 **Mosquitto responding:**
 
@@ -192,18 +189,18 @@ Mosquitto data and logs are in named volumes and survive restarts.
 # Live Mosquitto log
 docker compose -f /opt/sapdm-demo/docker-compose.yml logs -f mosquitto
 
-# Live cloudflared log
-docker compose -f /opt/sapdm-demo/docker-compose.yml logs -f cloudflared
-
 # Nginx access log
 docker compose -f /opt/sapdm-demo/docker-compose.yml logs -f dashboard
+
+# Cloudflared log (runs on pve-homelab host, not in the LXC)
+# On pve-homelab:
+journalctl -u cloudflared -f
 ```
 
 Common error patterns:
 
 | Message | Cause | Fix |
 |---------|-------|-----|
-| `cloudflared: unable to authenticate tunnel` | Credentials JSON missing or wrong tunnel ID | Check `cloudflared/` directory and tunnel ID in config |
-| `cloudflared: no ingress rule matched` | Ingress rule ordering issue | Confirm path rules precede catch-all |
+| `cloudflared: no ingress rule matched` | Ingress rule ordering issue in `/etc/cloudflared/config.yml` on pve-homelab | Confirm path rules precede WebSocket catch-all |
 | `mosquitto: client disconnected` with no prior connect | TLS handshake failure (client trying TLS on a non-TLS port) | Confirm client is connecting to port 9001 via WSS tunnel, not directly |
 | `mosquitto: error: bind: Address already in use` | Port 1883 or 9001 already occupied on the host | Check `ss -tlnp | grep 188` for conflicting processes |
