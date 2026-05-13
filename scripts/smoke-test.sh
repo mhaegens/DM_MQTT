@@ -44,18 +44,27 @@ for name in "${EXPECTED[@]}"; do
   fi
 done
 
-# ── 2. Dashboard HTTP ────────────────────────────────────────────────────────
+# ── 2. Dashboard path HTTP 200 ───────────────────────────────────────────────
 echo ""
-echo "2. Dashboard (Nginx :80)"
-if curl -sf --max-time 5 http://localhost/ -o /dev/null; then
-  pass "HTTP 200 on port 80"
+echo "2. Dashboard path (/dashboard/)"
+if curl -sf --max-time 5 http://localhost/dashboard/ -o /dev/null; then
+  pass "HTTP 200 on /dashboard/"
 else
-  fail "No HTTP response on port 80"
+  fail "No HTTP 200 response on /dashboard/"
 fi
 
-# ── 3. MQTT TCP publish/subscribe ────────────────────────────────────────────
+# ── 3. Editor path HTTP 200 ──────────────────────────────────────────────────
 echo ""
-echo "3. MQTT TCP pub/sub (:1883)"
+echo "3. Editor path (/editor/)"
+if curl -sf --max-time 5 http://localhost/editor/ -o /dev/null; then
+  pass "HTTP 200 on /editor/"
+else
+  fail "No HTTP 200 response on /editor/"
+fi
+
+# ── 4. MQTT TCP publish/subscribe ────────────────────────────────────────────
+echo ""
+echo "4. MQTT TCP pub/sub (:1883)"
 TEST_TOPIC="sapdm/smoketest/$$"
 TEST_MSG="smoke-$(date +%s)"
 RECV_FILE=$(mktemp)
@@ -86,18 +95,18 @@ else
   fail "Did not receive MQTT message within 3s (got: '${RECV:-<empty>}')"
 fi
 
-# ── 4. MQTT WebSocket port open ───────────────────────────────────────────────
+# ── 5. MQTT WebSocket port open ───────────────────────────────────────────────
 echo ""
-echo "4. MQTT WebSocket (:9001)"
+echo "5. MQTT WebSocket (:9001)"
 if nc -z -w3 localhost 9001 2>/dev/null; then
   pass "Port 9001 is open"
 else
   fail "Port 9001 is not reachable"
 fi
 
-# ── 5. Cloudflare Tunnel (optional) ──────────────────────────────────────────
+# ── 6. Cloudflare Tunnel (optional) ──────────────────────────────────────────
 echo ""
-echo "5. Cloudflare Tunnel (optional)"
+echo "6. Cloudflare Tunnel (optional)"
 if [[ -f "${INSTALL_DIR}/cloudflared/config.yml" ]]; then
   if docker logs sapdm-cloudflared 2>&1 | grep -q "Registered tunnel connection"; then
     pass "Tunnel is connected"
