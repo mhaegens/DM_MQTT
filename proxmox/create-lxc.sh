@@ -79,22 +79,22 @@ if pct status "$LXC_ID" &>/dev/null; then
   die "LXC ${LXC_ID} already exists. Choose a different ID."
 fi
 
-# ── Find or download Debian 12 (Bookworm) template ──────────────────────────
-info "Looking for Debian 12 (Bookworm) CT template..."
+# ── Find or download Debian 13 (Trixie) template ────────────────────────────
+info "Looking for Debian 13 (Trixie) CT template..."
 
-TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-12-standard_*.tar.*" 2>/dev/null | sort -V | tail -1)
+TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-13-standard_*.tar.*" 2>/dev/null | sort -V | tail -1)
 
 if [[ -z "$TEMPLATE_FILE" ]]; then
   info "Template not cached — fetching available templates list..."
   pveam update
 
-  TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "^debian-12-standard_" | sort -V | tail -1)
-  [[ -n "$TEMPLATE_NAME" ]] || die "Could not find a debian-12-standard template via pveam. Check your Proxmox template repository."
+  TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | awk '{print $2}' | grep "^debian-13-standard_" | sort -V | tail -1)
+  [[ -n "$TEMPLATE_NAME" ]] || die "Could not find a debian-13-standard template via pveam. Check your Proxmox template repository."
 
   info "Downloading ${TEMPLATE_NAME}..."
   pveam download local "$TEMPLATE_NAME" || die "Template download failed."
 
-  TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-12-standard_*.tar.*" | sort -V | tail -1)
+  TEMPLATE_FILE=$(find /var/lib/vz/template/cache/ -maxdepth 1 -name "debian-13-standard_*.tar.*" | sort -V | tail -1)
   [[ -n "$TEMPLATE_FILE" ]] || die "Template file not found after download."
 fi
 

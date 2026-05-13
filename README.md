@@ -35,7 +35,7 @@ SAP Digital Manufacturing
 
 ---
 
-## Server Stack (Debian 12 LXC)
+## Server Stack (Debian 13 LXC)
 
 ### Install
 
