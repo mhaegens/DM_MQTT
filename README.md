@@ -35,7 +35,7 @@ SAP Digital Manufacturing
 
 ---
 
-## Server Stack (Ubuntu 24.04 LXC)
+## Server Stack (Debian 12 LXC)
 
 ### Install
 
@@ -78,6 +78,7 @@ Add these rules to your existing tunnel `config.yml` on the Proxmox host. Replac
 ```
 
 Then reload: `systemctl reload cloudflared`
+
 
 ---
 
