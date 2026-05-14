@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "mqtt_client.h"
+#include "esp_crt_bundle.h"
 #include "lvgl.h"
 #include <stdio.h>
 #include <string.h>
@@ -76,11 +77,12 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
 
 void mqtt_task_start(void) {
     esp_mqtt_client_config_t cfg = {
-        .broker.address.uri              = MQTT_BROKER_URI,
-        .broker.address.port             = MQTT_BROKER_PORT,
-        .credentials.client_id           = MQTT_CLIENT_ID,
-        .session.keepalive               = MQTT_KEEPALIVE_S,
-        .network.disable_auto_reconnect  = true,  // we handle backoff ourselves
+        .broker.address.uri                       = MQTT_BROKER_URI,
+        .broker.address.port                      = MQTT_BROKER_PORT,
+        .broker.verification.crt_bundle_attach    = esp_crt_bundle_attach,
+        .credentials.client_id                    = MQTT_CLIENT_ID,
+        .session.keepalive                        = MQTT_KEEPALIVE_S,
+        .network.disable_auto_reconnect           = true,  // we handle backoff ourselves
     };
     s_client = esp_mqtt_client_init(&cfg);
     esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID,
