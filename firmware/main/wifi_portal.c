@@ -36,6 +36,11 @@ static sdmmc_card_t *s_card = NULL;
 static bool portal_sd_mount(void) {
     if (s_card) return true;
     sdmmc_host_t host        = SDMMC_HOST_DEFAULT();
+    // CRITICAL: ESP-Hosted C6 Wi-Fi bridge owns SDMMC slot 1 (SDIO 4-bit).
+    // SDMMC_HOST_DEFAULT() picks slot 1 on P4 by default — mounting the SD card
+    // there yanks the Wi-Fi bus mid-transaction and panics. The BSP puts the
+    // SD card on slot 0; both sockets have to be explicit.
+    host.slot                = SDMMC_HOST_SLOT_0;
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;
     slot.clk   = GPIO_SD_CLK;
@@ -629,11 +634,19 @@ static esp_err_t post_set_config_handler(httpd_req_t *req)
             return ESP_OK;
         }
         size_t n;
-        while ((n = fread(copybuf, 1, 512, src)) > 0)
-            fwrite(copybuf, 1, n, dst);
+        bool copy_ok = true;
+        while ((n = fread(copybuf, 1, 512, src)) > 0) {
+            if (fwrite(copybuf, 1, n, dst) != n) { copy_ok = false; break; }
+        }
+        if (ferror(src) || ferror(dst)) copy_ok = false;
         free(copybuf);
         fclose(src);
         fclose(dst);
+        if (!copy_ok) {
+            portal_sd_unmount();
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Copy failed");
+            return ESP_OK;
+        }
     }
 
     portal_sd_unmount();
@@ -680,7 +693,11 @@ void wifi_portal_start(void)
     if (s_server) return;
 
     httpd_config_t cfg   = HTTPD_DEFAULT_CONFIG();
-    cfg.stack_size        = 12288;  // 12 KB — file ops need headroom beyond default 8 KB
+    // 20 KB — /list-configs and /set-config traverse FAT via readdir/fread,
+    // which lands 6–8 KB of driver + DMA callback frames on top of our own.
+    // The old 12 KB overflowed under interrupt nesting and crashed the device
+    // as soon as the client hit "list configs on SD".
+    cfg.stack_size        = 20480;
     cfg.max_uri_handlers  = 8;
     cfg.uri_match_fn      = httpd_uri_match_wildcard;
     cfg.lru_purge_enable  = true;

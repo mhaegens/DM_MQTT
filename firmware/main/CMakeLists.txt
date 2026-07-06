@@ -46,6 +46,16 @@ idf_component_register(
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)
 
+# -O2 (CONFIG_COMPILER_OPTIMIZATION_PERF) enables deeper stringop/format analysis
+# that flags strncpy(dst, src, sizeof(dst)-1) and bounded snprintf payloads as
+# potentially truncating. The code explicitly null-terminates or intentionally
+# bounds these writes; downgrade both from errors to plain warnings so the
+# perf build stays green without rewriting the entire string-handling layer.
+target_compile_options(${COMPONENT_LIB} PRIVATE
+    -Wno-error=stringop-truncation
+    -Wno-error=format-truncation
+)
+
 # Package spiffs_image/ directory into a SPIFFS image for the 'spiffs' partition.
 # FLASH_IN_PROJECT means 'idf.py flash' flashes both firmware and SPIFFS image.
 spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)

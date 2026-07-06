@@ -23,6 +23,7 @@ void ui_home_create(lv_obj_t *parent);
 void ui_home_refresh(void);
 void ui_machines_create(lv_obj_t *parent);
 void ui_machines_refresh(void);
+void ui_machines_activate(void);
 void ui_machines_pulse_first(void);
 void ui_tanks_create(lv_obj_t *parent);
 void ui_tanks_activate(void);
@@ -480,7 +481,7 @@ void ui_switch_tab(ViewId v)
 
     // Screen-specific activation callbacks
     if (v == VIEW_HOME)     ui_home_refresh();
-    if (v == VIEW_MACHINES) ui_machines_refresh();
+    if (v == VIEW_MACHINES) { ui_machines_activate(); ui_machines_refresh(); }
     if (v == VIEW_TANKS)    ui_tanks_activate();
     if (v == VIEW_DEBUG)    ui_debug_activate();
 }

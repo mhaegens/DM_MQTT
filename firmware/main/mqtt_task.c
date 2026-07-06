@@ -4,6 +4,7 @@
 #include "ui/ui_main.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_crt_bundle.h"
 #include "mqtt_client.h"
 #include "lvgl.h"
 #include <stdio.h>
@@ -89,6 +90,11 @@ void mqtt_task_start(void) {
         .session.last_will.msg_len       = 0,      // 0 -> use strlen(msg)
         .session.last_will.qos           = 1,
         .session.last_will.retain        = 1,
+        // Attach ESP-IDF's compiled-in CA bundle (CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y).
+        // Without a verification field esp-tls refuses to build the SSL context
+        // (0x8017 ESP_ERR_MBEDTLS_SSL_SETUP_FAILED); the bundle covers Cloudflare
+        // Tunnel's Let's Encrypt / Google Trust Services chain.
+        .broker.verification.crt_bundle_attach = esp_crt_bundle_attach,
     };
     s_client = esp_mqtt_client_init(&cfg);
     esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID,
