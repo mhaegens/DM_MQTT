@@ -9,6 +9,7 @@
 #include "ui_detail.h"
 #include "data.h"
 #include "../mqtt_task.h"
+#include "../config.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
@@ -60,9 +61,9 @@ static lv_obj_t *s_charts[MAX_MACHINES]   = {NULL};  // sparkline chart
 static lv_chart_series_t *s_series[MAX_MACHINES] = {NULL};
 
 // Per-machine, per-metric value labels for tile and arc widgets (for live refresh)
-#define MAX_METRICS_PER_MACHINE 16
-static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_METRICS_PER_MACHINE] = {{NULL}};
-static lv_obj_t *s_metric_arcs[MAX_MACHINES][MAX_METRICS_PER_MACHINE]     = {{NULL}};
+static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_MACH_METRICS] = {{NULL}};
+static lv_obj_t *s_metric_arcs[MAX_MACHINES][MAX_MACH_METRICS]     = {{NULL}};
+static bool      s_last_render_running[MAX_MACHINES];  // last state drawn, skip redundant restyles
 
 // ─── Event callback context types ─────────────────────────────────────────────
 typedef struct { int machine; int metric; } MetricCtx;
@@ -85,12 +86,16 @@ static void toggle_cb(lv_event_t *e) {
     int idx = ctx->machine;
     Machine *mc = &g_machines[idx];
 
+    DATA_LOCK();
     mc->running = !mc->running;
-    ESP_LOGI(TAG, "Toggle: %s -> %s", mc->id, mc->running ? "running" : "stopped");
-    mqtt_pub_machine_status(mc->id, mc->running);
+    bool running = mc->running;
+    DATA_UNLOCK();
+    s_last_render_running[idx] = running;
+    ESP_LOGI(TAG, "Toggle: %s -> %s", mc->id, running ? "running" : "stopped");
+    mqtt_pub_machine_status(mc->id, running);
 
     // Update button appearance
-    if (mc->running) {
+    if (running) {
         lv_obj_set_style_bg_color(s_toggle_btns[idx], COL_ERR_LT, 0);
         lv_obj_set_style_border_color(s_toggle_btns[idx], lv_color_hex(COL_ERR_BD), 0);
         lv_obj_set_style_text_color(s_toggle_lbls[idx], COL_ERR, 0);
@@ -103,7 +108,7 @@ static void toggle_cb(lv_event_t *e) {
     }
 
     // Update status dot color
-    lv_obj_set_style_bg_color(s_dots[idx], mc->running ? COL_OK : COL_ERR, 0);
+    lv_obj_set_style_bg_color(s_dots[idx], running ? COL_OK : COL_ERR, 0);
 
     // Update card border color
     update_card_border(idx);
@@ -115,9 +120,12 @@ static void pulse_cb(lv_event_t *e) {
     int idx = ctx->machine;
     Machine *mc = &g_machines[idx];
 
+    DATA_LOCK();
     mc->pulses++;
-    ESP_LOGI(TAG, "Pulse: %s pulses=%d", mc->id, mc->pulses);
-    mqtt_pub_machine_pulse(mc->id, mc->pulses);
+    int pulses = mc->pulses;
+    DATA_UNLOCK();
+    ESP_LOGI(TAG, "Pulse: %s pulses=%d", mc->id, pulses);
+    mqtt_pub_machine_pulse(mc->id, pulses);
 
     // Brief visual flash: temporarily brighten card bg, restore after 200ms
     lv_obj_set_style_bg_color(s_cards[idx], COL_HI_LT, 0);
@@ -186,7 +194,7 @@ static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_obj_add_event_cb(tile, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
 
     // Store val_lbl for live refresh (child index 1 = val_lbl after key_lbl)
-    if (midx < MAX_MACHINES && kidx < MAX_METRICS_PER_MACHINE)
+    if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS)
         s_metric_val_lbls[midx][kidx] = val_lbl;
 }
 
@@ -254,7 +262,7 @@ static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
     lv_obj_add_event_cb(cont, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
 
     // Store arc widget and val_lbl for live refresh
-    if (midx < MAX_MACHINES && kidx < MAX_METRICS_PER_MACHINE) {
+    if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS) {
         s_metric_arcs[midx][kidx]     = arc;
         s_metric_val_lbls[midx][kidx] = val_lbl;
     }
@@ -265,8 +273,13 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     Machine *mc = &g_machines[idx];
 
     // ── Card shell ────────────────────────────────────────────────────────────
+    // Cards are positioned absolutely (2-column grid). Flex ROW_WRAP is
+    // deliberately NOT used: flex skips LV_OBJ_FLAG_HIDDEN children, so the
+    // scroll-culling in apply_card_visibility() would reflow the whole grid.
     lv_obj_t *card = lv_obj_create(grid);
     lv_obj_set_size(card, CARD_W, CARD_H);
+    lv_obj_set_pos(card, (idx % 2) * (CARD_W + GRID_GAP),
+                         (idx / 2) * (CARD_H + GRID_GAP));
     lv_obj_set_style_bg_color(card, COL_BASE, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card,
@@ -275,6 +288,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_style_pad_all(card, 0, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     s_cards[idx] = card;
+    s_last_render_running[idx] = mc->running;   // card is built in this state
 
     // Flex column: header / body / footer
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
@@ -597,21 +611,20 @@ void ui_machines_create(lv_obj_t *parent) {
     lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
     g_screens[VIEW_MACHINES] = s_screen;
 
-    // Scrollable 2-column grid (up to MAX_MACHINES cards, flex-wrap rows)
+    // Scrollable 2-column grid (up to MAX_MACHINES cards). Cards are placed at
+    // fixed coordinates — no flex — so hiding off-screen cards never reflows
+    // the layout (flex skips hidden children; see build_machine_card).
+    int rows = (g_machine_count + 1) / 2;
+    int grid_h = rows > 0 ? rows * CARD_H + (rows - 1) * GRID_GAP : 0;
+
     lv_obj_t *grid = lv_obj_create(s_screen);
-    lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, LV_SIZE_CONTENT);
+    lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, grid_h + GRID_PAD);
     lv_obj_set_pos(grid, GRID_PAD, GRID_PAD);
     lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(grid, 0, 0);
     lv_obj_set_style_pad_all(grid, 0, 0);
     lv_obj_set_style_pad_bottom(grid, GRID_PAD, 0);  // breathing room after last row
-    lv_obj_set_style_pad_gap(grid, 0, 0);
-
-    // Flex wrap: cards flow left-to-right, wrap to new row every 2 cards
-    lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(grid, GRID_GAP, 0);
+    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE); // s_screen owns the scroll
 
     for (int i = 0; i < g_machine_count; i++) {
         build_machine_card(grid, i);
@@ -620,7 +633,7 @@ void ui_machines_create(lv_obj_t *parent) {
     // Hook scroll events to show/hide off-screen cards (zero render cost when hidden)
     lv_obj_add_event_cb(s_screen, machines_scroll_cb, LV_EVENT_SCROLL, NULL);
 
-    lv_timer_create(machines_refresh_cb, 3000, NULL);
+    lv_timer_create(machines_refresh_cb, UI_REFRESH_MS, NULL);
 
     // Set initial card visibility (first 4 cards visible, rest hidden)
     apply_card_visibility();
@@ -630,11 +643,49 @@ void ui_machines_create(lv_obj_t *parent) {
 // NOTE: sparkline and arc widgets are rebuilt by ui_machines_create at boot;
 // for live data the caller should call ui_machines_refresh() which updates
 // visible label text and chart data.
+
+// Per-machine value snapshot: copied under DATA_LOCK, rendered after release,
+// so the sim task never blocks on LVGL work.
+typedef struct {
+    bool     running;
+    int      metric_count;
+    float    value[MAX_MACH_METRICS];
+    uint32_t color[MAX_MACH_METRICS];
+    int      spark_idx;   // -1 when the machine has no sparkline metric
+} MachSnap;
+
+// Set label text only when it changed — avoids invalidating unchanged regions
+static void label_set_if_changed(lv_obj_t *lbl, const char *text) {
+    if (strcmp(lv_label_get_text(lbl), text) != 0)
+        lv_label_set_text(lbl, text);
+}
+
 void ui_machines_refresh(void) {
+    static MachSnap snap[MAX_MACHINES];
+
+    // Phase 1: snapshot values under the lock — no LVGL calls here
     DATA_LOCK();
-    // Refresh status dots and toggle button labels / colors to match current state
-    for (int i = 0; i < g_machine_count; i++) {
-        Machine *mc = &g_machines[i];
+    int count = g_machine_count;
+    for (int i = 0; i < count; i++) {
+        Machine  *mc = &g_machines[i];
+        MachSnap *s  = &snap[i];
+        s->running      = mc->running;
+        s->metric_count = mc->metric_count < MAX_MACH_METRICS
+                        ? mc->metric_count : MAX_MACH_METRICS;
+        s->spark_idx    = -1;
+        for (int k = 0; k < s->metric_count; k++) {
+            Metric *m = &mc->metrics[k];
+            s->value[k] = m->value;
+            s->color[k] = metric_color(m);
+            if (s->spark_idx < 0 && m->viz == VIZ_SPARK && m->history_len > 0)
+                s->spark_idx = k;
+        }
+    }
+    DATA_UNLOCK();
+
+    // Phase 2: widget updates — sim task is free to run meanwhile
+    for (int i = 0; i < count; i++) {
+        MachSnap *s = &snap[i];
         if (!s_dots[i] || !s_toggle_btns[i]) continue;
         // Skip cards outside the visible viewport — lv_obj_is_visible() does not
         // account for scroll position, so we compare absolute coords directly
@@ -645,66 +696,57 @@ void ui_machines_refresh(void) {
             if (ca.y2 < sa.y1 || ca.y1 > sa.y2) continue;
         }
 
-        // Dot color
-        lv_obj_set_style_bg_color(s_dots[i], mc->running ? COL_OK : COL_ERR, 0);
-
-        // Card border
-        update_card_border(i);
-
-        // Toggle button
-        if (mc->running) {
-            lv_obj_set_style_bg_color(s_toggle_btns[i], COL_ERR_LT, 0);
-            lv_obj_set_style_border_color(s_toggle_btns[i], lv_color_hex(COL_ERR_BD), 0);
-            lv_obj_set_style_text_color(s_toggle_lbls[i], COL_ERR, 0);
-            lv_label_set_text(s_toggle_lbls[i], "Stop");
-        } else {
-            lv_obj_set_style_bg_color(s_toggle_btns[i], COL_OK_LT, 0);
-            lv_obj_set_style_border_color(s_toggle_btns[i], lv_color_hex(COL_OK_BD), 0);
-            lv_obj_set_style_text_color(s_toggle_lbls[i], COL_OK, 0);
-            lv_label_set_text(s_toggle_lbls[i], "Start");
+        // Dot / border / toggle restyle only on a state change
+        if (s->running != s_last_render_running[i]) {
+            s_last_render_running[i] = s->running;
+            lv_obj_set_style_bg_color(s_dots[i], s->running ? COL_OK : COL_ERR, 0);
+            update_card_border(i);
+            if (s->running) {
+                lv_obj_set_style_bg_color(s_toggle_btns[i], COL_ERR_LT, 0);
+                lv_obj_set_style_border_color(s_toggle_btns[i], lv_color_hex(COL_ERR_BD), 0);
+                lv_obj_set_style_text_color(s_toggle_lbls[i], COL_ERR, 0);
+                lv_label_set_text(s_toggle_lbls[i], "Stop");
+            } else {
+                lv_obj_set_style_bg_color(s_toggle_btns[i], COL_OK_LT, 0);
+                lv_obj_set_style_border_color(s_toggle_btns[i], lv_color_hex(COL_OK_BD), 0);
+                lv_obj_set_style_text_color(s_toggle_lbls[i], COL_OK, 0);
+                lv_label_set_text(s_toggle_lbls[i], "Start");
+            }
         }
 
         // Push new sparkline point if chart exists
-        if (s_charts[i] && s_series[i]) {
-            int spark_idx = -1;
-            for (int k = 0; k < mc->metric_count; k++) {
-                if (mc->metrics[k].viz == VIZ_SPARK && mc->metrics[k].history_len > 0) {
-                    spark_idx = k;
-                    break;
-                }
-            }
-            if (spark_idx >= 0) {
-                lv_chart_set_next_value(s_charts[i], s_series[i],
-                    (lv_value_precise_t)mc->metrics[spark_idx].value);
-                lv_chart_refresh(s_charts[i]);
-            }
+        if (s_charts[i] && s_series[i] && s->spark_idx >= 0) {
+            lv_chart_set_next_value(s_charts[i], s_series[i],
+                (lv_value_precise_t)s->value[s->spark_idx]);
+            lv_chart_refresh(s_charts[i]);
         }
 
         // Update tile val labels and arc widgets for all metrics
-        for (int k = 0; k < mc->metric_count && k < MAX_METRICS_PER_MACHINE; k++) {
-            Metric *m = &mc->metrics[k];
+        for (int k = 0; k < s->metric_count; k++) {
             lv_obj_t *vlbl = s_metric_val_lbls[i][k];
             if (vlbl) {
                 char val_str[32];
-                fmt_value(m->value, val_str, sizeof(val_str));
-                lv_label_set_text(vlbl, val_str);
-                lv_obj_set_style_text_color(vlbl, lv_color_hex(metric_color(m)), 0);
+                fmt_value(s->value[k], val_str, sizeof(val_str));
+                label_set_if_changed(vlbl, val_str);
+                lv_obj_set_style_text_color(vlbl, lv_color_hex(s->color[k]), 0);
             }
             lv_obj_t *arc = s_metric_arcs[i][k];
             if (arc) {
-                lv_arc_set_value(arc, (int16_t)m->value);
+                lv_arc_set_value(arc, (int16_t)s->value[k]);
             }
         }
     }
-    DATA_UNLOCK();
 }
 
 // ─── Public: pulse the first running machine ──────────────────────────────────
 void ui_machines_pulse_first(void) {
     for (int i = 0; i < g_machine_count; i++) {
         if (g_machines[i].running) {
+            DATA_LOCK();
             g_machines[i].pulses++;
-            ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, g_machines[i].pulses);
+            int pulses = g_machines[i].pulses;
+            DATA_UNLOCK();
+            ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, pulses);
 
             // Flash card background briefly
             if (s_cards[i]) {

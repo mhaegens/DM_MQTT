@@ -46,6 +46,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         s_disconnect_count = 0;
         g_mqtt_connected = true;
         g_mqtt_msg_count = 0;
+        // Retained availability marker — pairs with the "offline" last-will
+        esp_mqtt_client_enqueue(s_client, STATUS_TOPIC, "online", 0, 1, 1, true);
         { mqtt_status_async_t *a = malloc(sizeof(*a)); if (a) { a->connected = true;  if (lv_async_call(mqtt_status_dispatch, a) != LV_RESULT_OK) free(a); } }
         break;
     case MQTT_EVENT_DISCONNECTED: {
@@ -62,9 +64,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         }
         break;
     }
-    case MQTT_EVENT_PUBLISHED:
-        g_mqtt_msg_count++;
-        break;
+    // NOTE: MQTT_EVENT_PUBLISHED only fires for QoS 1/2 — QoS 0 telemetry never
+    // triggered it, so the message counter is incremented in pub() instead.
     case MQTT_EVENT_ERROR: {
         esp_mqtt_event_handle_t ev = (esp_mqtt_event_handle_t)event_data;
         ESP_LOGE(TAG, "error type=%d", ev->error_handle->error_type);
@@ -81,6 +82,13 @@ void mqtt_task_start(void) {
         .credentials.client_id           = MQTT_CLIENT_ID,
         .session.keepalive               = MQTT_KEEPALIVE_S,
         .network.disable_auto_reconnect  = true,  // we handle backoff ourselves
+        // Last-will: broker publishes retained "offline" if the device dies,
+        // so the dashboard can tell "device off" from "quiet"
+        .session.last_will.topic         = STATUS_TOPIC,
+        .session.last_will.msg           = "offline",
+        .session.last_will.msg_len       = 0,      // 0 -> use strlen(msg)
+        .session.last_will.qos           = 1,
+        .session.last_will.retain        = 1,
     };
     s_client = esp_mqtt_client_init(&cfg);
     esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID,
@@ -103,6 +111,9 @@ void mqtt_task_stop(void) {
         esp_timer_delete(s_reconnect_timer);
         s_reconnect_timer = NULL;
     }
+    // Graceful shutdown: leave a retained "offline" so the LWT isn't needed
+    if (g_mqtt_connected)
+        esp_mqtt_client_publish(s_client, STATUS_TOPIC, "offline", 0, 1, 1);
     esp_mqtt_client_stop(s_client);
     esp_mqtt_client_destroy(s_client);
     s_client = NULL;
@@ -122,7 +133,26 @@ void mqtt_task_reconnect(void) {
 static void pub(const char *topic, const char *payload) {
     if (!g_mqtt_connected || !s_client) return;
     strncpy(g_last_pub_topic, topic, sizeof(g_last_pub_topic) - 1);
-    esp_mqtt_client_publish(s_client, topic, payload, 0, 0, 0);
+    // enqueue, not publish: publish() performs a synchronous TLS/WSS write in the
+    // caller's context — called from LVGL touch callbacks it stalled the render
+    // task on network backpressure. enqueue hands the send to the MQTT task.
+    if (esp_mqtt_client_enqueue(s_client, topic, payload, 0, 0, 0, true) >= 0)
+        g_mqtt_msg_count++;
+}
+
+// Minimal JSON string escaping: backslash, double quote; control chars dropped.
+static void json_escape(const char *src, char *dst, size_t n) {
+    size_t i = 0;
+    for (; *src && i + 2 < n; src++) {
+        unsigned char c = (unsigned char)*src;
+        if (c == '"' || c == '\\') {
+            dst[i++] = '\\';
+            dst[i++] = (char)c;
+        } else if (c >= 0x20) {
+            dst[i++] = (char)c;
+        }
+    }
+    dst[i] = '\0';
 }
 
 void mqtt_pub_machine_status(const char *id, bool running) {
@@ -154,12 +184,17 @@ void mqtt_pub_tank_metric(const char *id, const char *key, float value) {
 
 void mqtt_pub_operator(const char *uid, const char *name,
                        const char *role, const char *plant) {
-    char topic[64], payload[256];
+    char topic[64], payload[320];
+    char e_uid[48], e_name[96], e_role[96], e_plant[64];
     int64_t ts_ms = esp_timer_get_time() / 1000;
+    json_escape(uid,   e_uid,   sizeof(e_uid));
+    json_escape(name,  e_name,  sizeof(e_name));
+    json_escape(role,  e_role,  sizeof(e_role));
+    json_escape(plant, e_plant, sizeof(e_plant));
     snprintf(topic, sizeof(topic), "%s/operators/login", TOPIC_PREFIX);
     snprintf(payload, sizeof(payload),
              "{\"uid\":\"%s\",\"name\":\"%s\",\"role\":\"%s\",\"plant\":\"%s\",\"ts\":%lld}",
-             uid, name, role, plant, ts_ms);
+             e_uid, e_name, e_role, e_plant, ts_ms);
     ESP_LOGI(TAG, "pub %s", topic);
     pub(topic, payload);
 }

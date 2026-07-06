@@ -1,6 +1,7 @@
 #include "sim_task.h"
 #include "ui/data.h"
 #include "mqtt_task.h"
+#include "config.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -49,8 +50,11 @@ static void sim_tick(void) {
     for (int i = 0; i < g_machine_count; i++) {
         Machine *mc = &g_machines[i];
         if (!mc->running) continue;
-        for (int k = 0; k < mc->metric_count; k++)
+        for (int k = 0; k < mc->metric_count; k++) {
+            // Skip the metric open in the detail view — the user owns it there
+            if (i == g_edit_machine && k == g_edit_metric) continue;
             sim_metric(&mc->metrics[k]);
+        }
         if (mc->auto_pulse && ++s_pulse_tick[i] >= 5) {
             s_pulse_tick[i] = 0;
             mc->pulses++;
@@ -61,6 +65,7 @@ static void sim_tick(void) {
         Tank *t = &g_tanks[i];
         for (int k = 0; k < t->metric_count; k++) {
             if (k == 0) continue;  // level only changes via drag or fill/drain action
+            if (i == g_edit_tank && k == g_edit_metric) continue;  // detail-view hold
             sim_metric(&t->metrics[k]);
         }
     }
@@ -101,8 +106,10 @@ static void sim_task_fn(void *arg) {
         DATA_LOCK();
         sim_tick();
         DATA_UNLOCK();
+        // publish_all reads single-word floats outside the lock (see data.h
+        // locking rule); pub() enqueues to the MQTT outbox and never blocks
         if (mqtt_is_connected()) publish_all();
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(pdMS_TO_TICKS(SIM_TICK_MS));
     }
 }
 

@@ -460,6 +460,9 @@ void ui_switch_tab(ViewId v)
 {
     if ((int)v > VIEW_NFC) return;   // VIEW_DETAIL and VIEW_TANK_OVW not reachable via tab bar
 
+    // Leaving the detail view by any route releases its sim edit-hold
+    g_edit_machine = g_edit_tank = g_edit_metric = -1;
+
     // Deactivate tanks timer if leaving tanks
     if (g_current_view == VIEW_TANKS) ui_tanks_deactivate();
     if (g_current_view == VIEW_DEBUG) ui_debug_deactivate();
@@ -509,6 +512,10 @@ void ui_push_detail(const char *back_label, const char *metric_label)
 
 void ui_pop_detail(void)
 {
+    // Any pop out of the detail view releases its sim edit-hold
+    if (g_current_view == VIEW_DETAIL)
+        g_edit_machine = g_edit_tank = g_edit_metric = -1;
+
     if (g_current_view == VIEW_WIFI_PASSWORD) {
         for (int i = 0; i < VIEW_COUNT; i++)
             if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);

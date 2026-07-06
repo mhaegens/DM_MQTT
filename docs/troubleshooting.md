@@ -9,9 +9,9 @@ This document covers all known issues with root causes and fixes. For each issue
 | # | Area | Symptom | Status |
 |---|------|---------|--------|
 | 1 | Display | Cyan flash on boot | Mitigated |
-| 2 | WiFi | iPhone captive portal page does not load | Open |
-| 3 | WiFi | WiFi scan returns no results | Open |
-| 4 | Machines tab | Vertical scroll is sluggish | Open |
+| 2 | WiFi | iPhone captive portal page does not load | Mitigated (DNS hijack implemented — retest) |
+| 3 | WiFi | WiFi scan returns no results | Fixed in codebase (blocking scan) |
+| 4 | Machines tab | Vertical scroll is sluggish | Fixed in codebase (direct mode — validate on device) |
 | 5 | Build | Stale sdkconfig causes crash at ~22 seconds | Fixed by procedure |
 | 6 | Build | `xTaskCreatePinnedToCore` fails on boot | Fixed in codebase |
 | 7 | Display | LVGL custom fonts render as filled squares | Fixed in codebase |
@@ -45,11 +45,11 @@ By setting the root screen background color before `ui_main_init()`, LVGL's firs
 
 **Symptom:** When the device is running in soft-AP mode (SSID: `SAP-DM-Setup`), an iPhone joins the network but Safari does not automatically open the captive portal page.
 
-**Root cause:** iOS captive portal detection works by making an HTTP request to `captive.apple.com` and checking whether the response is redirected. This redirect requires a DNS hijack: the device's DNS server must resolve all queries to its own IP (`192.168.4.1`). The DHCP server runs on the P4 (LwIP stack), but the DNS hijack responder is not implemented. iOS gets a DNS timeout instead of a redirect and shows the network as connected without opening the portal.
+**Root cause:** iOS captive portal detection works by making an HTTP request to `captive.apple.com` and checking whether the response is redirected. This redirect requires a DNS hijack: the device's DNS server must resolve all queries to its own IP (`192.168.4.1`).
 
-**Current workaround:** Manually open Safari on the iPhone and navigate to `http://192.168.4.1`. Do not rely on the captive portal auto-launch.
+**Status:** A UDP/53 DNS hijack responder that answers every A-record query with `192.168.4.1` **is implemented** in `wifi_portal.c` (`dns_task`, started by `wifi_portal_start`). If the iPhone portal still does not auto-launch, retest on-device and check that the phone actually sends DNS to `192.168.4.1` (DHCP option 6) and that the responder answers within iOS's timeout.
 
-**Fix path:** Implement a minimal UDP/53 DNS responder that resolves any A-record query to `192.168.4.1`. The LwIP DNS server component supports custom handlers. Android devices are less affected because Android's captive portal detection uses a different mechanism.
+**Fallback:** Manually open Safari on the iPhone and navigate to `http://192.168.4.1`.
 
 ---
 
@@ -57,11 +57,9 @@ By setting the root screen background color before `ui_main_init()`, LVGL's firs
 
 **Symptom:** Opening the WiFi tab and tapping the scan button shows a spinner that never populates with nearby networks.
 
-**Root cause:** The ESP32-P4 uses `esp_wifi_remote` to proxy WiFi API calls to the ESP32-C6 companion chip over SDIO. `esp_wifi_scan_start` reaches the C6 successfully, but the `WIFI_EVENT_SCAN_DONE` event is not reliably delivered back to the P4 application event loop. The `wifi_manager.c` handler registers on the default event loop, but the `esp_wifi_remote` scan completion event may fire on a different internal loop.
+**Root cause:** The ESP32-P4 uses `esp_wifi_remote` to proxy WiFi API calls to the ESP32-C6 companion chip over SDIO. The async `WIFI_EVENT_SCAN_DONE` event was not reliably delivered back to the P4 application event loop.
 
-**Current workaround:** None. The scan list stays empty.
-
-**Fix path:** Register `WIFI_EVENT_SCAN_DONE` explicitly on the remote event loop (check `esp_wifi_remote` API for the correct loop handle), or implement a timer that calls `esp_wifi_scan_get_ap_num` after a fixed delay following scan start, without relying on the event.
+**Status: fixed in codebase.** `wifi_manager.c` runs a **blocking** scan (`esp_wifi_scan_start(NULL, true)`) inside a dedicated FreeRTOS task so LVGL is never stalled, then delivers results to the UI via `lv_async_call`. The scan task also disconnects STA before scanning (the driver rejects scans mid-connect) and reconnects the previous network when the scan completes.
 
 ---
 
@@ -69,11 +67,11 @@ By setting the root screen background color before `ui_main_init()`, LVGL's firs
 
 **Symptom:** Vertical scrolling through the machines grid is visibly sluggish compared to other tabs.
 
-**Root cause:** `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` marks the entire 720x720 framebuffer as dirty on every LVGL timer tick, even when only one pixel changed. A scroll gesture fires LVGL invalidation on every pixel of movement, triggering a full 720x720 repaint each time. At 50 fps, this puts significant CPU pressure on the software renderer.
+**Root cause:** `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` marked the entire 720x720 framebuffer as dirty on any invalidation — a scroll gesture triggered a full-frame software repaint every frame.
 
-**Current state:** No fix implemented yet. The issue is tracked in `tasks/prd-pr21-known-issues.md`.
+**Status: fixed in codebase (validate on device).** The avoid-tearing path now uses **direct mode** (`patches/esp_lvgl_port_avoid_tearing_direct_mode.patch` + `CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE=y`): LVGL renders only dirty regions into the panel-owned framebuffers, still swapping on vsync, so tearing and the cyan flash stay fixed while scroll repaints drop by an order of magnitude. The build also moved from `-Og` to `-O2` (`CONFIG_COMPILER_OPTIMIZATION_PERF=y`), the LVGL timer is back to 16 ms, and the machine grid uses absolute positioning so off-screen card culling cannot reflow the layout.
 
-**Fix path:** Register `LV_EVENT_SCROLL_END` on the machines list object and defer invalidation until the scroll gesture ends, rather than per-pixel. This reduces repaints to one per scroll gesture. Enabling partial refresh (disabling `FULL_REFRESH`) is not viable because it is mutually exclusive with the `AVOID_TEAR` mode needed to prevent cyan flashes.
+**Revert path** (if direct mode shows artifacts on device): restore the old full-refresh patch, set `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y`, and raise `timer_period_ms` back to 33 in `main.c`.
 
 ---
 

@@ -25,8 +25,6 @@ static lv_obj_t *s_mqtt_badge_lbl = NULL;  // MQTT row badge text
 static lv_obj_t *s_mqtt_badge     = NULL;  // MQTT row badge pill
 static lv_obj_t *s_uptime_lbl     = NULL;  // uptime label in KPI meta[1]
 
-static uint32_t s_rssi_tick = 0;  // tracks when RSSI was last refreshed
-
 // ─── KPI card ────────────────────────────────────────────────────────────────
 static lv_obj_t *make_kpi_card(lv_obj_t *grid, int idx,
                            const char *label_text,
@@ -169,6 +167,7 @@ static lv_obj_t *make_status_row(lv_obj_t *col,
 static void home_timer_cb(lv_timer_t *t)
 {
     (void)t;
+    if (g_current_view != VIEW_HOME) return;  // don't format/update a hidden screen
     ui_home_refresh();
 }
 
@@ -271,8 +270,8 @@ void ui_home_create(lv_obj_t *parent)
                                        "ACTIVE",
                                        NULL, NULL);
 
-    // Periodic timer: refresh all live data every 3000ms
-    lv_timer_create(home_timer_cb, 3000, NULL);
+    // Periodic timer: refresh all live data (only while Home is the active tab)
+    lv_timer_create(home_timer_cb, UI_REFRESH_MS, NULL);
 
     ui_home_refresh();
 }
@@ -282,28 +281,27 @@ void ui_home_refresh(void)
 {
     if (!s_screen) return;
 
-    // KPI 0: Running / Total machines (use g_machine_count, not MACHINE_COUNT)
-    int running = 0;
-    for (int i = 0; i < g_machine_count; i++)
-        if (g_machines[i].running) running++;
-    lv_label_set_text_fmt(s_kpi_val[0], "%d / %d", running, g_machine_count);
-
-    const char *stopped_name = NULL;
+    // Aggregate machine stats under the lock, render after release
+    int  running = 0, total_pulses = 0;
+    char stopped_name[32] = "";
+    DATA_LOCK();
     for (int i = 0; i < g_machine_count; i++) {
-        if (!g_machines[i].running) {
-            stopped_name = g_machines[i].name;
-            break;
-        }
+        if (g_machines[i].running) running++;
+        else if (!stopped_name[0])
+            strncpy(stopped_name, g_machines[i].name, sizeof(stopped_name) - 1);
+        total_pulses += g_machines[i].pulses;
     }
-    if (stopped_name)
+    int machine_count = g_machine_count;
+    DATA_UNLOCK();
+
+    // KPI 0: Running / Total machines
+    lv_label_set_text_fmt(s_kpi_val[0], "%d / %d", running, machine_count);
+    if (stopped_name[0])
         lv_label_set_text_fmt(s_kpi_meta[0], "%s stopped", stopped_name);
     else
         lv_label_set_text(s_kpi_meta[0], "All running");
 
     // KPI 1: Pulses today; meta = uptime HH:MM:SS
-    int total_pulses = 0;
-    for (int i = 0; i < g_machine_count; i++)
-        total_pulses += g_machines[i].pulses;
     lv_label_set_text_fmt(s_kpi_val[1], "%d", total_pulses);
 
     if (s_uptime_lbl) {
@@ -317,15 +315,7 @@ void ui_home_refresh(void)
     // KPI 2: MQTT message count
     lv_label_set_text_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
 
-    // KPI 3: WiFi RSSI (refresh from driver every 5 ticks = ~7.5s)
-    s_rssi_tick++;
-    if (s_rssi_tick >= 4) {
-        s_rssi_tick = 0;
-        if (g_wifi_connected) {
-            // esp_wifi_sta_get_rssi updates g_wifi_rssi via wifi_manager_get_rssi
-            // g_wifi_rssi is updated directly by wifi_manager event handler
-        }
-    }
+    // KPI 3: WiFi RSSI (g_wifi_rssi is maintained by the wifi_manager event handler)
     if (g_wifi_connected)
         lv_label_set_text_fmt(s_kpi_val[3], "%d", g_wifi_rssi);
     else

@@ -24,6 +24,16 @@ Locks the build to the ESP32-P4. Prevents accidentally building for the wrong ch
 
 ---
 
+## Compiler
+
+```
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+```
+
+Builds at `-O2`. Without this line ESP-IDF defaults to Debug (`-Og`), which leaves the LVGL software rasteriser — the hottest code on the device — unoptimised. `-O2` is worth roughly 20–40 % on render-heavy paths for free.
+
+---
+
 ## PSRAM
 
 ```
@@ -97,7 +107,7 @@ CONFIG_LV_OS_FREERTOS=y
 
 **`CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2`**: enables two software draw units, one per CPU core. LVGL 9 can split a render frame into two horizontal bands and process them in parallel on CPU 0 and CPU 1. This roughly halves render time for complex screens.
 
-**`CONFIG_LV_DEF_REFR_PERIOD=15`**: default LVGL timer period in ms. The BSP overrides this via `timer_period_ms = 20` in `main.c`, so the effective value is 20ms (~50fps).
+**`CONFIG_LV_DEF_REFR_PERIOD=15`**: default LVGL timer period in ms. The BSP overrides this via `timer_period_ms = 16` in `main.c`, so the effective value is 16ms (~60fps). Direct-mode rendering only touches dirty regions, so a render pass comfortably fits the 16ms budget.
 
 ### Built-in Montserrat fonts
 
@@ -119,21 +129,18 @@ See [troubleshooting.md](../../docs/troubleshooting.md#issue-7-lvgl-custom-fonts
 ```
 CONFIG_BSP_LCD_DPI_BUFFER_NUMS=2
 CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR=y
-CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y
+CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE=y
 ```
 
-These three flags must be set together. Each one alone does not prevent visual artifacts:
+`BUFFER_NUMS=2` + `AVOID_TEAR` give two panel-owned PSRAM framebuffers swapped on vsync — this is what prevents both tearing and the boot cyan flash.
 
-| Config | Alone | Effect |
-|--------|-------|--------|
-| `BUFFER_NUMS=2` only | Can tear | Two buffers exist but swaps happen mid-frame |
-| `AVOID_TEAR` only | Needs double buffer | Vsync-gated swap, but only one buffer |
-| `FULL_REFRESH` only | Cyan flashes | Whole frame repainted, but partial-render gaps still exposed |
-| All three together | Clean, no artifacts | Double buffer, vsync swap, no dirty-region gaps |
+The render mode within the avoid-tear path is **direct mode** (previously full-refresh). Full-refresh marked the entire 720x720 frame dirty on *any* invalidation, so a single label update cost a ~1 MB repaint plus a full widget-tree render — the root cause of the machines-tab scroll lag. In direct mode LVGL renders only dirty regions straight into the active framebuffer; the port syncs dirty areas between the buffers on flush.
+
+The mode is actually carried by `patches/esp_lvgl_port_avoid_tearing_direct_mode.patch`, because the Waveshare BSP does not set the direct/full flags on the LVGL port in its avoid-tearing path. The `DIRECT_MODE` Kconfig line above only takes effect on BSPs that expose the choice and is otherwise ignored.
 
 Each framebuffer is 720 x 720 x 2 bytes = 1,036,800 bytes (~1 MB). Both framebuffers are allocated in PSRAM by the BSP DPI driver.
 
-For the implication on scroll performance, see [architecture.md](../../docs/architecture.md#lvgl-display-configuration).
+Revert path if direct mode shows artifacts on device: restore the full-refresh patch variant, set `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y`, and raise `timer_period_ms` in `main.c` back to 33.
 
 ---
 
