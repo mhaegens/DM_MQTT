@@ -6,6 +6,7 @@
 #include "ui_detail.h"
 #include "data.h"
 #include "../mqtt_task.h"
+#include "../config.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,7 @@ static int16_t s_press_y[MAX_TANKS];
 static float   s_press_pct[MAX_TANKS];
 static bool    s_dragging[MAX_TANKS];
 static uint32_t s_last_pub_ms[MAX_TANKS];  // lv_tick_get() at last throttled publish
+static float   s_last_render_pct[MAX_TANKS] = {-1.0f, -1.0f, -1.0f};  // skip refresh when unchanged
 
 #define DRAG_PUB_INTERVAL_MS 400
 
@@ -249,6 +251,11 @@ static void refresh_tank(int idx) {
     if (pct > 100.0f) pct = 100.0f;
     DATA_UNLOCK();
 
+    // Level unchanged since last render — skip the invalidate entirely
+    // (the 500ms timer would otherwise repaint an identical tank)
+    if (pct == s_last_render_pct[idx]) return;
+    s_last_render_pct[idx] = pct;
+
     lv_obj_invalidate(col->tank_widget);
 
     char buf[8];
@@ -313,7 +320,9 @@ static void tank_event_cb(lv_event_t *e) {
             float new_pct = s_press_pct[idx] + (float)dy / (float)h * 100.0f;
             if (new_pct < 0.0f)   new_pct = 0.0f;
             if (new_pct > 100.0f) new_pct = 100.0f;
+            DATA_LOCK();
             t->metrics[0].value = new_pct;
+            DATA_UNLOCK();
             refresh_tank(idx);
             uint32_t now = lv_tick_get();
             if (now - s_last_pub_ms[idx] >= DRAG_PUB_INTERVAL_MS) {
@@ -484,7 +493,7 @@ void ui_tanks_create(lv_obj_t *parent) {
         position_tick_labels(i);
     }
 
-    s_refresh_timer = lv_timer_create(refresh_timer_cb, 500, NULL);
+    s_refresh_timer = lv_timer_create(refresh_timer_cb, TANK_REFRESH_MS, NULL);
     lv_timer_pause(s_refresh_timer);
 
     ESP_LOGI(TAG, "Tanks screen created");

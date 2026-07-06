@@ -210,12 +210,20 @@ static void scan_task(void *arg)
 
     // Stop any active STA reconnect before scanning; blocking scan returns
     // ESP_ERR_WIFI_STATE immediately if the driver is mid-connect.
+    // Our disconnect arrives with reason ASSOC_LEAVE, which the event handler
+    // deliberately does not auto-reconnect — so remember the state and
+    // reconnect ourselves after the scan, or scanning permanently drops WiFi.
+    bool was_connected = g_wifi_connected;
     esp_wifi_disconnect();
     vTaskDelay(pdMS_TO_TICKS(300));
 
     uint16_t n = WIFI_SCAN_MAX;
     wifi_ap_record_t *recs = calloc(WIFI_SCAN_MAX, sizeof(*recs));
-    if (!recs) { vTaskDelete(NULL); return; }
+    if (!recs) {
+        if (was_connected) esp_wifi_connect();
+        vTaskDelete(NULL);
+        return;
+    }
 
     esp_wifi_start();
     err = esp_wifi_scan_start(NULL, true);   // blocking
@@ -223,6 +231,11 @@ static void scan_task(void *arg)
     ESP_LOGI("wifi_mgr", "scan ret=0x%x ap_count=%u", err, n);
     if (n > WIFI_SCAN_MAX) n = WIFI_SCAN_MAX;
     esp_wifi_scan_get_ap_records(&n, recs);
+
+    if (was_connected) {
+        ESP_LOGI("wifi_mgr", "scan done — reconnecting STA");
+        esp_wifi_connect();
+    }
 
     wifi_scan_entry_t *e = calloc(n + 1, sizeof(*e));
     int cnt = 0;

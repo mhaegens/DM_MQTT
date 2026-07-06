@@ -148,7 +148,9 @@ static void action_btn_cb(lv_event_t *e) {
     Tank *t = &g_tanks[s_tank_idx];
     float cur = tank_level(t);
     if ((int)s_target_pct == (int)cur) return;
+    DATA_LOCK();
     t->metrics[0].value = s_target_pct;
+    DATA_UNLOCK();
     g_tank_drag_active[s_tank_idx] = false;
     ovw_refresh_fill();
     ovw_hide_target_line();

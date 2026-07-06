@@ -99,7 +99,9 @@ void app_main(void) {
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size   = BSP_LCD_H_RES * 50,   // 72 KB DMA — reclaims 72 KB vs 100-row; card hiding reduces render passes
+        // NOTE: in AVOID_TEAR mode the LVGL port renders into the panel's own
+        // full-frame PSRAM framebuffers; this draw-buffer size is bypassed.
+        .buffer_size   = BSP_LCD_H_RES * 50,
         .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
         .flags = {
             .buff_dma    = true,
@@ -108,7 +110,8 @@ void app_main(void) {
         }
     };
     cfg.lvgl_port_cfg.task_affinity = 1;   // pin LVGL render task to CPU 1, free CPU 0 for IDLE
-    cfg.lvgl_port_cfg.timer_period_ms = 33;  // 30fps — gives full render pass time to complete
+    cfg.lvgl_port_cfg.timer_period_ms = 16;  // ~60fps — direct mode redraws only dirty regions,
+                                             // so a render pass no longer needs a 33ms budget
     cfg.lvgl_port_cfg.task_stack = 20480;  // 20KB: deep LVGL object hierarchy in ui_machines_create needs > 7KB default
     bsp_display_start_with_config(&cfg);
     bsp_display_backlight_on();
@@ -129,7 +132,9 @@ void app_main(void) {
     wifi_manager_set_on_ip(on_wifi_ip);
     sim_task_start();
 
-    xTaskCreatePinnedToCore(btn_task, "btn", 2048, NULL, 5, NULL, 0);
+    // 4 KB: btn_task runs full UI transitions (ui_switch_tab -> screen refresh,
+    // deep flex relayout) under bsp_display_lock — 2 KB was borderline overflow.
+    xTaskCreatePinnedToCore(btn_task, "btn", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(console_task, "con", 2048, NULL, 3, NULL, 0);
 
     // Memory diagnostics — log SPIRAM and internal SRAM state after all init

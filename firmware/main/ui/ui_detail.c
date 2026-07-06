@@ -488,11 +488,13 @@ static void detail_refresh_labels(void)
         lv_slider_set_value(s_slider, sv, LV_ANIM_OFF);
     }
 
-    // Update data model
+    // Update data model — mutation, so take the data lock (sim runs on core 0)
+    DATA_LOCK();
     if (s_ctx_tank >= 0 && s_ctx_metric >= 0)
         g_tanks[s_ctx_tank].metrics[s_ctx_metric].value = s_value;
     else if (s_ctx_machine >= 0 && s_ctx_metric >= 0)
         g_machines[s_ctx_machine].metrics[s_ctx_metric].value = s_value;
+    DATA_UNLOCK();
 
     update_viz();
 }
@@ -1036,6 +1038,8 @@ void ui_detail_create(lv_obj_t *parent)
 static void open_context(const char *entity, Metric *m,
                          int ctx_tank, int ctx_machine, int ctx_metric)
 {
+    // Snapshot the metric under the lock — sim may be mid-update on core 0
+    DATA_LOCK();
     strncpy(s_entity, entity,  sizeof(s_entity)  - 1);
     strncpy(s_metric, m->label, sizeof(s_metric) - 1);
     strncpy(s_unit,   m->unit,  sizeof(s_unit)   - 1);
@@ -1050,9 +1054,16 @@ static void open_context(const char *entity, Metric *m,
     s_ctx_machine = ctx_machine;
     s_ctx_metric  = ctx_metric;
 
+    // Edit hold: sim skips this metric while the detail view owns it.
+    // Cleared by ui_main when navigating away from VIEW_DETAIL.
+    g_edit_tank    = ctx_tank;
+    g_edit_machine = ctx_machine;
+    g_edit_metric  = ctx_metric;
+
     // Copy history
     s_history_len = m->history_len < HISTORY_LEN ? m->history_len : HISTORY_LEN;
     for (int i = 0; i < s_history_len; i++) s_history[i] = m->history[i];
+    DATA_UNLOCK();
 
     // Slider factor
     if (s_step >= 1.0f)        s_slider_factor = 1;
@@ -1104,7 +1115,7 @@ void ui_detail_open_tank_metric(int tank_idx, int metric_idx)
 
 void ui_detail_open_machine_metric(int machine_idx, int metric_idx)
 {
-    if (machine_idx < 0 || machine_idx >= MACHINE_COUNT) return;
+    if (machine_idx < 0 || machine_idx >= g_machine_count) return;
     Machine *mc = &g_machines[machine_idx];
     if (metric_idx < 0 || metric_idx >= mc->metric_count) return;
     open_context(mc->name, &mc->metrics[metric_idx], -1, machine_idx, metric_idx);

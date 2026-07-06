@@ -1,5 +1,9 @@
 CONFIG_IDF_TARGET="esp32p4"
 
+# Compiler — -O2. Without this IDF defaults to Debug (-Og) and the LVGL
+# software renderer (the hottest code on the device) runs unoptimised.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
 # PSRAM — heap only (XIP removed: it triggers linker non-contiguous-regions issue)
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM=y
@@ -74,8 +78,14 @@ CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y
 CONFIG_MQTT_TASK_CORE_SELECTION=0
 
 # Display — double framebuffer + avoid-tearing eliminates partial-render cyan flashes.
-# Full-refresh mode repaints the whole screen every tick; no dirty-region gaps exposed.
+# DIRECT mode (was FULL_REFRESH): LVGL renders only dirty regions straight into the
+# active framebuffer; the swap still happens on vsync so tearing/cyan stay fixed, but a
+# small label update no longer costs a full 720x720 repaint (~1 MB) like full-refresh did.
+# The mode switch itself is carried by patches/esp_lvgl_port_avoid_tearing_direct_mode.patch
+# (the Waveshare BSP does not set direct/full flags on the LVGL port in its avoid-tear
+# path). DIRECT_MODE below is set for BSPs that expose the Kconfig choice; it is ignored
+# if the symbol does not exist.
 # Each framebuffer is 720x720x2 = ~1 MB; both live in PSRAM via DPI DMA + L2 cache.
 CONFIG_BSP_LCD_DPI_BUFFER_NUMS=2
 CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR=y
-CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y
+CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE=y

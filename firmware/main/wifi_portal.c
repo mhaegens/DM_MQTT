@@ -339,6 +339,25 @@ static const char HTML_OK[] =
     "You can close this page.</p>"
     "</body></html>";
 
+// ─── HTML escape helper ───────────────────────────────────────────────────────
+// SSIDs are attacker-controlled (any nearby AP) and get embedded in the portal
+// page — escape them so a hostile network name cannot inject markup.
+static void html_escape(char *dst, const char *src, int max)
+{
+    int i = 0;
+    for (; *src && i < max - 7; src++) {
+        switch (*src) {
+        case '&':  i += snprintf(dst + i, max - i, "&amp;");  break;
+        case '<':  i += snprintf(dst + i, max - i, "&lt;");   break;
+        case '>':  i += snprintf(dst + i, max - i, "&gt;");   break;
+        case '"':  i += snprintf(dst + i, max - i, "&#34;");  break;
+        case '\'': i += snprintf(dst + i, max - i, "&#39;");  break;
+        default:   dst[i++] = *src;                           break;
+        }
+    }
+    dst[i] = '\0';
+}
+
 // ─── URL decode helper ────────────────────────────────────────────────────────
 
 static void url_decode(char *dst, const char *src, int max)
@@ -369,14 +388,14 @@ static esp_err_t get_root_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    char opts[1200] = {0};
+    char opts[1600] = {0};
     int  pos = 0;
-    for (int i = 0; i < s_cached_ap_count && pos < (int)sizeof(opts) - 120; i++) {
+    for (int i = 0; i < s_cached_ap_count && pos < (int)sizeof(opts) - 260; i++) {
+        char esc[33 * 6];   // worst case: every char escaped
+        html_escape(esc, s_cached_aps[i].ssid, sizeof(esc));
         pos += snprintf(opts + pos, sizeof(opts) - pos,
                         "<option value='%s'>%s (%d dBm)</option>",
-                        s_cached_aps[i].ssid,
-                        s_cached_aps[i].ssid,
-                        s_cached_aps[i].rssi);
+                        esc, esc, s_cached_aps[i].rssi);
     }
 
     httpd_resp_set_type(req, "text/html");

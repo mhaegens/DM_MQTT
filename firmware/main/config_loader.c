@@ -187,6 +187,28 @@ static void populate_from_json(const cJSON *root) {
              g_machine_count, g_tank_count, g_badge_count);
 }
 
+// Read an entire JSON file into buf (capacity JSON_BUF_SIZE).
+// Returns 0 on success, -1 if the file does not exist, -2 if it exceeds the
+// buffer — oversized configs are rejected loudly instead of being silently
+// truncated into a misleading "parse error".
+static int read_json_file(const char *path, char *buf) {
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    rewind(f);
+    if (sz >= JSON_BUF_SIZE) {
+        fclose(f);
+        ESP_LOGE(TAG, "%s is %ld bytes — over the %d byte limit, ignoring it",
+                 path, sz, JSON_BUF_SIZE - 1);
+        return -2;
+    }
+    size_t n = fread(buf, 1, JSON_BUF_SIZE - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    return 0;
+}
+
 static ConfigResult parse_and_populate(const char *json_str) {
     // Route cJSON tree allocations to SPIRAM for duration of parse
     cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
@@ -219,11 +241,8 @@ ConfigResult config_load(void) {
         // ESP_ERR_INVALID_STATE means already mounted — still usable
         char *buf = malloc(JSON_BUF_SIZE);
         if (buf) {
-            FILE *f = fopen("/spiffs/sapdm_config.json", "r");
-            if (f) {
-                size_t n = fread(buf, 1, JSON_BUF_SIZE - 1, f);
-                buf[n] = '\0';
-                fclose(f);
+            int rr = read_json_file("/spiffs/sapdm_config.json", buf);
+            if (rr == 0) {
                 ConfigResult r = parse_and_populate(buf);
                 free(buf);
                 if (r == CONFIG_OK) {
@@ -232,7 +251,8 @@ ConfigResult config_load(void) {
                 }
                 ESP_LOGW(TAG, "SPIFFS JSON parse failed — trying SD card");
             } else {
-                ESP_LOGW(TAG, "SPIFFS: /spiffs/sapdm_config.json not found — trying SD card");
+                if (rr == -1)
+                    ESP_LOGW(TAG, "SPIFFS: /spiffs/sapdm_config.json not found — trying SD card");
                 free(buf);
             }
         }
@@ -273,18 +293,15 @@ ConfigResult config_load(void) {
         return CONFIG_PARSE_ERROR;
     }
 
-    FILE *f = fopen("/sdcard/sapdm_config.json", "r");
-    if (!f) {
-        ESP_LOGW(TAG, "sapdm_config.json not found on SD — config source: embedded default");
+    int rr = read_json_file("/sdcard/sapdm_config.json", buf);
+    if (rr != 0) {
+        if (rr == -1)
+            ESP_LOGW(TAG, "sapdm_config.json not found on SD — config source: embedded default");
         free(buf);
         esp_vfs_fat_sdcard_unmount("/sdcard", card);
         parse_and_populate(DEFAULT_CONFIG_JSON);
-        return CONFIG_FILE_NOT_FOUND;
+        return rr == -1 ? CONFIG_FILE_NOT_FOUND : CONFIG_PARSE_ERROR;
     }
-
-    size_t n = fread(buf, 1, JSON_BUF_SIZE - 1, f);
-    buf[n] = '\0';
-    fclose(f);
     esp_vfs_fat_sdcard_unmount("/sdcard", card);
 
     ConfigResult r = parse_and_populate(buf);

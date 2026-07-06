@@ -58,11 +58,6 @@ typedef struct {
 #define MAX_TANK_METRICS 8
 #define MAX_CERTS        6
 
-// Compat aliases for callers that used the old names
-#define MACHINE_COUNT MAX_MACHINES
-#define TANK_COUNT    MAX_TANKS
-#define BADGE_COUNT   MAX_BADGES
-
 typedef struct {
     char  id[16];
     char  name[32];
@@ -80,8 +75,6 @@ typedef struct {
     char  name[32];
     Metric metrics[MAX_TANK_METRICS];
     int    metric_count;
-    float  phase;   // wave animation phase (updated by timer)
-    float  slosh;   // slosh offset
 } Tank;
 
 // ─── Badge (operator) ──────────────────────────────────────────────────────
@@ -116,12 +109,22 @@ extern char    g_device_ip[16];
 extern bool    g_tank_drag_active[MAX_TANKS];
 extern char    g_last_pub_topic[128];
 
+// Metric currently open in the detail view (edit hold). While set, sim_tick
+// skips this metric so the simulator cannot overwrite a user edit mid-view.
+// -1 = none. Written by ui_detail (open) and ui_main (navigation away).
+extern int     g_edit_machine;   // machine index, or -1
+extern int     g_edit_tank;      // tank index, or -1
+extern int     g_edit_metric;    // metric index within the entity, or -1
+
 void metric_push(Metric *m, float value);
 void data_init_psram(void);
 
 extern SemaphoreHandle_t g_data_mutex;
 
-// Convenience macros — always use these, never take/give directly
+// Convenience macros — always use these, never take/give directly.
+// Locking rule: every MUTATION of g_machines/g_tanks state must hold the lock
+// (sim task and all UI callbacks). Single-word reads (a float value, a bool)
+// may skip it — stale-by-one-tick reads are acceptable for display purposes.
 #define DATA_LOCK()    xSemaphoreTake(g_data_mutex, portMAX_DELAY)
 #define DATA_UNLOCK()  xSemaphoreGive(g_data_mutex)
 

@@ -22,6 +22,14 @@
 // Topic prefix
 #define TOPIC_PREFIX      "factory"
 
+// Retained device availability topic (set as MQTT last-will, published on connect)
+#define STATUS_TOPIC      TOPIC_PREFIX "/device/status"
+
+// ─── Timing — sim and UI refresh cadence (keep in sync; UI polls sim output) ──
+#define SIM_TICK_MS        3000   // simulator tick + MQTT publish interval
+#define UI_REFRESH_MS      3000   // home / machines live-refresh timers
+#define TANK_REFRESH_MS     500   // tanks screen refresh timer (active tab only)
+
 // Plant / site label shown in the shell bar subtitle
 #define PLANT_NAME        "Plant BE01"
 
@@ -51,5 +59,5 @@
 #define GPIO_I2S_SCLK     12
 #define GPIO_I2S_ASDOUT   11
 #define GPIO_I2S_LRCK     10
-#define GPIO_I2S_DSDIN     9   // Shared with BOOT button — see audio.h
+#define GPIO_I2S_DSDIN     9   // Shared with the BOOT strap function; release before audio use
 #define GPIO_PA_CTRL      53   // NS4150B power-amplifier enable (active high)

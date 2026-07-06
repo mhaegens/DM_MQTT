@@ -180,3 +180,33 @@ Where the "new way of running code" energy *is* well spent: the IDF/LVGL version
 | 10 | IDF 5.4/5.5 + LVGL 9.3 + PPA experiment (P1-6) | Medium, gated on 1–2 landing first | Hardware-accelerated headroom |
 
 Items 1–3 alone should deliver the "performance up by a lot" you asked for; everything after that is compounding.
+
+---
+
+## 8 · Status addendum (2026-07-06, same day)
+
+All fixes were applied on this branch. Status per finding:
+
+| Finding | Status |
+|---|---|
+| P0-1 `-O2` | **Applied** (`CONFIG_COMPILER_OPTIMIZATION_PERF=y`) |
+| P0-2 direct mode | **Applied** — patch rewritten (`esp_lvgl_port_avoid_tearing_direct_mode.patch`), `DIRECT_MODE` Kconfig set, LVGL timer back to 16 ms. **Needs on-device validation**; revert path documented in troubleshooting Issue 4 |
+| P0-3 enqueue | **Applied** — `pub()` uses `esp_mqtt_client_enqueue`; msg counter moved to `pub()` (it never worked for QoS 0 — `MQTT_EVENT_PUBLISHED` doesn't fire) |
+| P0-4 grid | **Applied** — absolute positioning, culling kept |
+| C-1 scan disconnect | **Applied** — STA reconnects after scan when it was connected before |
+| C-2 locking | **Applied** — all mutations under `DATA_LOCK`; snapshot-then-render in machines/home refresh; detail-view edit hold (`g_edit_*`) stops sim overwriting user edits |
+| C-3 escaping | **Applied** — JSON escape in `mqtt_pub_operator`, HTML escape for SSIDs in the portal |
+| C-4 config truncation | **Applied** — size check with a distinct error log |
+| C-5 vestigial code | **Applied** — RSSI no-op block, `Tank.phase/slosh`, `MAX_METRICS_PER_MACHINE` mismatch, compat aliases all removed |
+| P1-2 invalidation hygiene | **Applied** — tank change-gate, home view guard, machines label change-guard + running-state gate |
+| P1-4 btn stack | **Applied** — 4 KB |
+| H-1 dead files | **Applied** — `hw/`, `data_model.*`, `wifi_simple.*`, `fonts/`, `generate_fonts.sh` deleted |
+| H-4 LWT | **Applied** — retained `factory/device/status` online/offline |
+| H-5/H-6/H-7 comments, cadence defines, docs | **Applied** |
+| P1-3 shadow diet | **Deliberately skipped** — shadows are part of the look (hard constraint); direct mode removes most of their per-frame cost anyway |
+| P1-5 shared style theme | **Deferred** — large restyle-risk refactor; needs an on-device screenshot loop to verify pixel parity |
+| P1-6 IDF 5.4/5.5 + PPA | **Deferred** — needs a hardware build/validate cycle |
+| H-2 credentials | **Left in place** — the real fix is rotating the hotspot password (physical action); replacing defaults with placeholders would break first-boot convenience, and the values are already in git history regardless |
+| H-3 OTA partitions | **Deferred** — repartitioning + OTA update logic is a feature, not a fix; needs a full reflash of existing devices |
+
+**Post-flash checklist:** `rm sdkconfig && idf.py reconfigure && idf.py build` (defaults changed), re-apply the renamed patch to `managed_components` after `idf.py update-dependencies`, then verify on device: no tearing/cyan on boot, machines scroll, tank drag smoothness, and MQTT msg counter now counting.

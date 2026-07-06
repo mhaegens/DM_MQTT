@@ -16,7 +16,7 @@ Deep-dive reference for the ESP32-P4 firmware. The [quick-start guide](../README
 
 4. **Config load** (`config_load`) — tries SPIFFS, then SD card, then falls back to the embedded default. Parses the JSON into the pre-allocated arrays.
 
-5. **BSP display start** (`bsp_display_start_with_config`) — initializes the MIPI-DSI panel, allocates two PSRAM framebuffers, starts the LVGL port with the render task pinned to CPU 1, 20ms period, 20KB task stack.
+5. **BSP display start** (`bsp_display_start_with_config`) — initializes the MIPI-DSI panel, allocates two PSRAM framebuffers, starts the LVGL port with the render task pinned to CPU 1, 16ms period, 20KB task stack. Rendering runs in direct mode: only dirty regions are redrawn (see [sdkconfig-reference.md](sdkconfig-reference.md#display)).
 
 6. **Root screen background** — sets `lv_scr_act()` background to `0xF2F4FA` before the UI builds. This prevents the cyan flash from PSRAM garbage on the first frame.
 
@@ -38,9 +38,9 @@ Deep-dive reference for the ESP32-P4 firmware. The [quick-start guide](../README
 
 | Task | Stack | Priority | CPU | Wake |
 |------|-------|----------|-----|------|
-| LVGL render (BSP) | 20 KB | BSP default | 1 | 20ms period |
-| sim | 8 KB | 5 | 0 | 1500ms `vTaskDelay` |
-| btn | 2 KB | 5 | 0 | 20ms `vTaskDelay` |
+| LVGL render (BSP) | 20 KB | BSP default | 1 | 16ms period (direct mode) |
+| sim | 8 KB | 5 | 0 | `SIM_TICK_MS` (3000ms) `vTaskDelay` |
+| btn | 4 KB | 5 | 0 | 20ms `vTaskDelay` |
 | con (console) | 2 KB | 3 | 0 | 50ms `vTaskDelay` |
 | MQTT internal (esp_mqtt) | esp_mqtt default | esp_mqtt default | 0 | event-driven |
 | esp_hosted SDIO tasks | SPIRAM | — | — | SDIO interrupt |
@@ -104,7 +104,7 @@ extern char  g_last_pub_topic[128];
 
 ## Simulation Engine
 
-`sim_task.c` runs a 1.5-second tick loop on CPU 0:
+`sim_task.c` runs a `SIM_TICK_MS` (3-second) tick loop on CPU 0:
 
 ```c
 while (1) {
@@ -112,11 +112,14 @@ while (1) {
     sim_tick();
     DATA_UNLOCK();
     if (mqtt_is_connected()) publish_all();
-    vTaskDelay(pdMS_TO_TICKS(1500));
+    vTaskDelay(pdMS_TO_TICKS(SIM_TICK_MS));
 }
 ```
 
-Each tick calls `sim_metric` for every metric of every running machine and every tank (except tank level metrics when a drag is active, to avoid overwriting manual input).
+Each tick calls `sim_metric` for every metric of every running machine and every tank, except:
+
+- tank level metrics (`metrics[0]`) — these only change via drag or the fill/drain action
+- the metric currently open in the detail view (`g_edit_machine`/`g_edit_tank`/`g_edit_metric`) — the user owns it while editing; the hold is released by `ui_main` on any navigation away from the detail view
 
 **Simulation profiles:**
 
@@ -134,6 +137,10 @@ The pulse counter for running machines increments every 5 ticks (~7.5 seconds). 
 ## MQTT Client
 
 `mqtt_task.c` initializes an `esp_mqtt` client with WSS transport and `disable_auto_reconnect = true`.
+
+All publishes go through `esp_mqtt_client_enqueue` (never `esp_mqtt_client_publish`): publish performs a synchronous TLS/WSS write in the caller's context, which stalled the LVGL render task when publishes were triggered from touch callbacks (tank drags, Start/Stop taps). Enqueue hands the send to the MQTT task via the outbox. The message counter (`g_mqtt_msg_count`) is incremented on successful enqueue — `MQTT_EVENT_PUBLISHED` never fires for QoS 0.
+
+The client registers a retained last-will on `factory/device/status` (`offline`), and publishes retained `online` on every connect, so the dashboard can distinguish a dead device from a quiet one.
 
 On `MQTT_EVENT_DISCONNECTED`, a staged exponential backoff timer fires:
 - Disconnect 1: retry after 5 seconds

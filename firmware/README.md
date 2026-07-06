@@ -16,14 +16,13 @@ cd ~/esp/esp-idf && git checkout v5.3 && ./install.sh esp32p4
 source ~/esp/esp-idf/export.sh
 ```
 
-### Font files
+### Fonts
 
-Pre-generated IBM Plex Sans + IBM Plex Mono font files are included in `fonts/`. To regenerate:
-
-```bash
-npm install -g lv_font_conv
-bash generate_fonts.sh
-```
+The UI uses LVGL's built-in Montserrat family (16/18/22/24, enabled in
+`sdkconfig.defaults`). The old pre-generated IBM Plex files were incompatible
+with LVGL 9's font format and have been removed; if custom fonts are wanted
+again, generate them with `lv_font_conv` **without** `--compressed`
+(see [../docs/troubleshooting.md](../docs/troubleshooting.md), Issue 7).
 
 ---
 
@@ -72,10 +71,9 @@ Full schema and example: [`main/default_config.json`](main/default_config.json)
 
 On first boot (or after SD config change) the device connects to the configured WiFi network.
 A soft-AP hotspot can be toggled from the WiFi tab for provisioning. After connecting a phone
-to the hotspot, a captive portal serves the credential entry page.
-
-> **Known issue:** iPhone captive portal detection completes but the portal page does not
-> always load. WiFi scanning from the WiFi tab also has a known issue. Both are tracked below.
+to the hotspot, a captive portal (with a DNS hijack responder on UDP/53) serves the credential
+entry page. WiFi scanning uses a blocking scan in a worker task and reconnects the previous
+network automatically when the scan finishes.
 
 ---
 
@@ -83,13 +81,14 @@ to the hotspot, a captive portal serves the credential entry page.
 
 | Task | Stack | CPU | Wake |
 |------|-------|-----|------|
-| LVGL render (BSP) | 20 KB | 1 | 20ms period |
-| sim | 8 KB | 0 | 1500ms |
-| btn | 2 KB | 0 | 20ms poll |
+| LVGL render (BSP) | 20 KB | 1 | 16ms period (direct mode — dirty regions only) |
+| sim | 8 KB | 0 | 3000ms (`SIM_TICK_MS`) |
+| btn | 4 KB | 0 | 20ms poll |
 | con (console) | 2 KB | 0 | 50ms poll |
 | MQTT internal (esp_mqtt) | esp_mqtt default | 0 | event-driven |
 
-LVGL is on CPU 1. All other application tasks are on CPU 0.
+LVGL is on CPU 1. All other application tasks are on CPU 0. All MQTT publishes
+go through `esp_mqtt_client_enqueue`, so no task ever blocks on the WSS socket.
 
 ## Project structure
 
@@ -124,7 +123,7 @@ main/
 - **WiFi:** ESP32-C6 SDIO companion chip — do not use native P4 WiFi APIs
 - **PSRAM:** machine/tank/badge arrays allocated in SPIRAM; draw buffer stays in internal SRAM. `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=81920` reserves 80 KB of internal SRAM for the SDIO DMA ring buffers used by the esp_hosted driver.
 - **sdkconfig.defaults:** rationale for every non-obvious entry is in [docs/sdkconfig-reference.md](docs/sdkconfig-reference.md).
-- **Double framebuffer:** `BSP_LCD_DPI_BUFFER_NUMS=2` + `AVOID_TEAR` + `FULL_REFRESH` — both 720×720 framebuffers live in PSRAM, swapped on vsync
+- **Double framebuffer:** `BSP_LCD_DPI_BUFFER_NUMS=2` + `AVOID_TEAR` + **direct mode** — both 720×720 framebuffers live in PSRAM, swapped on vsync; LVGL redraws only dirty regions (see `patches/esp_lvgl_port_avoid_tearing_direct_mode.patch`)
 - **BOOT button:** GPIO35 — short press = back/home, long press = detail step
 - **SD card:** SDIO 4-bit on GPIO39–44
 
@@ -137,9 +136,8 @@ For root causes and fixes: [../docs/troubleshooting.md](../docs/troubleshooting.
 | # | Area | Description |
 |---|------|-------------|
 | 1 | Display | Occasional cyan frame flash on boot. Mitigated by pre-setting root screen background before UI init. |
-| 2 | WiFi | Soft-AP hotspot visible on iPhone but captive portal page does not load. Navigate manually to `http://192.168.4.1`. |
-| 3 | WiFi | WiFi scan from the WiFi tab returns no results. Known issue with scan callback delivery over the SDIO hosted path. |
-| 4 | Machines | Vertical scroll on the machines tab is sluggish. LVGL full-refresh mode repaints the entire 720x720 framebuffer on every scroll tick. |
+| 2 | WiFi | iPhone captive portal auto-launch: a DNS hijack responder is implemented (`wifi_portal.c`); needs a fresh on-device retest. Fallback: navigate to `http://192.168.4.1`. |
+| 3 | Display | Direct-mode rendering (replaces full-refresh) needs on-device validation: verify no tearing/cyan regressions. Revert = restore the full-refresh patch + `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` and set `timer_period_ms` back to 33. |
 
 ---
 
