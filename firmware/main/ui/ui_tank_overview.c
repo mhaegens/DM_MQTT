@@ -4,6 +4,7 @@
 #include "ui_theme.h"
 #include "ui_detail.h"
 #include "data.h"
+#include "../mqtt_task.h"
 #include "esp_log.h"
 #include <stdio.h>
 
@@ -35,8 +36,6 @@ static lv_obj_t   *s_action_btn   = NULL;
 static lv_obj_t   *s_action_lbl   = NULL;
 static lv_obj_t   *s_target_line  = NULL;
 static float       s_target_pct   = 0.0f;
-static bool        s_animating    = false;
-static lv_timer_t *s_anim_timer   = NULL;
 
 static const char *ovw_status_text(float pct) {
     if (pct < 15.0f) return "Critical";
@@ -108,12 +107,7 @@ static void update_action_btn(void) {
     snprintf(lbl_buf, sizeof(lbl_buf), "Target: %d%%", (int)s_target_pct);
     lv_label_set_text(s_target_lbl, lbl_buf);
 
-    if (s_animating) {
-        lv_obj_set_style_bg_color(s_action_btn, COL_ERR, 0);
-        lv_label_set_text(s_action_lbl, "Stop");
-        lv_obj_set_style_text_color(s_action_lbl, COL_BASE, 0);
-        lv_obj_add_flag(s_action_btn, LV_OBJ_FLAG_CLICKABLE);
-    } else if ((int)s_target_pct == (int)cur) {
+    if ((int)s_target_pct == (int)cur) {
         lv_obj_set_style_bg_color(s_action_btn, COL_BASE3, 0);
         char buf[20];
         snprintf(buf, sizeof(buf), "At %d%%", (int)cur);
@@ -139,7 +133,6 @@ static void update_action_btn(void) {
 
 static void slider_cb(lv_event_t *e) {
     (void)e;
-    if (s_animating) return;
     s_target_pct = (float)lv_slider_get_value(s_slider);
     Tank *t = &g_tanks[s_tank_idx];
     float cur = tank_level(t);
@@ -152,50 +145,19 @@ static void slider_cb(lv_event_t *e) {
 
 static void action_btn_cb(lv_event_t *e) {
     (void)e;
-    if (s_animating) {
-        lv_timer_pause(s_anim_timer);
-        s_animating = false;
-        lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
-        ovw_hide_target_line();
-        update_action_btn();
-    } else {
-        Tank *t = &g_tanks[s_tank_idx];
-        float cur = tank_level(t);
-        if ((int)s_target_pct == (int)cur) return;
-        s_animating = true;
-        lv_obj_clear_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
-        ovw_show_target_line(s_target_pct);
-        lv_timer_resume(s_anim_timer);
-        update_action_btn();
-    }
-}
-
-static void anim_timer_cb(lv_timer_t *tmr) {
-    (void)tmr;
-    if (!s_animating) return;
-
-    Tank *tk = &g_tanks[s_tank_idx];
-    float cur = tank_level(tk);
-    bool filling = (s_target_pct > cur);
-    float next = cur + (filling ? 1.2f : -1.2f);
-
-    if (filling  && next >= s_target_pct - 0.6f) next = s_target_pct;
-    if (!filling && next <= s_target_pct + 0.6f) next = s_target_pct;
-    if (next < 0.0f)   next = 0.0f;
-    if (next > 100.0f) next = 100.0f;
-
-    tk->metrics[0].value = next;
+    Tank *t = &g_tanks[s_tank_idx];
+    float cur = tank_level(t);
+    if ((int)s_target_pct == (int)cur) return;
+    t->metrics[0].value = s_target_pct;
+    g_tank_drag_active[s_tank_idx] = false;
     ovw_refresh_fill();
-
-    bool done = (filling && next >= s_target_pct) ||
-                (!filling && next <= s_target_pct);
-    if (done) {
-        lv_timer_pause(s_anim_timer);
-        s_animating = false;
-        lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
-        ovw_hide_target_line();
-        update_action_btn();
-    }
+    ovw_hide_target_line();
+    // Sync slider to the now-applied level so it reflects current state
+    if (s_slider) lv_slider_set_value(s_slider, (int)s_target_pct, LV_ANIM_OFF);
+    // Do NOT call update_action_btn() here — it would read the updated value
+    // and immediately disable the button before the user can see the result
+    if (mqtt_is_connected())
+        mqtt_pub_tank_metric(t->id, t->metrics[0].key, s_target_pct);
 }
 
 void ui_tank_overview_create(lv_obj_t *parent) {
@@ -447,10 +409,6 @@ void ui_tank_overview_create(lv_obj_t *parent) {
     lv_obj_set_style_text_color(s_action_lbl, COL_TX3, 0);
     lv_obj_center(s_action_lbl);
 
-    // Animation timer — created once, kept paused until fill/drain triggered
-    s_anim_timer = lv_timer_create(anim_timer_cb, 100, NULL);
-    lv_timer_pause(s_anim_timer);
-
     ESP_LOGI(TAG, "Tank overview screen created");
 }
 
@@ -458,11 +416,6 @@ void ui_tank_overview_activate(int tank_idx) {
     if (!s_screen) return;
     if (tank_idx < 0 || tank_idx >= g_tank_count) return;
 
-    // Cancel any in-progress animation from a previous visit
-    if (s_animating && s_anim_timer) {
-        lv_timer_pause(s_anim_timer);
-        s_animating = false;
-    }
     if (s_fill_outer) lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
     ovw_hide_target_line();
 
@@ -510,10 +463,6 @@ void ui_tank_overview_activate(int tank_idx) {
 }
 
 void ui_tank_overview_deactivate(void) {
-    if (s_animating && s_anim_timer) {
-        lv_timer_pause(s_anim_timer);
-        s_animating = false;
-    }
     if (s_fill_outer) lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
     ovw_hide_target_line();
 }

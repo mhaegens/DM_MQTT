@@ -7,10 +7,15 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_system.h"
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_host.h"
+#include "sdmmc_cmd.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "lwip/sockets.h"
+#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,6 +25,44 @@ static const char *TAG = "wifi_portal";
 static httpd_handle_t s_server          = NULL;
 static TimerHandle_t  s_stop_timer      = NULL;
 static bool           s_portal_connecting = false;
+
+// ─── SD helpers ───────────────────────────────────────────────────────────────
+
+#define PORTAL_SD_CONFIG_PATH "/sdcard/sapdm_config.json"
+#define PORTAL_JSON_MAX       (32 * 1024)
+
+static sdmmc_card_t *s_card = NULL;
+
+static bool portal_sd_mount(void) {
+    if (s_card) return true;
+    sdmmc_host_t host        = SDMMC_HOST_DEFAULT();
+    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot.width = 4;
+    slot.clk   = GPIO_SD_CLK;
+    slot.cmd   = GPIO_SD_CMD;
+    slot.d0    = GPIO_SD_D0;
+    slot.d1    = GPIO_SD_D1;
+    slot.d2    = GPIO_SD_D2;
+    slot.d3    = GPIO_SD_D3;
+    esp_vfs_fat_sdmmc_mount_config_t cfg = {
+        .format_if_mount_failed = false,
+        .max_files = 4,
+        .allocation_unit_size = 16 * 1024,
+    };
+    esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &cfg, &s_card);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "SD mount failed: %s", esp_err_to_name(err));
+        s_card = NULL;
+        return false;
+    }
+    return true;
+}
+
+static void portal_sd_unmount(void) {
+    if (!s_card) return;
+    esp_vfs_fat_sdcard_unmount("/sdcard", s_card);
+    s_card = NULL;
+}
 
 // ─── DNS hijack ───────────────────────────────────────────────────────────────
 
@@ -113,22 +156,46 @@ static void portal_scan_done_cb(const wifi_scan_entry_t *results, int count)
 static const char HTML_HEAD[] =
     "<!DOCTYPE html><html><head>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-    "<title>SAP DM WiFi Setup</title>"
+    "<title>SAP DM Setup</title>"
     "<style>"
     "body{font-family:sans-serif;background:#F2F4FA;color:#1D2D3E;"
-    "padding:24px;max-width:400px;margin:auto}"
+    "padding:24px;max-width:420px;margin:auto}"
     "h1{color:#0070F2;font-size:20px;margin-bottom:4px}"
     "p{color:#4A6080;font-size:13px;margin-top:0}"
     "label{display:block;margin-top:16px;font-size:14px;font-weight:600}"
-    "select,input{width:100%;padding:10px;margin-top:6px;"
+    "select,input[type=password],input[type=text]{"
+    "width:100%;padding:10px;margin-top:6px;"
     "border:1px solid #DDE1EA;border-radius:8px;font-size:15px;"
     "box-sizing:border-box;background:#fff}"
-    "button{margin-top:24px;width:100%;padding:14px;background:#0070F2;"
+    "button.main{margin-top:24px;width:100%;padding:14px;background:#0070F2;"
     "color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}"
-    "button:active{background:#0050BE}"
+    "button.main:active{background:#0050BE}"
+    "button.main.ok{background:#107E3E}"
+    "button.main.ok:active{background:#0A5C2C}"
     "a.rescan{display:inline-block;margin-top:12px;color:#0070F2;font-size:13px}"
+    ".tabs{display:flex;gap:2px;margin-bottom:20px;background:#E3E6EF;"
+    "border-radius:8px;padding:3px}"
+    ".tab{flex:1;padding:10px;border:none;border-radius:6px;background:transparent;"
+    "font-size:14px;cursor:pointer;color:#4A6080;font-family:sans-serif}"
+    ".tab.active{background:#fff;color:#0070F2;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}"
+    ".pane{display:none}"
+    "#dropzone{border:2px dashed #DDE1EA;border-radius:8px;padding:32px 16px;"
+    "text-align:center;color:#8090A8;margin-top:16px;cursor:pointer;"
+    "transition:all .15s}"
+    "#dropzone.over{border-color:#0070F2;background:#E8F2FF;color:#0070F2}"
+    "#dropzone.ready{border-color:#107E3E;background:#E3F5EC;color:#107E3E}"
+    "#fname{margin-top:8px;font-size:13px;color:#4A6080}"
+    "#upload-status{margin-top:12px;font-size:14px;padding:10px;border-radius:8px;"
+    "display:none}"
+    "#upload-status.ok{background:#E3F5EC;color:#107E3E;display:block}"
+    "#upload-status.err{background:#FFE8E8;color:#BB0000;display:block}"
     "</style></head><body>"
-    "<h1>SAP DM WiFi Setup</h1>"
+    "<h1>SAP DM Setup</h1>"
+    "<div class='tabs'>"
+    "<button class='tab active' onclick=\"showTab('wifi',this)\">WiFi</button>"
+    "<button class='tab' onclick=\"showTab('cfg',this)\">Config</button>"
+    "</div>"
+    "<div id='wifi' style='display:block'>"
     "<p>Select your network and enter the password.</p>"
     "<form method='post' action='/connect'>"
     "<label>Network<select name='ssid'>";
@@ -146,9 +213,105 @@ static const char HTML_TAIL[] =
     "background:none;border:none;color:#0070F2;font-size:13px;cursor:pointer;"
     "padding:0;width:auto;margin:0'>Show</button>"
     "</div></label>"
-    "<button type='submit'>Connect</button>"
+    "<button type='submit' class='main'>Connect</button>"
     "</form>"
     "<a class='rescan' href='/rescan'>Rescan networks</a>"
+    "</div>"
+    "<div id='cfg' class='pane'>"
+    "<p><strong>Config files on SD:</strong></p>"
+    "<div id='cfgList'><em style='color:#8090A8'>Loading...</em></div>"
+    "<div id='cfgStatus' style='margin-top:8px;font-size:13px'></div>"
+    "<hr style='border:none;border-top:1px solid #DDE1EA;margin:16px 0'>"
+    "<p>Upload a new config (saves as sapdm_config.json and reboots):</p>"
+    "<div id='dropzone' onclick='document.getElementById(\"fInput\").click()'>"
+    "Tap to select JSON file"
+    "</div>"
+    "<div id='fname'></div>"
+    "<input type='file' id='fInput' accept='.json,application/json' "
+    "style='display:none' onchange='filePicked(this)'>"
+    "<button class='main ok' id='upBtn' onclick='doUpload()' "
+    "style='display:none'>Upload &amp; Reboot</button>"
+    "<div id='upload-status'></div>"
+    "</div>"
+    "<script>"
+    "var _file=null;"
+    "function showTab(id,btn){"
+    "var ps=['wifi','cfg'];"
+    "for(var i=0;i<ps.length;i++){"
+    "var p=document.getElementById(ps[i]);"
+    "if(p)p.style.display=(ps[i]===id)?'block':'none';}"
+    "var ts=document.getElementsByClassName('tab');"
+    "for(var i=0;i<ts.length;i++){"
+    "ts[i].style.background=(ts[i]===btn)?'#fff':'transparent';"
+    "ts[i].style.color=(ts[i]===btn)?'#0070F2':'#4A6080';"
+    "ts[i].style.fontWeight=(ts[i]===btn)?'600':'normal';}"
+    "if(id==='cfg')loadCfgList();}"
+    "function loadCfgList(){"
+    "var el=document.getElementById('cfgList');"
+    "el.innerHTML='<em style=\"color:#8090A8\">Loading...</em>';"
+    "var xhr=new XMLHttpRequest();"
+    "xhr.open('GET','/list-configs',true);"
+    "xhr.onreadystatechange=function(){"
+    "if(xhr.readyState!==4)return;"
+    "if(xhr.status===200){"
+    "var files=JSON.parse(xhr.responseText);"
+    "if(!files.length){el.innerHTML='<em>No .json files on SD card.</em>';return;}"
+    "var html='';"
+    "for(var i=0;i<files.length;i++){"
+    "var f=files[i];"
+    "var cls=f.active?'main ok':'main';"
+    "var lbl=f.name+(f.active?' (active)':'');"
+    "html+='<button class=\"'+cls+'\" style=\"margin-top:8px\" "
+    "onclick=\"setCfg(\\'' + f.name + '\\')\">'+lbl+'</button>';}"
+    "el.innerHTML=html;}"
+    "else{el.innerHTML='<em style=\"color:#BB0000\">SD not available.</em>';}};"
+    "xhr.send();}"
+    "function setCfg(name){"
+    "var st=document.getElementById('cfgStatus');"
+    "st.style.color='#4A6080';st.textContent='Setting...';"
+    "var xhr=new XMLHttpRequest();"
+    "xhr.open('POST','/set-config',true);"
+    "xhr.setRequestHeader('Content-Type','application/json');"
+    "xhr.onreadystatechange=function(){"
+    "if(xhr.readyState!==4)return;"
+    "if(xhr.status===200){"
+    "st.style.color='#107E3E';"
+    "st.textContent='Active config set to '+name+'. Reboot to apply.';"
+    "loadCfgList();}"
+    "else{st.style.color='#BB0000';st.textContent='Failed: '+xhr.responseText;}};"
+    "xhr.send(JSON.stringify({file:name}));}"
+    "function filePicked(inp){"
+    "if(!inp.files.length)return;"
+    "_file=inp.files[0];"
+    "var dz=document.getElementById('dropzone');"
+    "dz.style.borderColor='#107E3E';"
+    "dz.style.background='#E3F5EC';"
+    "dz.style.color='#107E3E';"
+    "dz.textContent=_file.name+' ('+Math.round(_file.size/1024)+'KB)';"
+    "document.getElementById('upBtn').style.display='block';"
+    "document.getElementById('upload-status').style.display='none';}"
+    "function doUpload(){"
+    "if(!_file)return;"
+    "var btn=document.getElementById('upBtn');"
+    "btn.disabled=true;btn.textContent='Uploading...';"
+    "var st=document.getElementById('upload-status');"
+    "st.style.display='none';"
+    "var xhr=new XMLHttpRequest();"
+    "xhr.open('POST','/upload-config',true);"
+    "xhr.setRequestHeader('Content-Type','application/json');"
+    "xhr.onreadystatechange=function(){"
+    "if(xhr.readyState!==4)return;"
+    "if(xhr.status===200){"
+    "st.style.display='block';st.style.background='#E3F5EC';"
+    "st.style.color='#107E3E';st.textContent='Saved! Rebooting...';}"
+    "else{"
+    "st.style.display='block';st.style.background='#FFE8E8';"
+    "st.style.color='#BB0000';st.textContent='Failed: '+xhr.responseText;"
+    "btn.disabled=false;btn.textContent='Retry Upload';}};"
+    "var reader=new FileReader();"
+    "reader.onload=function(e){xhr.send(e.target.result);};"
+    "reader.readAsText(_file);}"
+    "</script>"
     "</body></html>";
 
 static const char HTML_SCANNING[] =
@@ -278,6 +441,189 @@ static esp_err_t redirect_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ─── POST /upload-config ──────────────────────────────────────────────────────
+
+static esp_err_t post_upload_config_handler(httpd_req_t *req)
+{
+    int len = req->content_len;
+    if (len <= 0 || len > PORTAL_JSON_MAX) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid content length");
+        return ESP_OK;
+    }
+    char *body = malloc(len + 1);
+    if (!body) { httpd_resp_send_500(req); return ESP_OK; }
+
+    int received = 0, ret;
+    while (received < len) {
+        ret = httpd_req_recv(req, body + received, len - received);
+        if (ret <= 0) { free(body); httpd_resp_send_500(req); return ESP_OK; }
+        received += ret;
+    }
+    body[received] = '\0';
+
+    if (!portal_sd_mount()) {
+        free(body);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD card not available");
+        return ESP_OK;
+    }
+    FILE *f = fopen(PORTAL_SD_CONFIG_PATH, "w");
+    if (!f) {
+        free(body);
+        portal_sd_unmount();
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot write to SD card");
+        return ESP_OK;
+    }
+    size_t written = fwrite(body, 1, received, f);
+    fclose(f);
+    free(body);
+    portal_sd_unmount();
+
+    if ((int)written != received) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write incomplete");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "config uploaded (%d bytes) — rebooting", received);
+    ui_wifi_setup_set_ap_status("Config saved — rebooting...");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    vTaskDelay(pdMS_TO_TICKS(600));
+    esp_restart();
+    return ESP_OK;
+}
+
+// ─── GET /list-configs ────────────────────────────────────────────────────────
+
+static esp_err_t get_list_configs_handler(httpd_req_t *req)
+{
+    if (!portal_sd_mount()) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "[]");
+        return ESP_OK;
+    }
+
+    DIR *dir = opendir("/sdcard");
+    if (!dir) {
+        portal_sd_unmount();
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "[]");
+        return ESP_OK;
+    }
+
+    // Heap-allocate response buffer — stack is too precious (only ~17 KB internal SRAM free)
+    char *buf = malloc(2048);
+    if (!buf) {
+        closedir(dir);
+        portal_sd_unmount();
+        httpd_resp_send_500(req);
+        return ESP_OK;
+    }
+    int pos = 0;
+    buf[pos++] = '[';
+
+    struct dirent *entry;
+    bool first = true;
+    while ((entry = readdir(dir)) != NULL) {
+        // FAT VFS always returns DT_UNKNOWN — skip type check, filter by .json extension only
+        const char *name = entry->d_name;
+        size_t nlen = strlen(name);
+        if (nlen < 5 || strcmp(name + nlen - 5, ".json") != 0) continue;
+        if (pos > 2048 - 128) break;  // safety cap
+
+        bool active = (strcmp(name, "sapdm_config.json") == 0);
+        if (!first) buf[pos++] = ',';
+        first = false;
+        pos += snprintf(buf + pos, 2048 - pos,
+                        "{\"name\":\"%s\",\"active\":%s}", name, active ? "true" : "false");
+    }
+    closedir(dir);
+    portal_sd_unmount();
+
+    buf[pos++] = ']';
+    buf[pos]   = '\0';
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, buf);
+    ESP_LOGI(TAG, "GET /list-configs: %d bytes", pos);
+    free(buf);
+    return ESP_OK;
+}
+
+// ─── POST /set-config ─────────────────────────────────────────────────────────
+
+static esp_err_t post_set_config_handler(httpd_req_t *req)
+{
+    char body[128] = {0};
+    int got = httpd_req_recv(req, body, sizeof(body) - 1);
+    if (got <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body"); return ESP_OK; }
+    body[got] = '\0';
+
+    // Parse {"file":"name.json"} — simple strstr approach, no cJSON to keep it lightweight
+    const char *key = strstr(body, "\"file\"");
+    if (!key) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file field"); return ESP_OK; }
+    const char *q1 = strchr(key + 6, '"');
+    if (!q1) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad format"); return ESP_OK; }
+    q1++;
+    const char *q2 = strchr(q1, '"');
+    if (!q2 || q2 - q1 >= 64) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad filename"); return ESP_OK; }
+
+    char filename[64];
+    int flen = (int)(q2 - q1);
+    memcpy(filename, q1, flen);
+    filename[flen] = '\0';
+
+    // Validate: must end in .json, no slashes, no ..
+    if (flen < 5 || strcmp(filename + flen - 5, ".json") != 0 ||
+        strchr(filename, '/') || strstr(filename, "..")) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
+        return ESP_OK;
+    }
+
+    if (!portal_sd_mount()) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD not available");
+        return ESP_OK;
+    }
+
+    // Copy source file to sapdm_config.json
+    char src_path[96];
+    snprintf(src_path, sizeof(src_path), "/sdcard/%s", filename);
+
+    if (strcmp(filename, "sapdm_config.json") != 0) {
+        FILE *src = fopen(src_path, "r");
+        if (!src) {
+            portal_sd_unmount();
+            httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+            return ESP_OK;
+        }
+        FILE *dst = fopen("/sdcard/sapdm_config.json", "w");
+        if (!dst) {
+            fclose(src);
+            portal_sd_unmount();
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write error");
+            return ESP_OK;
+        }
+        char *copybuf = malloc(512);
+        if (!copybuf) {
+            fclose(src); fclose(dst);
+            portal_sd_unmount();
+            httpd_resp_send_500(req);
+            return ESP_OK;
+        }
+        size_t n;
+        while ((n = fread(copybuf, 1, 512, src)) > 0)
+            fwrite(copybuf, 1, n, dst);
+        free(copybuf);
+        fclose(src);
+        fclose(dst);
+    }
+
+    portal_sd_unmount();
+    ESP_LOGI(TAG, "set-config: copied %s -> sapdm_config.json", filename);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
 // ─── Stop timer callback ──────────────────────────────────────────────────────
 
 static void stop_timer_cb(TimerHandle_t t)
@@ -315,23 +661,30 @@ void wifi_portal_start(void)
     if (s_server) return;
 
     httpd_config_t cfg   = HTTPD_DEFAULT_CONFIG();
-    cfg.stack_size       = 8192;
-    cfg.uri_match_fn     = httpd_uri_match_wildcard;
-    cfg.lru_purge_enable = true;
+    cfg.stack_size        = 12288;  // 12 KB — file ops need headroom beyond default 8 KB
+    cfg.max_uri_handlers  = 8;
+    cfg.uri_match_fn      = httpd_uri_match_wildcard;
+    cfg.lru_purge_enable  = true;
 
     if (httpd_start(&s_server, &cfg) != ESP_OK) {
         ESP_LOGE(TAG, "httpd_start failed");
         return;
     }
 
-    static const httpd_uri_t root   = { .uri = "/",        .method = HTTP_GET,  .handler = get_root_handler };
-    static const httpd_uri_t rescan = { .uri = "/rescan",  .method = HTTP_GET,  .handler = get_rescan_handler };
-    static const httpd_uri_t conn   = { .uri = "/connect", .method = HTTP_POST, .handler = post_connect_handler };
-    static const httpd_uri_t redir  = { .uri = "/*",       .method = HTTP_GET,  .handler = redirect_handler };
+    static const httpd_uri_t root      = { .uri = "/",              .method = HTTP_GET,  .handler = get_root_handler };
+    static const httpd_uri_t rescan    = { .uri = "/rescan",        .method = HTTP_GET,  .handler = get_rescan_handler };
+    static const httpd_uri_t conn      = { .uri = "/connect",       .method = HTTP_POST, .handler = post_connect_handler };
+    static const httpd_uri_t upload    = { .uri = "/upload-config", .method = HTTP_POST, .handler = post_upload_config_handler };
+    static const httpd_uri_t list_cfg  = { .uri = "/list-configs",  .method = HTTP_GET,  .handler = get_list_configs_handler };
+    static const httpd_uri_t set_cfg   = { .uri = "/set-config",    .method = HTTP_POST, .handler = post_set_config_handler };
+    static const httpd_uri_t redir     = { .uri = "/*",             .method = HTTP_GET,  .handler = redirect_handler };
 
     httpd_register_uri_handler(s_server, &root);
     httpd_register_uri_handler(s_server, &rescan);
     httpd_register_uri_handler(s_server, &conn);
+    httpd_register_uri_handler(s_server, &upload);
+    httpd_register_uri_handler(s_server, &list_cfg);
+    httpd_register_uri_handler(s_server, &set_cfg);
     httpd_register_uri_handler(s_server, &redir);
 
     s_stop_timer = xTimerCreate("portal_stop", pdMS_TO_TICKS(1500),

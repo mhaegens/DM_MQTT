@@ -43,6 +43,7 @@ static void sim_metric(Metric *m) {
 }
 
 static int s_pulse_tick[MAX_MACHINES];
+static bool s_last_running[MAX_MACHINES];
 
 static void sim_tick(void) {
     for (int i = 0; i < g_machine_count; i++) {
@@ -50,7 +51,7 @@ static void sim_tick(void) {
         if (!mc->running) continue;
         for (int k = 0; k < mc->metric_count; k++)
             sim_metric(&mc->metrics[k]);
-        if (++s_pulse_tick[i] >= 5) {
+        if (mc->auto_pulse && ++s_pulse_tick[i] >= 5) {
             s_pulse_tick[i] = 0;
             mc->pulses++;
             mqtt_pub_machine_pulse(mc->id, mc->pulses);
@@ -59,7 +60,7 @@ static void sim_tick(void) {
     for (int i = 0; i < g_tank_count; i++) {
         Tank *t = &g_tanks[i];
         for (int k = 0; k < t->metric_count; k++) {
-            if (k == 0 && g_tank_drag_active[i]) continue;  // don't overwrite manual drag
+            if (k == 0) continue;  // level only changes via drag or fill/drain action
             sim_metric(&t->metrics[k]);
         }
     }
@@ -68,7 +69,13 @@ static void sim_tick(void) {
 static void publish_all(void) {
     for (int i = 0; i < g_machine_count; i++) {
         Machine *mc = &g_machines[i];
-        mqtt_pub_machine_status(mc->id, mc->running);
+        // status: only publish when state changed
+        if (mc->running != s_last_running[i]) {
+            mqtt_pub_machine_status(mc->id, mc->running);
+            s_last_running[i] = mc->running;
+        }
+        // metrics: skip stopped machines — values are stale/flat
+        if (!mc->running) continue;
         for (int k = 0; k < mc->metric_count; k++)
             mqtt_pub_machine_metric(mc->id, mc->metrics[k].key, mc->metrics[k].value);
     }
@@ -81,10 +88,13 @@ static void publish_all(void) {
 }
 
 static void sim_task_fn(void *arg) {
-    memset(s_pulse_tick, 0, sizeof(s_pulse_tick));
+    memset(s_pulse_tick,   0, sizeof(s_pulse_tick));
+    memset(s_last_running, 0, sizeof(s_last_running));
+    // Force a status publish on first cycle by marking all as !running initially
+    // (s_last_running is already false; initial running state differs for running machines)
     ESP_LOGI(TAG, "started — %d machines, %d tanks", g_machine_count, g_tank_count);
     for (int i = 0; i < g_machine_count; i++)
-        ESP_LOGI(TAG, "  machine[%d] id=%s", i, g_machines[i].id);
+        ESP_LOGI(TAG, "  machine[%d] id=%s auto_pulse=%d", i, g_machines[i].id, g_machines[i].auto_pulse);
     for (int i = 0; i < g_tank_count; i++)
         ESP_LOGI(TAG, "  tank[%d] id=%s", i, g_tanks[i].id);
     while (1) {
@@ -92,7 +102,7 @@ static void sim_task_fn(void *arg) {
         sim_tick();
         DATA_UNLOCK();
         if (mqtt_is_connected()) publish_all();
-        vTaskDelay(pdMS_TO_TICKS(1500));
+        vTaskDelay(pdMS_TO_TICKS(3000));
     }
 }
 

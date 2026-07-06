@@ -99,7 +99,7 @@ void app_main(void) {
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),
-        .buffer_size   = BSP_LCD_DRAW_BUFF_SIZE,
+        .buffer_size   = BSP_LCD_H_RES * 50,   // 72 KB DMA — reclaims 72 KB vs 100-row; card hiding reduces render passes
         .double_buffer = BSP_LCD_DRAW_BUFF_DOUBLE,
         .flags = {
             .buff_dma    = true,
@@ -108,7 +108,7 @@ void app_main(void) {
         }
     };
     cfg.lvgl_port_cfg.task_affinity = 1;   // pin LVGL render task to CPU 1, free CPU 0 for IDLE
-    cfg.lvgl_port_cfg.timer_period_ms = 20; // ~50fps cap, reduce CPU pressure
+    cfg.lvgl_port_cfg.timer_period_ms = 33;  // 30fps — gives full render pass time to complete
     cfg.lvgl_port_cfg.task_stack = 20480;  // 20KB: deep LVGL object hierarchy in ui_machines_create needs > 7KB default
     bsp_display_start_with_config(&cfg);
     bsp_display_backlight_on();
