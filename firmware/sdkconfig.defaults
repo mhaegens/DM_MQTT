@@ -4,6 +4,10 @@ CONFIG_IDF_TARGET="esp32p4"
 # software renderer (the hottest code on the device) runs unoptimised.
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
+# CPU — 400 MHz (IDF defaults the P4 to 360). The LVGL software rasteriser is
+# CPU-bound during scrolls; this is a free ~11% on every render path.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_400=y
+
 # PSRAM — heap only (XIP removed: it triggers linker non-contiguous-regions issue)
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM=y
@@ -32,6 +36,13 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
 CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
 
+# FATFS — long filename support. The ESP-IDF default is DOS 8.3 names only, so
+# every fopen() of "sapdm_config.json" (12-char basename) on the SD card failed
+# with FR_INVALID_NAME: reads fell back to the embedded default silently, and
+# the portal's config upload reported "Cannot write to SD card".
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+
 # LVGL (from working reference 10_lvgl_demo_v9)
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
@@ -39,6 +50,16 @@ CONFIG_LV_USE_CLIB_SPRINTF=y
 CONFIG_LV_DEF_REFR_PERIOD=15
 CONFIG_LV_OS_FREERTOS=y
 CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+
+# Touch sampling — LVGL's default indev read period is 30 ms, so a scroll
+# gesture only produces new positions at 33 Hz even when frames render at 60.
+# 10 ms sampling makes the scroll position track the finger.
+CONFIG_LV_INDEV_DEF_READ_PERIOD=10
+
+# Software shadow cache — the NFC badge cards (shadow 20 + radius 16) and the
+# detail-view cards re-blur their box shadows on every repaint without this.
+# 40 covers the largest shadow_width+radius in the UI; cache is a few KB.
+CONFIG_LV_DRAW_SW_SHADOW_CACHE_SIZE=40
 
 # Montserrat fallback fonts (built into LVGL)
 CONFIG_LV_FONT_MONTSERRAT_16=y

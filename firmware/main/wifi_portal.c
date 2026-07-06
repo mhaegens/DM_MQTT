@@ -3,12 +3,14 @@
 #include "wifi_manager.h"
 #include "ui/ui_wifi_setup.h"
 #include "config.h"
+#include "config_loader.h"
 #include "esp_http_server.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_vfs_fat.h"
+#include "esp_spiffs.h"
 #include "driver/sdmmc_host.h"
 #include "sdmmc_cmd.h"
 #include "freertos/FreeRTOS.h"
@@ -18,6 +20,7 @@
 #include <dirent.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 
 static const char *TAG = "wifi_portal";
@@ -26,12 +29,31 @@ static httpd_handle_t s_server          = NULL;
 static TimerHandle_t  s_stop_timer      = NULL;
 static bool           s_portal_connecting = false;
 
-// ─── SD helpers ───────────────────────────────────────────────────────────────
+// ─── Config store helpers ─────────────────────────────────────────────────────
+// Active config lives in two places: SPIFFS (always present, factory image +
+// uploads) and the SD card (external override — it outranks SPIFFS at boot,
+// see config_loader.c). Every write targets both so whichever store wins at
+// the next boot carries the latest upload.
 
-#define PORTAL_SD_CONFIG_PATH "/sdcard/sapdm_config.json"
-#define PORTAL_JSON_MAX       (32 * 1024)
+#define PORTAL_SD_CONFIG_PATH     "/sdcard/sapdm_config.json"
+#define PORTAL_SPIFFS_CONFIG_PATH "/spiffs/sapdm_config.json"
+#define PORTAL_JSON_MAX           (32 * 1024)
 
 static sdmmc_card_t *s_card = NULL;
+
+// SPIFFS is registered (and left mounted) by config_load() at boot; re-register
+// here only if that failed, e.g. after a flash erase without a SPIFFS image.
+static bool portal_spiffs_ready(void)
+{
+    if (esp_spiffs_mounted("spiffs")) return true;
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = "spiffs",
+        .max_files = 4,
+        .format_if_mount_failed = false,
+    };
+    return esp_vfs_spiffs_register(&conf) == ESP_OK;
+}
 
 static bool portal_sd_mount(void) {
     if (s_card) return true;
@@ -100,24 +122,42 @@ static void dns_task(void *arg)
                          (struct sockaddr *)&src, &slen);
         if (n < 12) continue;   // too short to be a DNS query
 
-        // Build response: copy header, flip QR bit, append answer
+        // Parse QTYPE: skip the QNAME labels that follow the 12-byte header.
+        // Phones probe with AAAA/HTTPS queries too — answering those with an
+        // A record is malformed and makes iOS distrust the resolver, which
+        // breaks the captive-portal auto-launch. Answer A queries with our
+        // address and everything else with an empty NOERROR.
+        int q = 12;
+        while (q < n && buf[q] != 0) {
+            if (buf[q] & 0xC0) { q++; break; }  // compression pointer
+            q += buf[q] + 1;
+        }
+        q++;  // consume the terminating 0 (or the pointer's low byte)
+        uint16_t qtype = 0;
+        if (q + 1 < n) qtype = ((uint16_t)buf[q] << 8) | buf[q + 1];
+
+        // Build response: copy the query, flip QR bit, append answer
         uint8_t resp[512];
         memcpy(resp, buf, n);
         resp[2] |= 0x80;    // QR = response
         resp[3]  = 0x80;    // RA set, no error
         resp[6]  = 0;       // answer count high
-        resp[7]  = 1;       // answer count low = 1
-
         int rlen = n;
-        // Pointer back to the question name (offset 12)
-        resp[rlen++] = 0xC0; resp[rlen++] = 0x0C;
-        resp[rlen++] = 0x00; resp[rlen++] = 0x01;  // type A
-        resp[rlen++] = 0x00; resp[rlen++] = 0x01;  // class IN
-        resp[rlen++] = 0x00; resp[rlen++] = 0x00;
-        resp[rlen++] = 0x00; resp[rlen++] = 0x3C;  // TTL 60s
-        resp[rlen++] = 0x00; resp[rlen++] = 0x04;  // rdlength 4
-        resp[rlen++] = 192; resp[rlen++] = 168;
-        resp[rlen++] = 4;   resp[rlen++] = 1;      // 192.168.4.1
+
+        if (qtype == 1) {   // A query → answer with 192.168.4.1
+            resp[7] = 1;    // answer count low = 1
+            // Pointer back to the question name (offset 12)
+            resp[rlen++] = 0xC0; resp[rlen++] = 0x0C;
+            resp[rlen++] = 0x00; resp[rlen++] = 0x01;  // type A
+            resp[rlen++] = 0x00; resp[rlen++] = 0x01;  // class IN
+            resp[rlen++] = 0x00; resp[rlen++] = 0x00;
+            resp[rlen++] = 0x00; resp[rlen++] = 0x3C;  // TTL 60s
+            resp[rlen++] = 0x00; resp[rlen++] = 0x04;  // rdlength 4
+            resp[rlen++] = 192; resp[rlen++] = 168;
+            resp[rlen++] = 4;   resp[rlen++] = 1;      // 192.168.4.1
+        } else {
+            resp[7] = 0;    // no answers — NOERROR, query fails over to A
+        }
 
         sendto(sock, resp, rlen, 0, (struct sockaddr *)&src, slen);
     }
@@ -223,7 +263,7 @@ static const char HTML_TAIL[] =
     "<a class='rescan' href='/rescan'>Rescan networks</a>"
     "</div>"
     "<div id='cfg' class='pane'>"
-    "<p><strong>Config files on SD:</strong></p>"
+    "<p><strong>Available configs (flash + SD):</strong></p>"
     "<div id='cfgList'><em style='color:#8090A8'>Loading...</em></div>"
     "<div id='cfgStatus' style='margin-top:8px;font-size:13px'></div>"
     "<hr style='border:none;border-top:1px solid #DDE1EA;margin:16px 0'>"
@@ -260,18 +300,18 @@ static const char HTML_TAIL[] =
     "if(xhr.readyState!==4)return;"
     "if(xhr.status===200){"
     "var files=JSON.parse(xhr.responseText);"
-    "if(!files.length){el.innerHTML='<em>No .json files on SD card.</em>';return;}"
+    "if(!files.length){el.innerHTML='<em>No config files found.</em>';return;}"
     "var html='';"
     "for(var i=0;i<files.length;i++){"
     "var f=files[i];"
     "var cls=f.active?'main ok':'main';"
-    "var lbl=f.name+(f.active?' (active)':'');"
+    "var lbl=f.name+(f.src==='sd'?' [SD]':'')+(f.active?' (active)':'');"
     "html+='<button class=\"'+cls+'\" style=\"margin-top:8px\" "
-    "onclick=\"setCfg(\\'' + f.name + '\\')\">'+lbl+'</button>';}"
+    "onclick=\"setCfg(\\''+f.name+'\\',\\''+f.src+'\\')\">'+lbl+'</button>';}"
     "el.innerHTML=html;}"
-    "else{el.innerHTML='<em style=\"color:#BB0000\">SD not available.</em>';}};"
+    "else{el.innerHTML='<em style=\"color:#BB0000\">Storage not available.</em>';}};"
     "xhr.send();}"
-    "function setCfg(name){"
+    "function setCfg(name,src){"
     "var st=document.getElementById('cfgStatus');"
     "st.style.color='#4A6080';st.textContent='Setting...';"
     "var xhr=new XMLHttpRequest();"
@@ -284,7 +324,7 @@ static const char HTML_TAIL[] =
     "st.textContent='Active config set to '+name+'. Reboot to apply.';"
     "loadCfgList();}"
     "else{st.style.color='#BB0000';st.textContent='Failed: '+xhr.responseText;}};"
-    "xhr.send(JSON.stringify({file:name}));}"
+    "xhr.send(JSON.stringify({file:name,src:src}));}"
     "function filePicked(inp){"
     "if(!inp.files.length)return;"
     "_file=inp.files[0];"
@@ -465,6 +505,46 @@ static esp_err_t redirect_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ─── Active-config write (shared by /upload-config and /set-config) ──────────
+
+static bool write_whole_file(const char *path, const char *data, int len)
+{
+    FILE *f = fopen(path, "w");
+    if (!f) return false;
+    bool ok = (fwrite(data, 1, len, f) == (size_t)len);
+    fclose(f);
+    return ok;
+}
+
+// Persist a validated config blob as the active config in both stores.
+// Returns NULL on success, or a static error string for the HTTP response.
+static const char *save_active_config(const char *data, int len)
+{
+    bool spiffs_saved = portal_spiffs_ready() &&
+                        write_whole_file(PORTAL_SPIFFS_CONFIG_PATH, data, len);
+
+    bool sd_present = portal_sd_mount();
+    bool sd_saved   = false;
+    if (sd_present) {
+        sd_saved = write_whole_file(PORTAL_SD_CONFIG_PATH, data, len);
+        portal_sd_unmount();
+    }
+
+    // An inserted SD card outranks SPIFFS at boot — if it exists but could not
+    // be written, the stale card config would mask this upload. Fail loudly.
+    if (sd_present && !sd_saved) {
+        return spiffs_saved
+            ? "Saved to flash, but the inserted SD card failed to write - remove or replace the card, then retry"
+            : "Cannot write config to SD card or flash";
+    }
+    if (!spiffs_saved && !sd_saved)
+        return "Cannot save config (flash and SD card both unavailable)";
+
+    ESP_LOGI(TAG, "active config saved (%d bytes, spiffs=%d sd=%d)",
+             len, spiffs_saved, sd_saved);
+    return NULL;
+}
+
 // ─── POST /upload-config ──────────────────────────────────────────────────────
 
 static esp_err_t post_upload_config_handler(httpd_req_t *req)
@@ -485,25 +565,19 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
     }
     body[received] = '\0';
 
-    if (!portal_sd_mount()) {
+    // Reject broken uploads before persisting anything — a bad file would
+    // otherwise silently boot the device into the embedded default config.
+    if (!config_json_valid(body)) {
         free(body);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD card not available");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+            "Not a valid config (JSON with machines/tanks/people) - nothing saved");
         return ESP_OK;
     }
-    FILE *f = fopen(PORTAL_SD_CONFIG_PATH, "w");
-    if (!f) {
-        free(body);
-        portal_sd_unmount();
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot write to SD card");
-        return ESP_OK;
-    }
-    size_t written = fwrite(body, 1, received, f);
-    fclose(f);
-    free(body);
-    portal_sd_unmount();
 
-    if ((int)written != received) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write incomplete");
+    const char *save_err = save_active_config(body, received);
+    free(body);
+    if (save_err) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
         return ESP_OK;
     }
 
@@ -518,50 +592,58 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
 
 // ─── GET /list-configs ────────────────────────────────────────────────────────
 
+#define LIST_BUF_CAP 2048
+
+// Append every *.json in dirpath to the JSON array in buf as
+// {"name":...,"src":...,"active":...}. Returns the new write position.
+static int list_json_dir(const char *dirpath, const char *src_tag,
+                         char *buf, int pos, bool *first)
+{
+    DIR *dir = opendir(dirpath);
+    if (!dir) return pos;
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // FAT VFS always returns DT_UNKNOWN — filter by .json extension only
+        const char *name = entry->d_name;
+        size_t nlen = strlen(name);
+        if (nlen < 5 || strcasecmp(name + nlen - 5, ".json") != 0) continue;
+        if (pos > LIST_BUF_CAP - 160) break;  // safety cap
+
+        // The active config is the SPIFFS copy unless an SD card overrides it;
+        // both copies are kept in sync by save_active_config, so tagging the
+        // flash one is accurate either way.
+        bool active = (strcmp(src_tag, "flash") == 0 &&
+                       strcmp(name, "sapdm_config.json") == 0);
+        if (!*first) buf[pos++] = ',';
+        *first = false;
+        pos += snprintf(buf + pos, LIST_BUF_CAP - pos,
+                        "{\"name\":\"%s\",\"src\":\"%s\",\"active\":%s}",
+                        name, src_tag, active ? "true" : "false");
+    }
+    closedir(dir);
+    return pos;
+}
+
 static esp_err_t get_list_configs_handler(httpd_req_t *req)
 {
-    if (!portal_sd_mount()) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "[]");
-        return ESP_OK;
-    }
-
-    DIR *dir = opendir("/sdcard");
-    if (!dir) {
-        portal_sd_unmount();
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "[]");
-        return ESP_OK;
-    }
-
     // Heap-allocate response buffer — stack is too precious (only ~17 KB internal SRAM free)
-    char *buf = malloc(2048);
+    char *buf = malloc(LIST_BUF_CAP);
     if (!buf) {
-        closedir(dir);
-        portal_sd_unmount();
         httpd_resp_send_500(req);
         return ESP_OK;
     }
-    int pos = 0;
+    int  pos   = 0;
+    bool first = true;
     buf[pos++] = '[';
 
-    struct dirent *entry;
-    bool first = true;
-    while ((entry = readdir(dir)) != NULL) {
-        // FAT VFS always returns DT_UNKNOWN — skip type check, filter by .json extension only
-        const char *name = entry->d_name;
-        size_t nlen = strlen(name);
-        if (nlen < 5 || strcmp(name + nlen - 5, ".json") != 0) continue;
-        if (pos > 2048 - 128) break;  // safety cap
+    if (portal_spiffs_ready())
+        pos = list_json_dir("/spiffs", "flash", buf, pos, &first);
 
-        bool active = (strcmp(name, "sapdm_config.json") == 0);
-        if (!first) buf[pos++] = ',';
-        first = false;
-        pos += snprintf(buf + pos, 2048 - pos,
-                        "{\"name\":\"%s\",\"active\":%s}", name, active ? "true" : "false");
+    if (portal_sd_mount()) {
+        pos = list_json_dir("/sdcard", "sd", buf, pos, &first);
+        portal_sd_unmount();
     }
-    closedir(dir);
-    portal_sd_unmount();
 
     buf[pos++] = ']';
     buf[pos]   = '\0';
@@ -575,82 +657,93 @@ static esp_err_t get_list_configs_handler(httpd_req_t *req)
 
 // ─── POST /set-config ─────────────────────────────────────────────────────────
 
+// Extract a quoted string value for `key` out of a flat JSON body.
+// Returns length, or -1 when the key is absent / value too long.
+static int json_get_str(const char *body, const char *key, char *out, int cap)
+{
+    char pat[24];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+    const char *k = strstr(body, pat);
+    if (!k) return -1;
+    const char *q1 = strchr(k + strlen(pat), '"');
+    if (!q1) return -1;
+    q1++;
+    const char *q2 = strchr(q1, '"');
+    if (!q2 || q2 - q1 >= cap) return -1;
+    int len = (int)(q2 - q1);
+    memcpy(out, q1, len);
+    out[len] = '\0';
+    return len;
+}
+
 static esp_err_t post_set_config_handler(httpd_req_t *req)
 {
-    char body[128] = {0};
+    char body[160] = {0};
     int got = httpd_req_recv(req, body, sizeof(body) - 1);
     if (got <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body"); return ESP_OK; }
     body[got] = '\0';
 
-    // Parse {"file":"name.json"} — simple strstr approach, no cJSON to keep it lightweight
-    const char *key = strstr(body, "\"file\"");
-    if (!key) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file field"); return ESP_OK; }
-    const char *q1 = strchr(key + 6, '"');
-    if (!q1) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad format"); return ESP_OK; }
-    q1++;
-    const char *q2 = strchr(q1, '"');
-    if (!q2 || q2 - q1 >= 64) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad filename"); return ESP_OK; }
-
-    char filename[64];
-    int flen = (int)(q2 - q1);
-    memcpy(filename, q1, flen);
-    filename[flen] = '\0';
+    // Body: {"file":"name.json","src":"flash"|"sd"} (src defaults to flash)
+    char filename[64], src[8] = "flash";
+    int flen = json_get_str(body, "file", filename, sizeof(filename));
+    if (flen < 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing file field"); return ESP_OK; }
+    json_get_str(body, "src", src, sizeof(src));
+    bool from_sd = (strcmp(src, "sd") == 0);
 
     // Validate: must end in .json, no slashes, no ..
-    if (flen < 5 || strcmp(filename + flen - 5, ".json") != 0 ||
+    if (flen < 5 || strcasecmp(filename + flen - 5, ".json") != 0 ||
         strchr(filename, '/') || strstr(filename, "..")) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
         return ESP_OK;
     }
 
-    if (!portal_sd_mount()) {
+    // Read the source file into RAM (≤32 KB), then persist it as the active
+    // config in both stores via the same path the upload endpoint uses.
+    char src_path[96];
+    snprintf(src_path, sizeof(src_path), "%s/%s", from_sd ? "/sdcard" : "/spiffs", filename);
+
+    if (from_sd && !portal_sd_mount()) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD not available");
         return ESP_OK;
     }
-
-    // Copy source file to sapdm_config.json
-    char src_path[96];
-    snprintf(src_path, sizeof(src_path), "/sdcard/%s", filename);
-
-    if (strcmp(filename, "sapdm_config.json") != 0) {
-        FILE *src = fopen(src_path, "r");
-        if (!src) {
-            portal_sd_unmount();
-            httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
-            return ESP_OK;
-        }
-        FILE *dst = fopen("/sdcard/sapdm_config.json", "w");
-        if (!dst) {
-            fclose(src);
-            portal_sd_unmount();
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write error");
-            return ESP_OK;
-        }
-        char *copybuf = malloc(512);
-        if (!copybuf) {
-            fclose(src); fclose(dst);
-            portal_sd_unmount();
-            httpd_resp_send_500(req);
-            return ESP_OK;
-        }
-        size_t n;
-        bool copy_ok = true;
-        while ((n = fread(copybuf, 1, 512, src)) > 0) {
-            if (fwrite(copybuf, 1, n, dst) != n) { copy_ok = false; break; }
-        }
-        if (ferror(src) || ferror(dst)) copy_ok = false;
-        free(copybuf);
-        fclose(src);
-        fclose(dst);
-        if (!copy_ok) {
-            portal_sd_unmount();
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Copy failed");
-            return ESP_OK;
-        }
+    if (!from_sd && !portal_spiffs_ready()) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash storage not available");
+        return ESP_OK;
     }
 
-    portal_sd_unmount();
-    ESP_LOGI(TAG, "set-config: copied %s -> sapdm_config.json", filename);
+    char *data = malloc(PORTAL_JSON_MAX);
+    int   dlen = -1;
+    if (data) {
+        FILE *f = fopen(src_path, "r");
+        if (f) {
+            dlen = (int)fread(data, 1, PORTAL_JSON_MAX - 1, f);
+            fclose(f);
+            if (dlen >= PORTAL_JSON_MAX - 1) dlen = -2;  // too big — refuse truncation
+            else data[dlen] = '\0';
+        }
+    }
+    if (from_sd) portal_sd_unmount();
+
+    if (!data) { httpd_resp_send_500(req); return ESP_OK; }
+    if (dlen == -1) {
+        free(data);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+        return ESP_OK;
+    }
+    if (dlen < 0 || !config_json_valid(data)) {
+        free(data);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File is not a valid config");
+        return ESP_OK;
+    }
+
+    const char *save_err = save_active_config(data, dlen);
+    free(data);
+    if (save_err) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "set-config: %s (%s) -> active config", filename, src);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");
     return ESP_OK;

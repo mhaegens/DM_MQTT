@@ -142,8 +142,10 @@ static void pub(const char *topic, const char *payload) {
     // enqueue, not publish: publish() performs a synchronous TLS/WSS write in the
     // caller's context — called from LVGL touch callbacks it stalled the render
     // task on network backpressure. enqueue hands the send to the MQTT task.
+    // Atomic add: pub() runs on both the sim task (core 0) and LVGL callbacks
+    // (core 1), and a plain ++ across cores drops counts.
     if (esp_mqtt_client_enqueue(s_client, topic, payload, 0, 0, 0, true) >= 0)
-        g_mqtt_msg_count++;
+        __atomic_fetch_add(&g_mqtt_msg_count, 1, __ATOMIC_RELAXED);
 }
 
 // Minimal JSON string escaping: backslash, double quote; control chars dropped.
