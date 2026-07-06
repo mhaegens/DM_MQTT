@@ -191,9 +191,25 @@ static int               s_cached_ap_count = 0;
 
 static void portal_scan_done_cb(const wifi_scan_entry_t *results, int count)
 {
+    // Keep stale results rather than none: an empty result is almost always a
+    // scan that raced AP bring-up or channel switching, not an empty ether.
+    if (count == 0 && s_cached_ap_count > 0) {
+        ESP_LOGW(TAG, "scan returned 0 APs — keeping %d cached", s_cached_ap_count);
+        return;
+    }
     s_cached_ap_count = count < PORTAL_SCAN_MAX ? count : PORTAL_SCAN_MAX;
     for (int i = 0; i < s_cached_ap_count; i++) s_cached_aps[i] = results[i];
     ESP_LOGI(TAG, "scan cache updated: %d APs", s_cached_ap_count);
+}
+
+// Kick a scan; wifi_manager serializes concurrent requests. Called from portal
+// start, the first phone association, every load of the "Scanning..." page and
+// /rescan — so one failed or empty scan can never strand the portal on the
+// scanning screen (the page auto-refreshes and each load retries).
+static void portal_kick_scan(void)
+{
+    if (wifi_manager_scan(portal_scan_done_cb))
+        ESP_LOGI(TAG, "portal scan started");
 }
 
 // ─── Embedded HTML ────────────────────────────────────────────────────────────
@@ -362,6 +378,7 @@ static const char HTML_TAIL[] =
 static const char HTML_SCANNING[] =
     "<!DOCTYPE html><html><head>"
     "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<meta http-equiv='refresh' content='4'>"
     "<title>SAP DM WiFi Setup</title>"
     "<style>body{font-family:sans-serif;background:#F2F4FA;color:#1D2D3E;"
     "padding:40px;text-align:center}"
@@ -369,7 +386,8 @@ static const char HTML_SCANNING[] =
     "a{color:#0070F2}</style></head><body>"
     "<h1>Scanning...</h1>"
     "<p>Network scan is in progress.<br>"
-    "<a href='/'>Refresh this page</a> in a moment.</p>"
+    "This page refreshes automatically.<br>"
+    "<a href='/'>Refresh now</a></p>"
     "</body></html>";
 
 static const char HTML_OK[] =
@@ -428,6 +446,9 @@ static void url_decode(char *dst, const char *src, int max)
 static esp_err_t get_root_handler(httpd_req_t *req)
 {
     if (s_cached_ap_count == 0) {
+        // Self-healing: if the initial scan failed or returned nothing, every
+        // load of this auto-refreshing page retries until results land.
+        portal_kick_scan();
         httpd_resp_set_type(req, "text/html");
         httpd_resp_sendstr(req, HTML_SCANNING);
         return ESP_OK;
@@ -454,7 +475,7 @@ static esp_err_t get_root_handler(httpd_req_t *req)
 static esp_err_t get_rescan_handler(httpd_req_t *req)
 {
     s_cached_ap_count = 0;
-    wifi_manager_scan(portal_scan_done_cb);
+    portal_kick_scan();
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/");
     httpd_resp_sendstr(req, "");
@@ -765,6 +786,10 @@ static void portal_event_handler(void *arg, esp_event_base_t base,
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STACONNECTED) {
         ui_wifi_setup_set_ap_status("Phone connected");
+        // The AP is demonstrably up now. The scan kicked at portal start races
+        // AP bring-up on the C6 and often comes back empty — this is the
+        // reliable moment to retry it, before the phone loads the page.
+        if (s_cached_ap_count == 0) portal_kick_scan();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && s_portal_connecting) {
         wifi_event_sta_disconnected_t *ev = data;
         if (ev->reason != WIFI_REASON_ASSOC_LEAVE) {
@@ -821,7 +846,7 @@ void wifi_portal_start(void)
 
     // Pre-populate scan cache immediately so the portal form is ready when phone connects
     s_cached_ap_count = 0;
-    wifi_manager_scan(portal_scan_done_cb);
+    portal_kick_scan();
 
     dns_start();
 

@@ -177,7 +177,13 @@ static void scan_btn_cb(lv_event_t *e)
     (void)e;
     if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Scanning...");
     if (s_scan_btn) lv_obj_add_state(s_scan_btn, LV_STATE_DISABLED);
-    wifi_manager_scan(scan_done_cb);
+    if (!wifi_manager_scan(scan_done_cb)) {
+        // A scan is already running (e.g. the portal's) — its results go to
+        // that caller, so re-enable the button instead of waiting forever.
+        if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl,
+                                                 "Scan busy - try again in a moment");
+        if (s_scan_btn) lv_obj_clear_state(s_scan_btn, LV_STATE_DISABLED);
+    }
 }
 
 static void forget_btn_cb(lv_event_t *e)

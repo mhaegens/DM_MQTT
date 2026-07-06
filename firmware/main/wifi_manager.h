@@ -16,7 +16,9 @@ typedef void (*wifi_connect_cb_t)(bool success, const char *ip);
 void wifi_manager_init(void);
 void wifi_manager_set_on_connected(void (*cb)(void));  // fires once on first IP acquired
 void wifi_manager_set_on_ip(void (*cb)(void));          // fires on every IP acquisition
-void wifi_manager_scan(wifi_scan_cb_t cb);
+// Start an async scan; cb is delivered on the LVGL task. Returns false when a
+// scan is already running (no callback will fire for this request).
+bool wifi_manager_scan(wifi_scan_cb_t cb);
 void wifi_manager_connect(const char *ssid, const char *password,
                           wifi_connect_cb_t cb);
 void wifi_manager_forget(void);

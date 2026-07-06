@@ -138,7 +138,7 @@ For root causes and fixes: [../docs/troubleshooting.md](../docs/troubleshooting.
 | # | Area | Description |
 |---|------|-------------|
 | 1 | Display | Occasional cyan frame flash on boot. Mitigated by pre-setting root screen background before UI init. |
-| 2 | WiFi | iPhone captive portal auto-launch: the DNS responder now answers only A queries (AAAA/HTTPS get empty NOERROR), which was the suspected trigger for iOS distrust; needs a fresh on-device retest. Fallback: navigate to `http://192.168.4.1`. |
+| 2 | WiFi | Portal scan raced soft-AP bring-up: the single scan fired at portal start could return empty and nothing retried it, stranding the portal on "Scanning...". Now the scan retries in-task, re-kicks when the phone associates, and the auto-refreshing scanning page retries on every load. DNS auto-launch (A-queries-only) confirmed working on device. |
 | 3 | Display | Direct-mode rendering + ghost scrolling need on-device validation: verify no tearing/cyan regressions and pixel-identical cards at scroll end. Reverts: `UI_SCROLL_GHOSTS 0` in `main/config.h`; for direct mode restore the full-refresh patch + `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` and set `timer_period_ms` back to 33. |
 
 ---
