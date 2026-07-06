@@ -115,8 +115,9 @@ static void populate_from_json(const cJSON *root) {
         if ((v = cJSON_GetObjectItem(item, "id"))      && cJSON_IsString(v)) strncpy(m->id,   v->valuestring, sizeof(m->id)   - 1);
         if ((v = cJSON_GetObjectItem(item, "name"))    && cJSON_IsString(v)) strncpy(m->name, v->valuestring, sizeof(m->name) - 1);
         if ((v = cJSON_GetObjectItem(item, "type"))    && cJSON_IsString(v)) strncpy(m->type, v->valuestring, sizeof(m->type) - 1);
-        if ((v = cJSON_GetObjectItem(item, "running")) && cJSON_IsBool(v))   m->running = cJSON_IsTrue(v);
-        if ((v = cJSON_GetObjectItem(item, "pulses"))  && cJSON_IsNumber(v)) m->pulses  = v->valueint;
+        if ((v = cJSON_GetObjectItem(item, "running"))    && cJSON_IsBool(v))   m->running    = cJSON_IsTrue(v);
+        if ((v = cJSON_GetObjectItem(item, "auto_pulse")) && cJSON_IsBool(v))   m->auto_pulse = cJSON_IsTrue(v);
+        if ((v = cJSON_GetObjectItem(item, "pulses"))     && cJSON_IsNumber(v)) m->pulses     = v->valueint;
         const cJSON *metrics = cJSON_GetObjectItem(item, "metrics");
         m->metric_count = 0;
         const cJSON *met;

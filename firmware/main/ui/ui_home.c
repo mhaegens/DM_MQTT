@@ -271,8 +271,8 @@ void ui_home_create(lv_obj_t *parent)
                                        "ACTIVE",
                                        NULL, NULL);
 
-    // Periodic timer: refresh all live data every 1500ms
-    lv_timer_create(home_timer_cb, 1500, NULL);
+    // Periodic timer: refresh all live data every 3000ms
+    lv_timer_create(home_timer_cb, 3000, NULL);
 
     ui_home_refresh();
 }

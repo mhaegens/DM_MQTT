@@ -68,6 +68,7 @@ typedef struct {
     char  name[32];
     char  type[48];
     bool  running;
+    bool  auto_pulse;
     int   pulses;
     Metric metrics[MAX_MACH_METRICS];
     int    metric_count;

@@ -552,9 +552,32 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_add_event_cb(pulse_btn, pulse_cb, LV_EVENT_SHORT_CLICKED, mctx2);
 }
 
+// ─── Viewport-based card hiding — hides cards outside the scroll viewport so ──
+// LVGL skips them entirely during render (layout + draw cost = 0 when hidden)
+static void apply_card_visibility(void) {
+    if (!s_screen) return;
+    lv_area_t sa;
+    lv_obj_get_coords(s_screen, &sa);
+    for (int i = 0; i < g_machine_count; i++) {
+        if (!s_cards[i]) continue;
+        lv_area_t ca;
+        lv_obj_get_coords(s_cards[i], &ca);
+        bool in_view = !(ca.y2 < sa.y1 || ca.y1 > sa.y2);
+        if (in_view) lv_obj_clear_flag(s_cards[i], LV_OBJ_FLAG_HIDDEN);
+        else          lv_obj_add_flag(s_cards[i],   LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void machines_scroll_cb(lv_event_t *e) {
+    (void)e;
+    apply_card_visibility();
+}
+
 // ─── Periodic refresh timer callback ─────────────────────────────────────────
 static void machines_refresh_cb(lv_timer_t *t) {
     (void)t;
+    if (g_current_view != VIEW_MACHINES) return;
+    if (s_screen && lv_obj_is_scrolling(s_screen)) return;
     ui_machines_refresh();
 }
 
@@ -594,7 +617,13 @@ void ui_machines_create(lv_obj_t *parent) {
         build_machine_card(grid, i);
     }
 
-    lv_timer_create(machines_refresh_cb, 1500, NULL);
+    // Hook scroll events to show/hide off-screen cards (zero render cost when hidden)
+    lv_obj_add_event_cb(s_screen, machines_scroll_cb, LV_EVENT_SCROLL, NULL);
+
+    lv_timer_create(machines_refresh_cb, 3000, NULL);
+
+    // Set initial card visibility (first 4 cards visible, rest hidden)
+    apply_card_visibility();
 }
 
 // ─── Public: refresh all arc / tile values from g_machines ───────────────────
@@ -607,6 +636,14 @@ void ui_machines_refresh(void) {
     for (int i = 0; i < g_machine_count; i++) {
         Machine *mc = &g_machines[i];
         if (!s_dots[i] || !s_toggle_btns[i]) continue;
+        // Skip cards outside the visible viewport — lv_obj_is_visible() does not
+        // account for scroll position, so we compare absolute coords directly
+        if (s_cards[i] && s_screen) {
+            lv_area_t ca, sa;
+            lv_obj_get_coords(s_cards[i], &ca);
+            lv_obj_get_coords(s_screen,   &sa);
+            if (ca.y2 < sa.y1 || ca.y1 > sa.y2) continue;
+        }
 
         // Dot color
         lv_obj_set_style_bg_color(s_dots[i], mc->running ? COL_OK : COL_ERR, 0);
