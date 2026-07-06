@@ -1,0 +1,80 @@
+{
+  "plant_name": "EV Battery LE03",
+  "machines": [
+    {
+      "id": "mix01", "name": "SLURRY-01", "type": "Cathode Mixer",
+      "running": true, "auto_pulse": true, "pulses": 96,
+      "metrics": [
+        {"key":"viscosity","label":"Viscosity","unit":"cP","viz":"spark","input":"step","color":"0x0070F2","init_val":4200,"min_val":1000,"max_val":10000,"step":50,"sim":{"profile":"random_walk","rand_min":3800,"rand_max":4800}},
+        {"key":"solidsPct","label":"Solids Content","unit":"%","viz":"arc","input":"slider","init_val":62,"min_val":40,"max_val":75,"step":0.5,"thresholds":[{"limit":55,"color":"0xBB0000"},{"limit":65,"color":"0x107E3E"},{"limit":75,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":60,"rand_max":64}},
+        {"key":"batchTemp","label":"Batch Temp","unit":"°C","viz":"thermo","input":"step","init_val":26.4,"min_val":15,"max_val":40,"step":0.2,"sim":{"profile":"sine","amplitude":0.6,"period_s":120,"offset":26.4}}
+      ]
+    },
+    {
+      "id": "coat01", "name": "COATER-01", "type": "Slot-Die Coater",
+      "running": true, "auto_pulse": true, "pulses": 342,
+      "metrics": [
+        {"key":"webSpeed","label":"Web Speed","unit":"m/min","viz":"spark","input":"step","color":"0x0070F2","init_val":45,"min_val":0,"max_val":80,"step":1,"sim":{"profile":"random_walk","rand_min":40,"rand_max":55}},
+        {"key":"coatMass","label":"Loading","unit":"mg/cm²","viz":"bullet","input":"step","color":"0xE76500","init_val":22.4,"min_val":10,"max_val":40,"step":0.1,"sim":{"profile":"random_walk","rand_min":21.5,"rand_max":23.5}},
+        {"key":"dryerTemp","label":"Dryer Temp","unit":"°C","viz":"thermo","input":"step","init_val":128,"min_val":60,"max_val":180,"step":1,"sim":{"profile":"sine","amplitude":2,"period_s":90,"offset":128}}
+      ]
+    },
+    {
+      "id": "calen01", "name": "CAL-01", "type": "Calender",
+      "running": true, "auto_pulse": false, "pulses": 178,
+      "metrics": [
+        {"key":"nipForce","label":"Nip Force","unit":"kN","viz":"arc","input":"step","init_val":1150,"min_val":0,"max_val":2000,"step":10,"thresholds":[{"limit":800,"color":"0xE76500"},{"limit":1400,"color":"0x107E3E"},{"limit":2000,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":1050,"rand_max":1250}},
+        {"key":"thickness","label":"Thickness","unit":"μm","viz":"bullet","input":"step","color":"0x0070F2","init_val":86,"min_val":50,"max_val":150,"step":0.5,"sim":{"profile":"random_walk","rand_min":84,"rand_max":88}},
+        {"key":"rollTemp","label":"Roll Temp","unit":"°C","viz":"thermo","input":"step","init_val":58,"min_val":30,"max_val":100,"step":0.5,"sim":{"profile":"sine","amplitude":1,"period_s":60,"offset":58}}
+      ]
+    },
+    {
+      "id": "asm01", "name": "STACK-01", "type": "Cell Stacker",
+      "running": true, "auto_pulse": true, "pulses": 4118,
+      "metrics": [
+        {"key":"cycleTime","label":"Cycle Time","unit":"s","viz":"spark","input":"step","color":"0x0070F2","init_val":0.82,"min_val":0,"max_val":3,"step":0.01,"sim":{"profile":"random_walk","rand_min":0.75,"rand_max":0.95}},
+        {"key":"alignErr","label":"Align Error","unit":"μm","viz":"arc","input":"slider","init_val":18,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":25,"color":"0x107E3E"},{"limit":60,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":12,"rand_max":28}},
+        {"key":"yield","label":"Yield","unit":"%","viz":"arc","input":"slider","init_val":96.8,"min_val":80,"max_val":100,"step":0.1,"thresholds":[{"limit":92,"color":"0xBB0000"},{"limit":96,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"random_walk","rand_min":95,"rand_max":98}}
+      ]
+    },
+    {
+      "id": "form01", "name": "FORM-01", "type": "Formation Chamber",
+      "running": true, "auto_pulse": false, "pulses": 244,
+      "metrics": [
+        {"key":"cellVolt","label":"Cell Voltage","unit":"V","viz":"spark","input":"step","color":"0xE76500","init_val":3.72,"min_val":2.5,"max_val":4.3,"step":0.01,"sim":{"profile":"ramp"}},
+        {"key":"chargeI","label":"Charge Current","unit":"A","viz":"bullet","input":"step","color":"0x0070F2","init_val":8.4,"min_val":0,"max_val":15,"step":0.1,"sim":{"profile":"sine","amplitude":0.3,"period_s":45,"offset":8.4}},
+        {"key":"soc","label":"SoC","unit":"%","viz":"arc","input":"slider","init_val":41,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":50,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"ramp"}}
+      ]
+    },
+    {
+      "id": "test01", "name": "EOL-01", "type": "End-of-Line Tester",
+      "running": true, "auto_pulse": true, "pulses": 3902,
+      "metrics": [
+        {"key":"irValue","label":"IR","unit":"mΩ","viz":"spark","input":"step","color":"0x0070F2","init_val":0.42,"min_val":0.2,"max_val":1.5,"step":0.01,"sim":{"profile":"random_walk","rand_min":0.38,"rand_max":0.48}},
+        {"key":"passRate","label":"Pass Rate","unit":"%","viz":"arc","input":"slider","init_val":98.2,"min_val":80,"max_val":100,"step":0.1,"thresholds":[{"limit":94,"color":"0xBB0000"},{"limit":97,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"random_walk","rand_min":97,"rand_max":99.5}}
+      ]
+    }
+  ],
+  "tanks": [
+    {
+      "id": "nmp", "name": "NMP Solvent",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":64,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":58,"rand_max":70}},
+        {"key":"temperature","label":"Solvent Temp","unit":"°C","viz":"thermo","input":"step","init_val":22.8,"min_val":10,"max_val":45,"step":0.2,"sim":{"profile":"sine","amplitude":0.4,"period_s":180,"offset":22.8}}
+      ]
+    },
+    {
+      "id": "electrolyte", "name": "Electrolyte",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":78,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":72,"rand_max":84}},
+        {"key":"temperature","label":"Bath Temp","unit":"°C","viz":"thermo","input":"step","init_val":18.4,"min_val":5,"max_val":30,"step":0.2,"sim":{"profile":"sine","amplitude":0.3,"period_s":240,"offset":18.4}}
+      ]
+    }
+  ],
+  "people": [
+    {"id":"EMP-EV01","name":"Nadia Sharma","role":"Line Lead","role_key":"lead","dept":"Cell Assembly","plant":"EV Battery LE03","uid":"EV:01:AA:11","avatar_color":"0x0050BE","certs":["IATF 16949","Lean 6σ","MES"]},
+    {"id":"EMP-EV08","name":"Rafael Costa","role":"Coater Operator","role_key":"operator","dept":"Electrode","plant":"EV Battery LE03","uid":"EV:08:BB:22","avatar_color":"0xE76500","certs":["IATF","EHS Advanced"]},
+    {"id":"EMP-EV14","name":"Mei Nakamura","role":"Process Engineer","role_key":"engineer","dept":"Engineering","plant":"EV Battery LE03","uid":"EV:14:CC:33","avatar_color":"0xB84D00","certs":["6σ BB","DoE","Yield Eng."]},
+    {"id":"EMP-EV22","name":"Aiden Cole","role":"Quality Engineer","role_key":"quality","dept":"Quality","plant":"EV Battery LE03","uid":"EV:22:DD:44","avatar_color":"0xBB0000","certs":["IATF Auditor","APQP","PPAP"]}
+  ]
+}

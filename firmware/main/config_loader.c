@@ -262,6 +262,8 @@ ConfigResult config_load(void) {
 
     // --- Try SD card ---
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // ESP-Hosted C6 owns slot 1 (SDIO Wi-Fi). SD card is on slot 0 per BSP.
+    host.slot = SDMMC_HOST_SLOT_0;
     sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
     slot.width = 4;
     slot.clk   = GPIO_SD_CLK;

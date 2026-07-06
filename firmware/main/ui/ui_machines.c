@@ -570,8 +570,13 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 // LVGL skips them entirely during render (layout + draw cost = 0 when hidden)
 static void apply_card_visibility(void) {
     if (!s_screen) return;
+    // Screen has never been laid out yet (either still LV_OBJ_FLAG_HIDDEN or
+    // pre-first-render): coords resolve to zero-extent and every card fails
+    // the in_view check, permanently flagging the whole grid HIDDEN. Bail.
+    if (lv_obj_has_flag(s_screen, LV_OBJ_FLAG_HIDDEN)) return;
     lv_area_t sa;
     lv_obj_get_coords(s_screen, &sa);
+    if (sa.y2 <= sa.y1) return;  // not laid out yet — leave cards visible
     for (int i = 0; i < g_machine_count; i++) {
         if (!s_cards[i]) continue;
         lv_area_t ca;
@@ -584,6 +589,7 @@ static void apply_card_visibility(void) {
 
 static void machines_scroll_cb(lv_event_t *e) {
     (void)e;
+    if (g_current_view != VIEW_MACHINES) return;
     apply_card_visibility();
 }
 
@@ -635,7 +641,24 @@ void ui_machines_create(lv_obj_t *parent) {
 
     lv_timer_create(machines_refresh_cb, UI_REFRESH_MS, NULL);
 
-    // Set initial card visibility (first 4 cards visible, rest hidden)
+    // Cards start visible; ui_machines_activate() re-runs the viewport cull
+    // once the screen is actually laid out on the display. Running it here,
+    // while the screen is still LV_OBJ_FLAG_HIDDEN, would hide every card
+    // permanently (zero-extent coords → nothing tests in-view).
+    ESP_LOGI(TAG, "machines page: built %d cards", g_machine_count);
+    if (g_machine_count == 0) ESP_LOGW(TAG, "machines page has zero cards — config not loaded?");
+}
+
+// ─── Public: called from ui_main on view enter ───────────────────────────────
+// Force every card back to visible (recover from a stale HIDDEN state from
+// a previous run of apply_card_visibility() before layout), then re-cull
+// against the now-real screen coords.
+void ui_machines_activate(void) {
+    if (!s_screen) return;
+    for (int i = 0; i < g_machine_count; i++) {
+        if (s_cards[i]) lv_obj_clear_flag(s_cards[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_update_layout(s_screen);
     apply_card_visibility();
 }
 
