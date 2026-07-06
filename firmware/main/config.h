@@ -30,6 +30,13 @@
 #define UI_REFRESH_MS      3000   // home / machines live-refresh timers
 #define TANK_REFRESH_MS     500   // tanks screen refresh timer (active tab only)
 
+// Ghost-scroll on the machines grid: each card is pre-rendered into an opaque
+// RGB565 image in PSRAM, and during a scroll gesture the live widget trees are
+// swapped for those images — a scroll frame is then a handful of straight
+// memcpy blits instead of a full software repaint of charts/arcs/rounded
+// rects. Set to 0 to fall back to scrolling the live widgets.
+#define UI_SCROLL_GHOSTS   1
+
 // Plant / site label shown in the shell bar subtitle
 #define PLANT_NAME        "Plant BE01"
 

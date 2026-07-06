@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 
 typedef enum {
     CONFIG_OK,
@@ -11,3 +12,8 @@ typedef enum {
 
 ConfigResult    config_load(void);
 const char     *config_result_str(ConfigResult r);
+
+// Sanity-check a JSON config string (parseable + has at least one of the
+// machines/tanks/people arrays) without touching the entity arrays. Used by
+// the captive portal to reject broken uploads before they are persisted.
+bool config_json_valid(const char *json_str);

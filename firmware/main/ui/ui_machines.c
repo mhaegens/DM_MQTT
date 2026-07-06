@@ -65,6 +65,13 @@ static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_MACH_METRICS] = {{NULL}};
 static lv_obj_t *s_metric_arcs[MAX_MACHINES][MAX_MACH_METRICS]     = {{NULL}};
 static bool      s_last_render_running[MAX_MACHINES];  // last state drawn, skip redundant restyles
 
+// Last-rendered metric value/color — refresh skips a metric entirely when
+// nothing changed, so an idle tick no longer restyles and invalidates every
+// visible label and arc.
+static float     s_prev_val[MAX_MACHINES][MAX_MACH_METRICS];
+static uint32_t  s_prev_col[MAX_MACHINES][MAX_MACH_METRICS];
+static bool      s_prev_valid[MAX_MACHINES][MAX_MACH_METRICS];
+
 // ─── Event callback context types ─────────────────────────────────────────────
 typedef struct { int machine; int metric; } MetricCtx;
 typedef struct { int machine; }             MachCtx;
@@ -72,11 +79,119 @@ typedef struct { int machine; }             MachCtx;
 // ─── Forward declarations ─────────────────────────────────────────────────────
 static void build_machine_card(lv_obj_t *grid, int idx);
 static void update_card_border(int idx);
+static void apply_card_visibility(void);
+
+// ─── Ghost scroll ─────────────────────────────────────────────────────────────
+// A full-viewport scroll frame dirties everything under the finger, so direct
+// mode degenerates to a complete software repaint (charts, arcs, dozens of
+// rounded rects) per frame — the source of the machines-tab scroll jank.
+// Instead, every card is pre-rendered once into an opaque RGB565 image in
+// PSRAM; on LV_EVENT_SCROLL_BEGIN the live cards swap for those images (a
+// straight row-copy blit each), and on LV_EVENT_SCROLL_END they swap back.
+// Snapshots are retaken off-gesture whenever a card's pixels change, so the
+// swap is never visible. Kill switch: UI_SCROLL_GHOSTS in config.h.
+#if UI_SCROLL_GHOSTS
+static lv_obj_t      *s_ghost_imgs[MAX_MACHINES] = {NULL};
+static lv_draw_buf_t *s_ghost_bufs[MAX_MACHINES] = {NULL};
+static bool           s_ghost_mode   = false;
+static bool           s_ghosts_active = false;  // grid taller than viewport?
+
+// Composite an ARGB8888 snapshot over the page background into RGB565. The
+// pixels outside the card's rounded corners must show COL_BG, and an opaque
+// RGB565 image blits with no per-pixel blending during scroll.
+static lv_draw_buf_t *ghost_composite(const lv_draw_buf_t *src) {
+    const uint32_t w = src->header.w, h = src->header.h;
+    lv_draw_buf_t *dst = lv_draw_buf_create(w, h, LV_COLOR_FORMAT_RGB565, 0);
+    if (!dst) return NULL;
+    const uint32_t bg_r = 0xF2, bg_g = 0xF4, bg_b = 0xFA;   // COL_BG 0xF2F4FA
+    for (uint32_t y = 0; y < h; y++) {
+        const uint8_t *sp = src->data + y * src->header.stride;
+        uint16_t      *dp = (uint16_t *)(dst->data + y * dst->header.stride);
+        for (uint32_t x = 0; x < w; x++, sp += 4) {
+            uint32_t b = sp[0], g = sp[1], r = sp[2], a = sp[3];  // lv_color32_t
+            if (a != 255) {
+                r = (r * a + bg_r * (255 - a) + 127) / 255;
+                g = (g * a + bg_g * (255 - a) + 127) / 255;
+                b = (b * a + bg_b * (255 - a) + 127) / 255;
+            }
+            dp[x] = (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+        }
+    }
+    return dst;
+}
+
+// Re-render card idx into its ghost image. Runs on the LVGL task, never
+// mid-gesture (callers are refresh/tap paths, all off-scroll).
+static void ghost_retake(int idx) {
+    if (!s_ghosts_active || s_ghost_mode) return;
+    if (!s_cards[idx] || !s_ghost_imgs[idx]) return;
+    if (lv_obj_get_width(s_cards[idx]) <= 0) return;   // layout not resolved yet
+
+    // Snapshot renders regardless of viewport position, but not while HIDDEN
+    // (scroll culling) — lift the flag for the render, restore it after.
+    bool was_hidden = lv_obj_has_flag(s_cards[idx], LV_OBJ_FLAG_HIDDEN);
+    if (was_hidden) lv_obj_clear_flag(s_cards[idx], LV_OBJ_FLAG_HIDDEN);
+    lv_draw_buf_t *argb = lv_snapshot_take(s_cards[idx], LV_COLOR_FORMAT_ARGB8888);
+    if (was_hidden) lv_obj_add_flag(s_cards[idx], LV_OBJ_FLAG_HIDDEN);
+    if (!argb) return;
+
+    lv_draw_buf_t *rgb = ghost_composite(argb);
+    lv_draw_buf_destroy(argb);
+    if (!rgb) return;
+
+    // Snapshot includes any ext-draw margin — recenter the image on the card
+    // slot so a size mismatch cannot shift the ghost.
+    lv_obj_set_pos(s_ghost_imgs[idx],
+                   (idx % 2) * (CARD_W + GRID_GAP) - ((int)rgb->header.w - CARD_W) / 2,
+                   (idx / 2) * (CARD_H + GRID_GAP) - ((int)rgb->header.h - CARD_H) / 2);
+    lv_image_set_src(s_ghost_imgs[idx], rgb);
+
+    lv_draw_buf_t *old = s_ghost_bufs[idx];
+    s_ghost_bufs[idx] = rgb;
+    if (old) {
+        lv_image_cache_drop(old);   // the decoder may hold the old pointer
+        lv_draw_buf_destroy(old);
+    }
+}
+
+static void ghost_mode_enter(void) {
+    if (!s_ghosts_active || s_ghost_mode) return;
+    // Backfill any snapshot that is still missing (first scroll after an
+    // allocation failure) — normally all exist and this is free.
+    for (int i = 0; i < g_machine_count; i++)
+        if (!s_ghost_bufs[i]) ghost_retake(i);
+    s_ghost_mode = true;
+    apply_card_visibility();
+}
+
+static void ghost_mode_exit(void) {
+    if (!s_ghost_mode) return;
+    s_ghost_mode = false;
+    for (int i = 0; i < g_machine_count; i++)
+        if (s_ghost_imgs[i]) lv_obj_add_flag(s_ghost_imgs[i], LV_OBJ_FLAG_HIDDEN);
+    apply_card_visibility();
+}
+
+static void machines_scroll_begin_cb(lv_event_t *e) {
+    (void)e;
+    if (g_current_view == VIEW_MACHINES) ghost_mode_enter();
+}
+
+static void machines_scroll_end_cb(lv_event_t *e) {
+    (void)e;
+    ghost_mode_exit();
+}
+#else
+static void ghost_retake(int idx) { (void)idx; }
+#endif  // UI_SCROLL_GHOSTS
 
 // ─── Flash restore timer callback ────────────────────────────────────────────
 static void flash_restore_cb(lv_timer_t *timer) {
-    lv_obj_t *card = (lv_obj_t *)lv_timer_get_user_data(timer);
-    lv_obj_set_style_bg_color(card, COL_BASE, 0);
+    int idx = (int)(intptr_t)lv_timer_get_user_data(timer);
+    if (idx >= 0 && idx < MAX_MACHINES && s_cards[idx]) {
+        lv_obj_set_style_bg_color(s_cards[idx], COL_BASE, 0);
+        ghost_retake(idx);
+    }
     lv_timer_delete(timer);
 }
 
@@ -112,6 +227,8 @@ static void toggle_cb(lv_event_t *e) {
 
     // Update card border color
     update_card_border(idx);
+
+    ghost_retake(idx);
 }
 
 // ─── Pulse callback ───────────────────────────────────────────────────────────
@@ -129,7 +246,7 @@ static void pulse_cb(lv_event_t *e) {
 
     // Brief visual flash: temporarily brighten card bg, restore after 200ms
     lv_obj_set_style_bg_color(s_cards[idx], COL_HI_LT, 0);
-    lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, s_cards[idx]);
+    lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, (void *)(intptr_t)idx);
     lv_timer_set_repeat_count(t, 1);
 }
 
@@ -564,6 +681,17 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
     lv_obj_add_flag(pulse_btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(pulse_btn, pulse_cb, LV_EVENT_SHORT_CLICKED, mctx2);
+
+#if UI_SCROLL_GHOSTS
+    // Image proxy shown in place of the card during scroll gestures. Same slot
+    // position; pixels arrive via ghost_retake() once the card has a layout.
+    lv_obj_t *ghost = lv_image_create(grid);
+    lv_obj_set_pos(ghost, (idx % 2) * (CARD_W + GRID_GAP),
+                          (idx / 2) * (CARD_H + GRID_GAP));
+    lv_obj_add_flag(ghost, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(ghost, LV_OBJ_FLAG_CLICKABLE);
+    s_ghost_imgs[idx] = ghost;
+#endif
 }
 
 // ─── Viewport-based card hiding — hides cards outside the scroll viewport so ──
@@ -580,10 +708,21 @@ static void apply_card_visibility(void) {
     for (int i = 0; i < g_machine_count; i++) {
         if (!s_cards[i]) continue;
         lv_area_t ca;
-        lv_obj_get_coords(s_cards[i], &ca);
+        lv_obj_get_coords(s_cards[i], &ca);   // scroll moves hidden children too — coords stay valid
         bool in_view = !(ca.y2 < sa.y1 || ca.y1 > sa.y2);
+#if UI_SCROLL_GHOSTS
+        // During a scroll the image proxy stands in for the live card; a card
+        // whose snapshot failed keeps its widgets on screen instead.
+        bool use_ghost = s_ghost_mode && s_ghost_imgs[i] && s_ghost_bufs[i];
+        lv_obj_t *shown  = use_ghost ? s_ghost_imgs[i] : s_cards[i];
+        lv_obj_t *other  = use_ghost ? s_cards[i]      : s_ghost_imgs[i];
+        if (other) lv_obj_add_flag(other, LV_OBJ_FLAG_HIDDEN);
+        if (in_view) lv_obj_clear_flag(shown, LV_OBJ_FLAG_HIDDEN);
+        else         lv_obj_add_flag(shown, LV_OBJ_FLAG_HIDDEN);
+#else
         if (in_view) lv_obj_clear_flag(s_cards[i], LV_OBJ_FLAG_HIDDEN);
         else          lv_obj_add_flag(s_cards[i],   LV_OBJ_FLAG_HIDDEN);
+#endif
     }
 }
 
@@ -598,6 +737,11 @@ static void machines_refresh_cb(lv_timer_t *t) {
     (void)t;
     if (g_current_view != VIEW_MACHINES) return;
     if (s_screen && lv_obj_is_scrolling(s_screen)) return;
+#if UI_SCROLL_GHOSTS
+    // Safety net: if a SCROLL_END was ever swallowed (e.g. a press killed the
+    // momentum animation), drop back to live cards on the next idle tick.
+    if (s_ghost_mode) ghost_mode_exit();
+#endif
     ui_machines_refresh();
 }
 
@@ -639,6 +783,15 @@ void ui_machines_create(lv_obj_t *parent) {
     // Hook scroll events to show/hide off-screen cards (zero render cost when hidden)
     lv_obj_add_event_cb(s_screen, machines_scroll_cb, LV_EVENT_SCROLL, NULL);
 
+#if UI_SCROLL_GHOSTS
+    // Ghosts only earn their PSRAM when the grid can actually scroll
+    s_ghosts_active = (GRID_PAD + grid_h + GRID_PAD) > CONTENT_H;
+    if (s_ghosts_active) {
+        lv_obj_add_event_cb(s_screen, machines_scroll_begin_cb, LV_EVENT_SCROLL_BEGIN, NULL);
+        lv_obj_add_event_cb(s_screen, machines_scroll_end_cb,   LV_EVENT_SCROLL_END,   NULL);
+    }
+#endif
+
     lv_timer_create(machines_refresh_cb, UI_REFRESH_MS, NULL);
 
     // Cards start visible; ui_machines_activate() re-runs the viewport cull
@@ -655,11 +808,21 @@ void ui_machines_create(lv_obj_t *parent) {
 // against the now-real screen coords.
 void ui_machines_activate(void) {
     if (!s_screen) return;
+#if UI_SCROLL_GHOSTS
+    ghost_mode_exit();   // never enter the tab with proxies on screen
+#endif
     for (int i = 0; i < g_machine_count; i++) {
         if (s_cards[i]) lv_obj_clear_flag(s_cards[i], LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_update_layout(s_screen);
     apply_card_visibility();
+#if UI_SCROLL_GHOSTS
+    // Take the initial snapshots now that layout is resolved — off-gesture,
+    // so the first scroll never pays for them.
+    if (s_ghosts_active)
+        for (int i = 0; i < g_machine_count; i++)
+            if (!s_ghost_bufs[i]) ghost_retake(i);
+#endif
 }
 
 // ─── Public: refresh all arc / tile values from g_machines ───────────────────
@@ -678,13 +841,15 @@ typedef struct {
 } MachSnap;
 
 // Set label text only when it changed — avoids invalidating unchanged regions
-static void label_set_if_changed(lv_obj_t *lbl, const char *text) {
-    if (strcmp(lv_label_get_text(lbl), text) != 0)
-        lv_label_set_text(lbl, text);
+static bool label_set_if_changed(lv_obj_t *lbl, const char *text) {
+    if (strcmp(lv_label_get_text(lbl), text) == 0) return false;
+    lv_label_set_text(lbl, text);
+    return true;
 }
 
 void ui_machines_refresh(void) {
     static MachSnap snap[MAX_MACHINES];
+    bool card_changed[MAX_MACHINES] = {false};
 
     // Phase 1: snapshot values under the lock — no LVGL calls here
     DATA_LOCK();
@@ -735,6 +900,7 @@ void ui_machines_refresh(void) {
                 lv_obj_set_style_text_color(s_toggle_lbls[i], COL_OK, 0);
                 lv_label_set_text(s_toggle_lbls[i], "Start");
             }
+            card_changed[i] = true;
         }
 
         // Push new sparkline point if chart exists
@@ -742,23 +908,45 @@ void ui_machines_refresh(void) {
             lv_chart_set_next_value(s_charts[i], s_series[i],
                 (lv_value_precise_t)s->value[s->spark_idx]);
             lv_chart_refresh(s_charts[i]);
+            card_changed[i] = true;
         }
 
-        // Update tile val labels and arc widgets for all metrics
+        // Update tile val labels and arc widgets — but only for metrics whose
+        // value or threshold color actually moved since the last render, so an
+        // idle tick doesn't restyle and invalidate every widget on screen
         for (int k = 0; k < s->metric_count; k++) {
+            if (s_prev_valid[i][k] &&
+                s->value[k] == s_prev_val[i][k] &&
+                s->color[k] == s_prev_col[i][k]) continue;
+            s_prev_val[i][k]   = s->value[k];
+            s_prev_col[i][k]   = s->color[k];
+            s_prev_valid[i][k] = true;
+
             lv_obj_t *vlbl = s_metric_val_lbls[i][k];
             if (vlbl) {
                 char val_str[32];
                 fmt_value(s->value[k], val_str, sizeof(val_str));
-                label_set_if_changed(vlbl, val_str);
+                if (label_set_if_changed(vlbl, val_str)) card_changed[i] = true;
                 lv_obj_set_style_text_color(vlbl, lv_color_hex(s->color[k]), 0);
+                card_changed[i] = true;
             }
             lv_obj_t *arc = s_metric_arcs[i][k];
             if (arc) {
                 lv_arc_set_value(arc, (int16_t)s->value[k]);
+                card_changed[i] = true;
             }
         }
     }
+
+#if UI_SCROLL_GHOSTS
+    // Re-render the ghost of every card whose pixels changed this tick, while
+    // no gesture is active — the card↔ghost swap then never shows a jump.
+    if (s_ghosts_active && !s_ghost_mode)
+        for (int i = 0; i < count; i++)
+            if (card_changed[i]) ghost_retake(i);
+#else
+    (void)card_changed;
+#endif
 }
 
 // ─── Public: pulse the first running machine ──────────────────────────────────
@@ -774,7 +962,7 @@ void ui_machines_pulse_first(void) {
             // Flash card background briefly
             if (s_cards[i]) {
                 lv_obj_set_style_bg_color(s_cards[i], COL_HI_LT, 0);
-                lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, s_cards[i]);
+                lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, (void *)(intptr_t)i);
                 lv_timer_set_repeat_count(t, 1);
             }
             return;

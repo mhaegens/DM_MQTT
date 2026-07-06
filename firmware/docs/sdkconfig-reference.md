@@ -34,6 +34,27 @@ Builds at `-O2`. Without this line ESP-IDF defaults to Debug (`-Og`), which leav
 
 ---
 
+## CPU
+
+```
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_400=y
+```
+
+The ESP32-P4's HP cores run up to 400 MHz, but ESP-IDF defaults the target to 360 MHz. Everything render-related on this device is CPU-bound, so this is a free ~11 %.
+
+---
+
+## FATFS (SD card)
+
+```
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+```
+
+Long filename support. **Without this, ESP-IDF's FATFS accepts DOS 8.3 names only** — and `sapdm_config.json` has a 12-character basename, so every `fopen()` of it on the SD card failed with `FR_INVALID_NAME`: config reads silently fell back to the default, and the portal's upload reported "Cannot write to SD card". `LFN_HEAP` keeps the name buffers off the stack.
+
+---
+
 ## PSRAM
 
 ```
@@ -109,6 +130,18 @@ CONFIG_LV_OS_FREERTOS=y
 
 **`CONFIG_LV_DEF_REFR_PERIOD=15`**: default LVGL timer period in ms. The BSP overrides this via `timer_period_ms = 16` in `main.c`, so the effective value is 16ms (~60fps). Direct-mode rendering only touches dirty regions, so a render pass comfortably fits the 16ms budget.
 
+```
+CONFIG_LV_INDEV_DEF_READ_PERIOD=10
+```
+
+Touch sampling period. LVGL's default is 30 ms, which caps scroll-position updates at 33 Hz — visible judder during gestures even when frames render at 60 fps. 10 ms makes the scroll track the finger.
+
+```
+CONFIG_LV_DRAW_SW_SHADOW_CACHE_SIZE=40
+```
+
+Caches the most recent software-blurred box shadow. The NFC badge cards (shadow 20 + radius 16), NFC result card and detail cards all share shadow parameters, so repaints become cache hits instead of a fresh blur. 40 covers the largest `shadow_width + radius` in the UI; the cache costs ~1.6 KB.
+
 ### Built-in Montserrat fonts
 
 ```
@@ -137,6 +170,8 @@ CONFIG_BSP_DISPLAY_LVGL_DIRECT_MODE=y
 The render mode within the avoid-tear path is **direct mode** (previously full-refresh). Full-refresh marked the entire 720x720 frame dirty on *any* invalidation, so a single label update cost a ~1 MB repaint plus a full widget-tree render — the root cause of the machines-tab scroll lag. In direct mode LVGL renders only dirty regions straight into the active framebuffer; the port syncs dirty areas between the buffers on flush.
 
 The mode is actually carried by `patches/esp_lvgl_port_avoid_tearing_direct_mode.patch`, because the Waveshare BSP does not set the direct/full flags on the LVGL port in its avoid-tearing path. The `DIRECT_MODE` Kconfig line above only takes effect on BSPs that expose the choice and is otherwise ignored.
+
+**The patch is applied automatically** by the top-level `CMakeLists.txt` at configure time (idempotent, and it removes the component-manager hash file so the modified component still builds). After `idf.py update-dependencies`, the next configure re-applies it — no manual step. If upstream `esp_lvgl_port` ever changes the anchor code, the configure step fails loudly with instructions instead of silently building a broken pipeline.
 
 Each framebuffer is 720 x 720 x 2 bytes = 1,036,800 bytes (~1 MB). Both framebuffers are allocated in PSRAM by the BSP DPI driver.
 

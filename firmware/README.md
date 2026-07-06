@@ -44,28 +44,29 @@ idf.py flash
 idf.py monitor
 ```
 
+The avoid-tear **direct-mode patch** for `esp_lvgl_port` is applied automatically
+at configure time by the top-level `CMakeLists.txt` (look for
+`esp_lvgl_port: applied direct-mode avoid-tear patch` in the configure output).
+No manual patching after `idf.py update-dependencies` anymore.
+
 ---
 
 ## Configuration
 
-Demo content is driven by a JSON file on the SD card: `/config/demo.json`
+Demo content is driven by `sapdm_config.json`, looked up in this order:
 
-If no SD card is present the firmware falls back to an embedded default config (`main/default_config.json`).
+1. **SD card** — `/sdcard/sapdm_config.json` (an inserted card is an explicit override)
+2. **SPIFFS** — `/spiffs/sapdm_config.json` (factory image + captive-portal uploads)
+3. **Embedded default** — compiled into the firmware (`main/default_config.c`)
 
-### Config structure
+The captive portal (WiFi tab → Setup via Phone → Config) can upload a new
+config or activate one of the bundled scenarios (`config_brewery.json`,
+`config_bakery.json`, `config_ev_battery.json`). Uploads are validated
+(parseable JSON with `machines`/`tanks`/`people`) and written to **both**
+SPIFFS and the SD card when one is inserted, so the active store always
+carries the latest upload. No SD card is required for any of this.
 
-```json
-{
-  "mqtt_broker": "wss://mqttfordm.haegens.be/mqtt",
-  "wifi_ssid": "YourNetwork",
-  "wifi_password": "secret",
-  "machines": [...],
-  "tanks": [...],
-  "operators": [...]
-}
-```
-
-Full schema and example: [`main/default_config.json`](main/default_config.json)
+Schema reference: [`main/spiffs_image/sapdm_config.annotated.json`](main/spiffs_image/sapdm_config.annotated.json)
 
 ### WiFi
 
@@ -123,7 +124,8 @@ main/
 - **WiFi:** ESP32-C6 SDIO companion chip — do not use native P4 WiFi APIs
 - **PSRAM:** machine/tank/badge arrays allocated in SPIRAM; draw buffer stays in internal SRAM. `CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=81920` reserves 80 KB of internal SRAM for the SDIO DMA ring buffers used by the esp_hosted driver.
 - **sdkconfig.defaults:** rationale for every non-obvious entry is in [docs/sdkconfig-reference.md](docs/sdkconfig-reference.md).
-- **Double framebuffer:** `BSP_LCD_DPI_BUFFER_NUMS=2` + `AVOID_TEAR` + **direct mode** — both 720×720 framebuffers live in PSRAM, swapped on vsync; LVGL redraws only dirty regions (see `patches/esp_lvgl_port_avoid_tearing_direct_mode.patch`)
+- **Double framebuffer:** `BSP_LCD_DPI_BUFFER_NUMS=2` + `AVOID_TEAR` + **direct mode** — both 720×720 framebuffers live in PSRAM, swapped on vsync; LVGL redraws only dirty regions. The required esp_lvgl_port patch is applied automatically by CMake.
+- **Ghost scrolling:** the machines grid swaps its live widget trees for pre-rendered RGB565 images during scroll gestures, turning each scroll frame into a few memcpy blits instead of a full software repaint. Kill switch: `UI_SCROLL_GHOSTS` in `main/config.h`.
 - **BOOT button:** GPIO35 — short press = back/home, long press = detail step
 - **SD card:** SDIO 4-bit on GPIO39–44
 
@@ -136,8 +138,8 @@ For root causes and fixes: [../docs/troubleshooting.md](../docs/troubleshooting.
 | # | Area | Description |
 |---|------|-------------|
 | 1 | Display | Occasional cyan frame flash on boot. Mitigated by pre-setting root screen background before UI init. |
-| 2 | WiFi | iPhone captive portal auto-launch: a DNS hijack responder is implemented (`wifi_portal.c`); needs a fresh on-device retest. Fallback: navigate to `http://192.168.4.1`. |
-| 3 | Display | Direct-mode rendering (replaces full-refresh) needs on-device validation: verify no tearing/cyan regressions. Revert = restore the full-refresh patch + `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` and set `timer_period_ms` back to 33. |
+| 2 | WiFi | iPhone captive portal auto-launch: the DNS responder now answers only A queries (AAAA/HTTPS get empty NOERROR), which was the suspected trigger for iOS distrust; needs a fresh on-device retest. Fallback: navigate to `http://192.168.4.1`. |
+| 3 | Display | Direct-mode rendering + ghost scrolling need on-device validation: verify no tearing/cyan regressions and pixel-identical cards at scroll end. Reverts: `UI_SCROLL_GHOSTS 0` in `main/config.h`; for direct mode restore the full-refresh patch + `CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH=y` and set `timer_period_ms` back to 33. |
 
 ---
 

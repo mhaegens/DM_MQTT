@@ -185,9 +185,11 @@ The `on_wifi_ip` callback in `main.c` is called when `WIFI_EVENT_STA_GOT_IP` fir
 
 `config_loader.c` tries config sources in this order:
 
-1. SPIFFS: mounts the SPIFFS partition and reads `/spiffs/sapdm_config.json`.
-2. SD card: mounts SDIO 4-bit SD and reads `/sdcard/sapdm_config.json` (fallback if SPIFFS file is absent).
+1. SD card: mounts SDIO 4-bit SD (slot 0) and reads `/sdcard/sapdm_config.json` — an inserted card is an explicit external override.
+2. SPIFFS: reads `/spiffs/sapdm_config.json` — the factory image plus captive-portal uploads. SPIFFS is registered first and stays mounted so the portal can read/write it at runtime.
 3. Embedded default: uses the `DEFAULT_CONFIG_JSON` string from `default_config.c`.
+
+The captive portal writes uploads to **both** stores (SPIFFS always, SD when a card is inserted), so whichever store wins at the next boot carries the latest upload. Uploads are validated first via `config_json_valid()` — parseable JSON containing at least one of `machines`/`tanks`/`people`. FATFS long filenames are enabled in `sdkconfig.defaults`; without them every access to `sapdm_config.json` (a non-8.3 name) fails.
 
 The cJSON library is used for parsing. To avoid exhausting internal SRAM, the cJSON allocator is overridden to use PSRAM:
 
@@ -255,6 +257,16 @@ Currently implemented for: `ui_tanks` (wave animation timer), `ui_debug` (refres
 ### Shell bar and tab bar
 
 The shell bar (top) and tab bar (bottom) are built inside `bsp_display_lock/unlock` in `ui_main_init` and are permanent children of `lv_scr_act()`. They are never hidden or recreated. Screen content replaces only the `g_content` area.
+
+### Ghost scrolling (machines grid)
+
+A scroll gesture dirties the whole viewport every frame, so direct mode degenerates into a full software repaint of every visible card — the historical source of the machines-tab jank. `ui_machines.c` therefore keeps a pre-rendered opaque RGB565 image of every card in PSRAM (`lv_snapshot_take` in ARGB8888, composited over the page background so rounded corners are baked correctly):
+
+- `LV_EVENT_SCROLL_BEGIN` hides the live cards and shows the images; a scroll frame is then a handful of row-copy blits.
+- `LV_EVENT_SCROLL_END` swaps back — pixel-identical, so the swap is invisible.
+- Snapshots are retaken only off-gesture: after a refresh tick that changed the card, on Start/Stop taps, and when the pulse flash restores.
+- The machinery arms only when the grid is taller than the viewport (>4 machines); a failed snapshot allocation gracefully leaves that card live.
+- Kill switch: `UI_SCROLL_GHOSTS` in `main/config.h`.
 
 ### Theme tokens
 

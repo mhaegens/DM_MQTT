@@ -228,8 +228,26 @@ static ConfigResult parse_and_populate(const char *json_str) {
     return CONFIG_OK;
 }
 
+bool config_json_valid(const char *json_str) {
+    cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
+    cJSON_InitHooks(&hooks);
+    cJSON *root = cJSON_Parse(json_str);
+    cJSON_InitHooks(NULL);
+    if (!root) return false;
+    bool ok = cJSON_IsArray(cJSON_GetObjectItem(root, "machines")) ||
+              cJSON_IsArray(cJSON_GetObjectItem(root, "tanks"))    ||
+              cJSON_IsArray(cJSON_GetObjectItem(root, "people"));
+    cJSON_Delete(root);
+    return ok;
+}
+
+// Load order: SD card first (an inserted card is an explicit external
+// override), then SPIFFS (factory image + captive-portal uploads), then the
+// embedded default. The portal writes uploads to BOTH stores so the winner
+// always carries the latest upload; see wifi_portal.c.
 ConfigResult config_load(void) {
-    // --- Try SPIFFS first ---
+    // Register SPIFFS up front and leave it mounted — the captive portal
+    // reads/writes /spiffs/sapdm_config.json at runtime.
     esp_vfs_spiffs_conf_t spiffs_conf = {
         .base_path = "/spiffs",
         .partition_label = "spiffs",
@@ -237,30 +255,18 @@ ConfigResult config_load(void) {
         .format_if_mount_failed = false,
     };
     esp_err_t sp_err = esp_vfs_spiffs_register(&spiffs_conf);
-    if (sp_err == ESP_OK || sp_err == ESP_ERR_INVALID_STATE) {
-        // ESP_ERR_INVALID_STATE means already mounted — still usable
-        char *buf = malloc(JSON_BUF_SIZE);
-        if (buf) {
-            int rr = read_json_file("/spiffs/sapdm_config.json", buf);
-            if (rr == 0) {
-                ConfigResult r = parse_and_populate(buf);
-                free(buf);
-                if (r == CONFIG_OK) {
-                    ESP_LOGI(TAG, "config source: SPIFFS (/spiffs/sapdm_config.json)");
-                    return CONFIG_SPIFFS_OK;
-                }
-                ESP_LOGW(TAG, "SPIFFS JSON parse failed — trying SD card");
-            } else {
-                if (rr == -1)
-                    ESP_LOGW(TAG, "SPIFFS: /spiffs/sapdm_config.json not found — trying SD card");
-                free(buf);
-            }
-        }
-    } else {
-        ESP_LOGW(TAG, "SPIFFS mount failed (%s) — trying SD card", esp_err_to_name(sp_err));
+    bool spiffs_ok = (sp_err == ESP_OK || sp_err == ESP_ERR_INVALID_STATE);
+    if (!spiffs_ok)
+        ESP_LOGW(TAG, "SPIFFS mount failed (%s)", esp_err_to_name(sp_err));
+
+    char *buf = malloc(JSON_BUF_SIZE);
+    if (!buf) {
+        ESP_LOGW(TAG, "alloc failed — config source: embedded default");
+        parse_and_populate(DEFAULT_CONFIG_JSON);
+        return CONFIG_PARSE_ERROR;
     }
 
-    // --- Try SD card ---
+    // --- 1. SD card ---
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     // ESP-Hosted C6 owns slot 1 (SDIO Wi-Fi). SD card is on slot 0 per BSP.
     host.slot = SDMMC_HOST_SLOT_0;
@@ -279,40 +285,47 @@ ConfigResult config_load(void) {
         .allocation_unit_size = 16 * 1024,
     };
 
+    bool sd_present = false;
     sdmmc_card_t *card = NULL;
     esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &mount_cfg, &card);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "SD mount failed (%s) — config source: embedded default", esp_err_to_name(err));
-        parse_and_populate(DEFAULT_CONFIG_JSON);
-        return CONFIG_SD_NOT_FOUND;
-    }
-
-    char *buf = malloc(JSON_BUF_SIZE);
-    if (!buf) {
+    if (err == ESP_OK) {
+        sd_present = true;
+        int rr = read_json_file("/sdcard/sapdm_config.json", buf);
         esp_vfs_fat_sdcard_unmount("/sdcard", card);
-        ESP_LOGW(TAG, "alloc failed — config source: embedded default");
-        parse_and_populate(DEFAULT_CONFIG_JSON);
-        return CONFIG_PARSE_ERROR;
+        if (rr == 0) {
+            if (parse_and_populate(buf) == CONFIG_OK) {
+                free(buf);
+                ESP_LOGI(TAG, "config source: SD card (/sdcard/sapdm_config.json)");
+                return CONFIG_OK;
+            }
+            ESP_LOGW(TAG, "SD JSON parse failed — trying SPIFFS");
+        } else if (rr == -1) {
+            ESP_LOGI(TAG, "no sapdm_config.json on SD — trying SPIFFS");
+        }
+    } else {
+        ESP_LOGI(TAG, "SD mount failed (%s) — trying SPIFFS", esp_err_to_name(err));
     }
 
-    int rr = read_json_file("/sdcard/sapdm_config.json", buf);
-    if (rr != 0) {
+    // --- 2. SPIFFS ---
+    if (spiffs_ok) {
+        int rr = read_json_file("/spiffs/sapdm_config.json", buf);
+        if (rr == 0) {
+            if (parse_and_populate(buf) == CONFIG_OK) {
+                free(buf);
+                ESP_LOGI(TAG, "config source: SPIFFS (/spiffs/sapdm_config.json)");
+                return CONFIG_SPIFFS_OK;
+            }
+            ESP_LOGW(TAG, "SPIFFS JSON parse failed — using embedded default");
+            free(buf);
+            parse_and_populate(DEFAULT_CONFIG_JSON);
+            return CONFIG_PARSE_ERROR;
+        }
         if (rr == -1)
-            ESP_LOGW(TAG, "sapdm_config.json not found on SD — config source: embedded default");
-        free(buf);
-        esp_vfs_fat_sdcard_unmount("/sdcard", card);
-        parse_and_populate(DEFAULT_CONFIG_JSON);
-        return rr == -1 ? CONFIG_FILE_NOT_FOUND : CONFIG_PARSE_ERROR;
+            ESP_LOGW(TAG, "no /spiffs/sapdm_config.json — using embedded default");
     }
-    esp_vfs_fat_sdcard_unmount("/sdcard", card);
 
-    ConfigResult r = parse_and_populate(buf);
+    // --- 3. Embedded default ---
     free(buf);
-    if (r != CONFIG_OK) {
-        ESP_LOGW(TAG, "SD JSON parse failed — config source: embedded default");
-        parse_and_populate(DEFAULT_CONFIG_JSON);
-        return CONFIG_USING_DEFAULT;
-    }
-    ESP_LOGI(TAG, "config source: SD card (/sdcard/sapdm_config.json)");
-    return CONFIG_OK;
+    parse_and_populate(DEFAULT_CONFIG_JSON);
+    return sd_present ? CONFIG_FILE_NOT_FOUND : CONFIG_SD_NOT_FOUND;
 }
