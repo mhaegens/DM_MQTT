@@ -203,6 +203,8 @@ void wifi_manager_init(void)
 // Blocking scan runs in a FreeRTOS task so LVGL is not stalled.
 // esp_wifi_scan_start with block=true works reliably on the C6 SDIO bridge;
 // the async WIFI_EVENT_SCAN_DONE path returned 0 APs while STA was reconnecting.
+static volatile bool s_scan_task_running = false;
+
 static void scan_task(void *arg)
 {
     wifi_scan_cb_t cb = (wifi_scan_cb_t)arg;
@@ -221,6 +223,7 @@ static void scan_task(void *arg)
     wifi_ap_record_t *recs = calloc(WIFI_SCAN_MAX, sizeof(*recs));
     if (!recs) {
         if (was_connected) esp_wifi_connect();
+        s_scan_task_running = false;
         vTaskDelete(NULL);
         return;
     }
@@ -229,6 +232,17 @@ static void scan_task(void *arg)
     err = esp_wifi_scan_start(NULL, true);   // blocking
     esp_wifi_scan_get_ap_num(&n);
     ESP_LOGI("wifi_mgr", "scan ret=0x%x ap_count=%u", err, n);
+    if (err != ESP_OK || n == 0) {
+        // One in-task retry. A scan kicked off while the soft-AP is still
+        // coming up (captive portal) or right after a disconnect often fails
+        // with ESP_ERR_WIFI_STATE or sees nothing; a second attempt a moment
+        // later is usually clean.
+        vTaskDelay(pdMS_TO_TICKS(1200));
+        n = WIFI_SCAN_MAX;
+        err = esp_wifi_scan_start(NULL, true);
+        esp_wifi_scan_get_ap_num(&n);
+        ESP_LOGI("wifi_mgr", "scan retry ret=0x%x ap_count=%u", err, n);
+    }
     if (n > WIFI_SCAN_MAX) n = WIFI_SCAN_MAX;
     esp_wifi_scan_get_ap_records(&n, recs);
 
@@ -262,13 +276,23 @@ static void scan_task(void *arg)
         free(e); free(a);
     }
 
+    s_scan_task_running = false;
     vTaskDelete(NULL);
 }
 
-void wifi_manager_scan(wifi_scan_cb_t cb)
+bool wifi_manager_scan(wifi_scan_cb_t cb)
 {
     s_scan_cb = NULL;  // not used in blocking path
-    xTaskCreate(scan_task, "wifi_scan", 4096, (void *)cb, 5, NULL);
+    if (s_scan_task_running) {
+        ESP_LOGW(TAG, "scan already running — request ignored");
+        return false;
+    }
+    s_scan_task_running = true;
+    if (xTaskCreate(scan_task, "wifi_scan", 4096, (void *)cb, 5, NULL) != pdPASS) {
+        s_scan_task_running = false;
+        return false;
+    }
+    return true;
 }
 
 void wifi_manager_connect(const char *ssid, const char *password,
