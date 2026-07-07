@@ -60,32 +60,6 @@ bash /opt/sapdm-demo/update.sh
 
 Internet access is provided by the **existing Cloudflare Tunnel on the Proxmox host** — no cloudflared container runs in this stack. Add three ingress rules to your existing tunnel config pointing at this LXC's LAN IP (see `cloudflared/config.yml.example` and `docs/INSTALL.md` Part 3).
 
-### Cloudflare Tunnel setup
-
-Add these rules to `/etc/cloudflared/config.yml` on the Proxmox host, above the `http_status:404` catch-all. Rule order matters — Cloudflare evaluates top-to-bottom and stops at the first match:
-
-```yaml
-- hostname: mqttfordm.haegens.be
-  path: /editor.*
-  service: http://192.168.0.60:80
-
-- hostname: mqttfordm.haegens.be
-  path: /dashboard.*
-  service: http://192.168.0.60:80
-
-- hostname: mqttfordm.haegens.be
-  service: ws://192.168.0.60:9001
-```
-
-Then create the DNS record and reload:
-
-```bash
-cloudflared tunnel route dns homelab mqttfordm.haegens.be
-systemctl restart cloudflared
-```
-
-
----
 
 ## Key Decisions
 
