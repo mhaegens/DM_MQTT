@@ -68,6 +68,20 @@ carries the latest upload. No SD card is required for any of this.
 
 Schema reference: [`main/spiffs_image/sapdm_config.annotated.json`](main/spiffs_image/sapdm_config.annotated.json)
 
+An optional top-level `ui` block tunes the Machines tab rendering:
+
+```json
+"ui": { "indicator_scale": 100 }
+```
+
+`indicator_scale` is a percent (50–200, default 100) applied to the indicator
+size caps on machine cards — the arc gauge diameter and the sparkline strip
+height. 100 matches the HTML PoC proportions; lower it for denser cards,
+raise it for bigger gauges. Cards always fill their fixed grid slot: the
+scale moves the caps, and the layout still degrades gracefully (gauges fall
+back to value tiles, tiles collapse to one-line rows) when many metrics
+compete for space.
+
 ### WiFi
 
 On first boot (or after SD config change) the device connects to the configured WiFi network.

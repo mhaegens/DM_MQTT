@@ -113,6 +113,20 @@ static void populate_from_json(const cJSON *root) {
         strncpy(g_plant_name, PLANT_NAME, sizeof(g_plant_name) - 1);
     }
 
+    // Optional "ui" block — display tuning knobs. Reset to defaults first so a
+    // config without the block never inherits values from the previous one.
+    g_ui_indicator_scale = 100;
+    const cJSON *ui = cJSON_GetObjectItem(root, "ui");
+    if (cJSON_IsObject(ui)) {
+        const cJSON *sc = cJSON_GetObjectItem(ui, "indicator_scale");
+        if (cJSON_IsNumber(sc)) {
+            int s = sc->valueint;
+            if (s < 50)  s = 50;
+            if (s > 200) s = 200;
+            g_ui_indicator_scale = s;
+        }
+    }
+
     arr = cJSON_GetObjectItem(root, "machines");
     g_machine_count = 0;
     cJSON_ArrayForEach(item, arr) {
