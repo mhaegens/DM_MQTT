@@ -24,7 +24,8 @@ void ui_home_refresh(void);
 void ui_machines_create(lv_obj_t *parent);
 void ui_machines_refresh(void);
 void ui_machines_activate(void);
-void ui_machines_pulse_first(void);
+void ui_config_select_create(lv_obj_t *parent);
+void ui_config_select_activate(void);
 void ui_tanks_create(lv_obj_t *parent);
 void ui_tanks_activate(void);
 void ui_tanks_deactivate(void);
@@ -192,7 +193,8 @@ static void build_shell_bar(void)
 
     g_shell_subtitle = lv_label_create(title_col);
     lv_label_set_text_fmt(g_shell_subtitle,
-                          "SAP Digital Manufacturing - %s", PLANT_NAME);
+                          "SAP Digital Manufacturing - %s",
+                          g_plant_name[0] ? g_plant_name : PLANT_NAME);
     lv_obj_set_style_text_font(g_shell_subtitle, FONT_MONO_XXS, LV_PART_MAIN);
     lv_obj_set_style_text_color(g_shell_subtitle, COL_TX2, LV_PART_MAIN);
 
@@ -451,6 +453,7 @@ void ui_main_init(void)
     ui_wifi_setup_create(g_content);
     ui_mqtt_detail_create(g_content);
     ui_wifi_password_create(g_content);
+    ui_config_select_create(g_content);
 
     // Activate home tab as the initial view
     ui_switch_tab(VIEW_HOME);
@@ -596,6 +599,19 @@ void ui_push_mqtt_detail(void)
     if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
     g_current_view = VIEW_MQTT_DETAIL;
     ui_mqtt_detail_refresh();
+}
+
+void ui_push_config_select(void)
+{
+    if (g_current_view == VIEW_CONFIG_SEL) return;
+    g_prev_view = g_current_view;
+    for (int i = 0; i < VIEW_COUNT; i++)
+        if (g_screens[i]) lv_obj_add_flag(g_screens[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(g_screens[VIEW_CONFIG_SEL], LV_OBJ_FLAG_HIDDEN);
+    if (s_crumb_label) lv_label_set_text(s_crumb_label, "Configuration");
+    if (g_crumb_bar)   lv_obj_clear_flag(g_crumb_bar, LV_OBJ_FLAG_HIDDEN);
+    g_current_view = VIEW_CONFIG_SEL;
+    ui_config_select_activate();
 }
 
 void ui_push_wifi_password(const char *ssid)

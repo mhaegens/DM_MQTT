@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "main.c"
         "config_loader.c"
+        "config_store.c"
         "default_config.c"
         "wifi_manager.c"
         "wifi_portal.c"
@@ -19,6 +20,7 @@ idf_component_register(
         "ui/ui_wifi_setup.c"
         "ui/ui_wifi_password.c"
         "ui/ui_mqtt_detail.c"
+        "ui/ui_config_select.c"
         "ui/data.c"
         "ui/assets/sap_logo.c"
         "ui/assets/tank_icon.c"

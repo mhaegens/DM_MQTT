@@ -25,6 +25,7 @@ int     g_wifi_rssi      = -99;
 char    g_device_ip[16]  = "0.0.0.0";
 bool    g_tank_drag_active[MAX_TANKS] = {false};
 char    g_last_pub_topic[128] = "";
+char    g_plant_name[40] = "";
 int     g_edit_machine = -1;
 int     g_edit_tank    = -1;
 int     g_edit_metric  = -1;

@@ -25,7 +25,8 @@ typedef enum {
     VIEW_WIFI_SETUP     = 7,  // not a tab; pushed over any tab via WiFi pill/card
     VIEW_MQTT_DETAIL    = 8,  // not a tab; pushed over any tab via MQTT pill
     VIEW_WIFI_PASSWORD  = 9,  // not a tab; pushed from wifi_setup Scan & Join list
-    VIEW_COUNT          = 10,
+    VIEW_CONFIG_SEL     = 10, // not a tab; pushed from Home config-template tile
+    VIEW_COUNT          = 11,
 } ViewId;
 
 // ─── Global LVGL objects (for use by screen modules) ─────────────────────────
@@ -47,6 +48,7 @@ void ui_push_tank_ovw(int tank_idx);
 void ui_push_wifi_setup(void);
 void ui_push_wifi_password(const char *ssid);
 void ui_push_mqtt_detail(void);
+void ui_push_config_select(void);
 
 // ─── Status update callbacks (called from MQTT/WiFi event handlers) ───────────
 void ui_notify_mqtt_status(bool connected);
