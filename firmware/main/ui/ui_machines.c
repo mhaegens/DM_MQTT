@@ -4,6 +4,13 @@
 // The grid adapts to the machine count: 1 machine = one full-area card,
 // 2 machines = two full-height columns, 3+ = the standard 2×2 grid.
 // Tapping any metric opens ui_push_detail(machine.name, metric.label).
+//
+// Cell styling mirrors the HTML PoC (sapdm-demo-ui-v7.html): arc metrics are
+// compact open-bottom gauges (198°–342°) with the value in the opening, other
+// metrics are left-aligned label/value/unit tiles, and rows too short for a
+// stacked tile collapse to a single label——value line. Labels are pinned to
+// one line (dotted, never word-wrapped). Indicator size caps scale with the
+// optional "ui.indicator_scale" percent in the config file.
 
 #include "ui_machines.h"
 #include "ui_main.h"
@@ -14,6 +21,7 @@
 #include "../config.h"
 #include "esp_log.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
@@ -47,6 +55,20 @@ static void fmt_value(float v, char *buf, size_t n) {
 #define DOT_D      14    // status dot diameter
 #define CELL_GAP    6    // gap between body rows and metric cells
 
+// Metric cell layout — proportions match the HTML PoC machine cards
+#define LBL_H          20   // one FONT_MONO_XXS line — fixed height so labels dot, never wrap
+#define NAME_H         26   // one FONT_SANS_SM line (card name)
+#define CELLS_PER_ROW   3   // the PoC caps metric tiles at 3 per row
+#define ARC_D_MAX      96   // gauge bounding-box cap at indicator_scale 100
+#define ARC_D_MIN      44   // below this a gauge is unreadable — render a tile instead
+#define SPARK_H_MAX   132   // sparkline strip cap at indicator_scale 100
+#define SPARK_H_MIN    48   // header row + minimal chart
+#define TILE_COL_MIN   64   // row height below which cells collapse to one line
+#define ROW_MIN        40   // cell-row minimum the spark strip must leave room for
+
+// Apply the config file's "ui.indicator_scale" percent to a pixel size
+static int scaled(int px) { return px * g_ui_indicator_scale / 100; }
+
 // Card dimensions adapt to the machine count (computed in ui_machines_create)
 static int s_grid_cols = 2;
 static int s_card_w    = 0;
@@ -63,6 +85,13 @@ static lv_obj_t *s_charts[MAX_MACHINES]   = {NULL};  // sparkline chart
 static lv_chart_series_t *s_series[MAX_MACHINES] = {NULL};
 static lv_obj_t *s_pulse_lbls[MAX_MACHINES] = {NULL}; // footer pulse counter
 static int       s_prev_pulses[MAX_MACHINES];
+
+// History last rendered into each sparkline — refresh rewrites the chart only
+// when the data actually moved, so idle ticks stop invalidating (and
+// ghost-retaking) every visible card. Advanced only when the widget is
+// updated, so a card scrolled back into view catches up on the next tick.
+static float     s_hist_shadow[MAX_MACHINES][HISTORY_LEN];
+static int       s_hist_shadow_len[MAX_MACHINES] = {0};
 
 // Per-machine, per-metric value labels and arc widgets (for live refresh)
 static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_MACH_METRICS] = {{NULL}};
@@ -83,6 +112,7 @@ typedef struct { int machine; }             MachCtx;
 // ─── Forward declarations ─────────────────────────────────────────────────────
 static void build_machine_card(lv_obj_t *grid, int idx);
 static void update_card_border(int idx);
+static void style_status_dot(lv_obj_t *dot, bool running);
 static void apply_card_visibility(void);
 
 // ─── Ghost scroll ─────────────────────────────────────────────────────────────
@@ -216,8 +246,8 @@ static void toggle_cb(lv_event_t *e) {
         lv_label_set_text(s_toggle_lbls[idx], "Start");
     }
 
-    // Update status dot color
-    lv_obj_set_style_bg_color(s_dots[idx], running ? COL_OK : COL_ERR, 0);
+    // Update status dot color + ring
+    style_status_dot(s_dots[idx], running);
 
     // Update card border color
     update_card_border(idx);
@@ -238,10 +268,69 @@ static void update_card_border(int idx) {
     lv_obj_set_style_border_color(s_cards[idx], bd_col, 0);
 }
 
-// ─── Build one metric cell (arc gauge or key/value tile) ──────────────────────
-// Cells share a row and grow equally, so the body is filled edge-to-edge no
-// matter how many metrics the machine has; the arc diameter and value fonts
-// scale with the space the cell actually gets.
+// ─── Status dot fill + soft ring (the PoC dot glows; a tinted ring here) ──────
+static void style_status_dot(lv_obj_t *dot, bool running) {
+    lv_obj_set_style_bg_color(dot, running ? COL_OK : COL_ERR, 0);
+    lv_obj_set_style_outline_color(dot, running ? COL_OK_LT : COL_ERR_LT, 0);
+}
+
+// ─── Sparkline scaling ────────────────────────────────────────────────────────
+// The chart Y axis is a fixed 0–1000 and every point is normalised into a
+// window hugging the history's min/max — same auto-zoom the PoC uses, so a
+// 2000–7000 RPM walk draws as a full-height wiggle. (Previously the values
+// went in raw against LVGL's default 0–100 range: anything larger clipped
+// flat against the strip edge, anything smaller hugged the bottom.)
+static void spark_window(const float *h, int len, float *mn_out, float *mx_out) {
+    float lo = h[0], hi = h[0];
+    for (int i = 1; i < len; i++) {
+        if (h[i] < lo) lo = h[i];
+        if (h[i] > hi) hi = h[i];
+    }
+    float span = hi - lo;
+    if (span < 1e-3f) span = (fabsf(hi) > 1.0f) ? fabsf(hi) * 0.1f : 1.0f;
+    *mn_out = lo - span * 0.08f;
+    *mx_out = hi + span * 0.10f;
+}
+
+static void spark_fill_chart(lv_obj_t *chart, lv_chart_series_t *ser,
+                             const float *h, int len) {
+    if (len < 1 || len > HISTORY_LEN) return;
+    float mn, mx;
+    spark_window(h, len, &mn, &mx);
+    float k = 1000.0f / (mx - mn);
+    for (int i = 0; i < HISTORY_LEN; i++) {
+        int j = i - (HISTORY_LEN - len);   // newest sample lands rightmost
+        lv_chart_set_value_by_id(chart, ser, i,
+            j < 0 ? LV_CHART_POINT_NONE
+                  : (int32_t)((h[j] - mn) * k));
+    }
+    lv_chart_refresh(chart);
+}
+
+// ─── One-line metric key label ────────────────────────────────────────────────
+// Fixed single-line height so LV_LABEL_LONG_DOT truncates with dots — with a
+// content-sized height the label word-wraps instead ("SPINDLE LOAD" used to
+// break mid-word over three lines). Caller sets the width.
+static lv_obj_t *make_key_label(lv_obj_t *parent, const char *text) {
+    char up[48];
+    to_upper_str(text, up, sizeof(up));
+    lv_obj_t *lbl = lv_label_create(parent);
+    lv_obj_set_style_text_font(lbl, FONT_MONO_XXS, 0);
+    lv_obj_set_style_text_color(lbl, COL_TX3, 0);
+    lv_obj_set_style_text_letter_space(lbl, 1, 0);
+    lv_obj_set_height(lbl, LBL_H);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
+    lv_label_set_text(lbl, up);
+    return lbl;
+}
+
+// ─── Build one metric cell ────────────────────────────────────────────────────
+// Cells share a row and grow equally. Three renderings, picked from the space
+// the cell actually gets (all styled after the HTML PoC):
+//  · gauge    — VIZ_ARC with room: compact 198°–342° open-bottom arc, label
+//               above, value in the opening (PoC .arctile)
+//  · tile     — label / value / unit stacked, left-aligned (PoC .mtile)
+//  · one-line — label left, value+unit right, for rows too short to stack
 static void build_metric_cell(lv_obj_t *parent, int midx, int kidx, Metric *m,
                               int cell_h, int cell_w) {
     lv_obj_t *cell = lv_obj_create(parent);
@@ -251,80 +340,111 @@ static void build_metric_cell(lv_obj_t *parent, int midx, int kidx, Metric *m,
     lv_obj_set_style_border_color(cell, COL_BD, 0);
     lv_obj_set_style_border_width(cell, 1, 0);
     lv_obj_set_style_radius(cell, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_hor(cell, 6, 0);
-    lv_obj_set_style_pad_ver(cell, 5, 0);
-    lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_SPACE_EVENLY,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(cell, 2, 0);
+    lv_obj_set_style_pad_all(cell, 0, 0);
     lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Key label (uppercase, dotted when the cell is narrow)
-    char up_key[32];
-    to_upper_str(m->label, up_key, 32);
-    lv_obj_t *key_lbl = lv_label_create(cell);
-    lv_label_set_text(key_lbl, up_key);
-    lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
-    lv_obj_set_width(key_lbl, LV_PCT(100));
-    lv_obj_set_style_text_align(key_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(key_lbl, LV_LABEL_LONG_DOT);
-
+    lv_color_t val_col = lv_color_hex(metric_color(m));
     lv_obj_t *val_lbl = NULL;
+    char val_str[32];
+    fmt_value(m->value, val_str, sizeof(val_str));
 
-    if (m->viz == VIZ_ARC) {
-        lv_color_t arc_col = lv_color_hex(metric_color(m));
+    // Gauge box the cell can afford. The drawn part of the open-bottom gauge —
+    // value text included — ends at ~0.76·d; the rest of the square arc widget
+    // is empty, so the height budget divides by 0.76 rather than 1.
+    int avail = cell_h - 8 - LBL_H - 2;            // pads + label + gap
+    int d = (avail - 12) * 100 / 76;               // 12 ≈ value-text descent
+    if (d > cell_w - 12)        d = cell_w - 12;
+    if (d > scaled(ARC_D_MAX))  d = scaled(ARC_D_MAX);
 
-        // Diameter: whatever fits below the key label, capped by cell width
-        int d = cell_h - 18 - 14;               // key label + pads
-        if (d > cell_w - 16) d = cell_w - 16;
-        if (d > 140) d = 140;
-        if (d < 24)  d = 24;
+    if (cell_h < TILE_COL_MIN) {
+        // ── One-line cell: LABEL ······ value unit ───────────────────────────
+        lv_obj_set_style_pad_hor(cell, 8, 0);
+        lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_START,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(cell, 4, 0);
+
+        lv_obj_t *key_lbl = make_key_label(cell, m->label);
+        lv_obj_set_flex_grow(key_lbl, 1);
+
+        val_lbl = lv_label_create(cell);
+        lv_label_set_text(val_lbl, val_str);
+        lv_obj_set_style_text_font(val_lbl, FONT_SANS_XS, 0);
+        lv_obj_set_style_text_color(val_lbl, val_col, 0);
+
+        if (m->unit[0]) {
+            lv_obj_t *unit_lbl = lv_label_create(cell);
+            lv_label_set_text(unit_lbl, m->unit);
+            lv_obj_set_style_text_font(unit_lbl, FONT_MONO_XXS, 0);
+            lv_obj_set_style_text_color(unit_lbl, COL_TX3, 0);
+        }
+    } else if (m->viz == VIZ_ARC && d >= ARC_D_MIN) {
+        // ── Gauge cell — manual placement, group vertically centred ──────────
+        int content_h = LBL_H + 2 + d * 76 / 100 + 12;
+        int top = (cell_h - content_h) / 2;
+        if (top < 4) top = 4;
+
+        lv_obj_t *key_lbl = make_key_label(cell, m->label);
+        lv_obj_set_width(key_lbl, cell_w - 14);
+        lv_obj_set_style_text_align(key_lbl, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(key_lbl, LV_ALIGN_TOP_MID, 0, top);
 
         lv_obj_t *arc = lv_arc_create(cell);
         lv_obj_set_size(arc, d, d);
+        lv_obj_align(arc, LV_ALIGN_TOP_MID, 0, top + LBL_H + 2);
         lv_arc_set_mode(arc, LV_ARC_MODE_NORMAL);
-        lv_arc_set_bg_angles(arc, 135, 45);   // 270° sweep
+        lv_arc_set_bg_angles(arc, 198, 342);   // 144° over the top, open bottom
         lv_arc_set_range(arc, (int32_t)m->min_val, (int32_t)m->max_val);
         lv_arc_set_value(arc, (int32_t)m->value);
+
+        int stroke = d / 9;
+        if (stroke < 5)  stroke = 5;
+        if (stroke > 10) stroke = 10;
 
         lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(arc, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
         lv_obj_set_style_arc_color(arc, lv_color_hex(0xE0E4EF), LV_PART_MAIN);
-        lv_obj_set_style_arc_width(arc, d >= 90 ? 10 : 7, LV_PART_MAIN);
+        lv_obj_set_style_arc_width(arc, stroke, LV_PART_MAIN);
+        lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
 
-        lv_obj_set_style_arc_color(arc, arc_col, LV_PART_INDICATOR);
-        lv_obj_set_style_arc_width(arc, d >= 90 ? 10 : 7, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(arc, val_col, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(arc, stroke, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
 
         lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
         lv_obj_set_style_pad_all(arc, 0, LV_PART_KNOB);
 
         lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
 
-        // Value label centered inside the arc (no unit)
+        // Value in the gauge opening, just below centre (no unit)
         val_lbl = lv_label_create(arc);
-        char val_str[24];
-        fmt_value(m->value, val_str, sizeof(val_str));
         lv_label_set_text(val_lbl, val_str);
-        lv_obj_set_style_text_font(val_lbl, d >= 90 ? FONT_SANS_SM : FONT_MONO_XXS, 0);
-        lv_obj_set_style_text_color(val_lbl, arc_col, 0);
-        lv_obj_center(val_lbl);
+        lv_obj_set_style_text_font(val_lbl,
+            d >= 84 ? FONT_SANS_SM : (d >= 56 ? FONT_SANS_XS : FONT_MONO_XXS), 0);
+        lv_obj_set_style_text_color(val_lbl, val_col, 0);
+        lv_obj_align(val_lbl, LV_ALIGN_CENTER, 0, d * 26 / 100);
 
         if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS)
             s_metric_arcs[midx][kidx] = arc;
     } else {
-        // Value label (smart decimal, threshold color)
-        lv_color_t val_col = lv_color_hex(metric_color(m));
+        // ── Stacked tile: label / value / unit, left-aligned ─────────────────
+        lv_obj_set_style_pad_hor(cell, 10, 0);
+        lv_obj_set_style_pad_ver(cell, 6, 0);
+        lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_gap(cell, 2, 0);
+
+        lv_obj_t *key_lbl = make_key_label(cell, m->label);
+        lv_obj_set_width(key_lbl, LV_PCT(100));
+
         val_lbl = lv_label_create(cell);
-        char val_str[32];
-        fmt_value(m->value, val_str, sizeof(val_str));
         lv_label_set_text(val_lbl, val_str);
         lv_obj_set_style_text_font(val_lbl,
             cell_h >= 110 ? FONT_SANS_MD : FONT_SANS_SM, 0);
         lv_obj_set_style_text_color(val_lbl, val_col, 0);
 
-        // Unit label (small gray)
         if (m->unit[0]) {
             lv_obj_t *unit_lbl = lv_label_create(cell);
             lv_label_set_text(unit_lbl, m->unit);
@@ -388,12 +508,16 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_flex_align(hdr, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    // Left: name + type stacked
+    // Left: name + type stacked. The column takes all width up to the dot and
+    // both labels are pinned to one line each (dotted), so a long name or type
+    // can never wrap onto extra lines or collide with the status dot.
     lv_obj_t *title_col = lv_obj_create(hdr);
-    lv_obj_set_size(title_col, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_height(title_col, LV_SIZE_CONTENT);
+    lv_obj_set_flex_grow(title_col, 1);
     lv_obj_set_style_bg_opa(title_col, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(title_col, 0, 0);
     lv_obj_set_style_pad_all(title_col, 0, 0);
+    lv_obj_set_style_pad_right(title_col, 8, 0);   // clearance to the dot ring
     lv_obj_set_flex_flow(title_col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(title_col, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -401,21 +525,25 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_clear_flag(title_col, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *name_lbl = lv_label_create(title_col);
-    lv_label_set_text(name_lbl, mc->name);
     lv_obj_set_style_text_font(name_lbl, FONT_SANS_SM, 0);
     lv_obj_set_style_text_color(name_lbl, COL_TX, 0);
+    lv_obj_set_size(name_lbl, LV_PCT(100), NAME_H);
+    lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
+    lv_label_set_text(name_lbl, mc->name);
 
-    lv_obj_t *type_lbl = lv_label_create(title_col);
-    lv_label_set_text(type_lbl, mc->type);
-    lv_obj_set_style_text_font(type_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(type_lbl, COL_TX3, 0);
+    // Machine type — uppercase small caps line, as in the PoC
+    lv_obj_t *type_lbl = make_key_label(title_col, mc->type);
+    lv_obj_set_width(type_lbl, LV_PCT(100));
 
-    // Right: status dot 14×14 circle
+    // Right: status dot with a soft ring in the state tint
     lv_obj_t *dot = lv_obj_create(hdr);
     lv_obj_set_size(dot, DOT_D, DOT_D);
-    lv_obj_set_style_bg_color(dot, mc->running ? COL_OK : COL_ERR, 0);
     lv_obj_set_style_radius(dot, DOT_D / 2, 0);
     lv_obj_set_style_border_width(dot, 0, 0);
+    lv_obj_set_style_outline_width(dot, 3, 0);
+    lv_obj_set_style_outline_pad(dot, 0, 0);
+    lv_obj_set_style_outline_opa(dot, LV_OPA_COVER, 0);
+    style_status_dot(dot, mc->running);
     s_dots[idx] = dot;
 
     // ── Body ──────────────────────────────────────────────────────────────────
@@ -451,11 +579,24 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     for (int k = 0; k < mc->metric_count; k++)
         if (k != spark_idx) n_cells++;
 
+    // Cells pack at most CELLS_PER_ROW per row (as the PoC does) — four
+    // metrics in a single row left ~74 px per cell and unreadable labels.
+    int rows = 0, per_row = 0;
+    if (n_cells > 0) {
+        rows    = (n_cells + CELLS_PER_ROW - 1) / CELLS_PER_ROW;
+        per_row = (n_cells + rows - 1) / rows;
+    }
+
     int spark_h = 0, cells_h = 0;
     if (spark_idx >= 0 && n_cells > 0) {
         spark_h = inner_h * 2 / 5;
-        if (spark_h < 64)  spark_h = 64;
-        if (spark_h > 132) spark_h = 132;
+        int spark_max = scaled(SPARK_H_MAX);
+        if (spark_h > spark_max) spark_h = spark_max;
+        // The strip yields before any cell row drops below ROW_MIN
+        int cells_min = rows * ROW_MIN + (rows - 1) * CELL_GAP;
+        if (inner_h - spark_h - CELL_GAP < cells_min)
+            spark_h = inner_h - CELL_GAP - cells_min;
+        if (spark_h < SPARK_H_MIN) spark_h = SPARK_H_MIN;
         cells_h = inner_h - spark_h - CELL_GAP;
     } else if (spark_idx >= 0) {
         spark_h = inner_h;             // sparkline-only machine: full body
@@ -491,12 +632,10 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_set_flex_align(spark_hdr, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(spark_hdr, LV_OBJ_FLAG_SCROLLABLE);
 
-        char spark_key_up[32];
-        to_upper_str(sm->label, spark_key_up, 32);
-        lv_obj_t *key_lbl = lv_label_create(spark_hdr);
-        lv_label_set_text(key_lbl, spark_key_up);
-        lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
-        lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
+        // Label yields to the value: it grows into the free space and dots
+        // when the row runs out, so the two can never overlap.
+        lv_obj_t *key_lbl = make_key_label(spark_hdr, sm->label);
+        lv_obj_set_flex_grow(key_lbl, 1);
 
         lv_obj_t *cur_lbl = lv_label_create(spark_hdr);
         char val_str[20];
@@ -511,7 +650,7 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
         // Chart — full width, fills the strip below the header row
         int chart_h = spark_h - 30;    // pads 8 + header 20 + gap 2
-        if (chart_h < 24) chart_h = 24;
+        if (chart_h < 16) chart_h = 16;
         lv_obj_t *chart = lv_chart_create(spark_box);
         lv_obj_set_size(chart, LV_PCT(100), chart_h);
         lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
@@ -524,13 +663,14 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_set_style_size(chart, 0, 0, LV_PART_INDICATOR);
 
         lv_chart_series_t *ser = lv_chart_add_series(chart, spark_col, LV_CHART_AXIS_PRIMARY_Y);
-        for (int i = 0; i < sm->history_len; i++) {
-            lv_chart_set_next_value(chart, ser, (lv_value_precise_t)sm->history[i]);
-        }
-        lv_chart_refresh(chart);
+        lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
+        spark_fill_chart(chart, ser, sm->history, sm->history_len);
 
         s_charts[idx] = chart;
         s_series[idx] = ser;
+        memcpy(s_hist_shadow[idx], sm->history,
+               (size_t)sm->history_len * sizeof(float));
+        s_hist_shadow_len[idx] = sm->history_len;
 
         // Make entire spark_box tappable (not just the chart)
         lv_obj_add_flag(spark_box, LV_OBJ_FLAG_CLICKABLE);
@@ -542,10 +682,8 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
     // ── Metric cell rows ──────────────────────────────────────────────────────
     if (n_cells > 0) {
-        int rows    = (n_cells > 4) ? 2 : 1;   // >4 metrics: wrap into two rows
-        int per_row = (n_cells + rows - 1) / rows;
-        int row_h   = (rows == 1) ? cells_h : (cells_h - CELL_GAP) / 2;
-        int cell_w  = (inner_w - (per_row - 1) * CELL_GAP) / per_row;
+        int row_h  = (cells_h - (rows - 1) * CELL_GAP) / rows;
+        int cell_w = (inner_w - (per_row - 1) * CELL_GAP) / per_row;
 
         lv_obj_t *row = NULL;
         int built = 0;
@@ -834,6 +972,8 @@ typedef struct {
     float    value[MAX_MACH_METRICS];
     uint32_t color[MAX_MACH_METRICS];
     int      spark_idx;   // -1 when the machine has no sparkline metric
+    float    hist[HISTORY_LEN];   // spark metric history (auto-zoom rescale)
+    int      hist_len;
 } MachSnap;
 
 // Set label text only when it changed — avoids invalidating unchanged regions
@@ -865,6 +1005,12 @@ void ui_machines_refresh(void) {
             if (s->spark_idx < 0 && m->viz == VIZ_SPARK && m->history_len > 0)
                 s->spark_idx = k;
         }
+        s->hist_len = 0;
+        if (s->spark_idx >= 0) {
+            Metric *m = &mc->metrics[s->spark_idx];
+            s->hist_len = m->history_len;
+            memcpy(s->hist, m->history, (size_t)s->hist_len * sizeof(float));
+        }
     }
     DATA_UNLOCK();
 
@@ -884,7 +1030,7 @@ void ui_machines_refresh(void) {
         // Dot / border / toggle restyle only on a state change
         if (s->running != s_last_render_running[i]) {
             s_last_render_running[i] = s->running;
-            lv_obj_set_style_bg_color(s_dots[i], s->running ? COL_OK : COL_ERR, 0);
+            style_status_dot(s_dots[i], s->running);
             update_card_border(i);
             if (s->running) {
                 lv_obj_set_style_bg_color(s_toggle_btns[i], COL_ERR_LT, 0);
@@ -907,11 +1053,16 @@ void ui_machines_refresh(void) {
             card_changed[i] = true;
         }
 
-        // Push new sparkline point if chart exists
-        if (s_charts[i] && s_series[i] && s->spark_idx >= 0) {
-            lv_chart_set_next_value(s_charts[i], s_series[i],
-                (lv_value_precise_t)s->value[s->spark_idx]);
-            lv_chart_refresh(s_charts[i]);
+        // Redraw the sparkline only when its history actually moved — the
+        // whole strip is rewritten each time because the auto-zoom window
+        // shifts with the data (see spark_fill_chart)
+        if (s_charts[i] && s_series[i] && s->hist_len > 0 &&
+            (s->hist_len != s_hist_shadow_len[i] ||
+             memcmp(s_hist_shadow[i], s->hist,
+                    (size_t)s->hist_len * sizeof(float)) != 0)) {
+            spark_fill_chart(s_charts[i], s_series[i], s->hist, s->hist_len);
+            memcpy(s_hist_shadow[i], s->hist, (size_t)s->hist_len * sizeof(float));
+            s_hist_shadow_len[i] = s->hist_len;
             card_changed[i] = true;
         }
 
@@ -937,6 +1088,8 @@ void ui_machines_refresh(void) {
             lv_obj_t *arc = s_metric_arcs[i][k];
             if (arc) {
                 lv_arc_set_value(arc, (int32_t)s->value[k]);
+                lv_obj_set_style_arc_color(arc, lv_color_hex(s->color[k]),
+                                           LV_PART_INDICATOR);
                 card_changed[i] = true;
             }
         }

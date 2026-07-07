@@ -3,6 +3,11 @@
 
   "plant_name": "Plant BE01",
 
+  "ui": {
+    "_comment": "Optional display tuning for the Machines tab. indicator_scale is a percent (50-200, default 100) applied to the indicator size caps on machine cards: the arc gauge diameter and the sparkline strip height. 100 matches the HTML PoC proportions; lower it for denser cards, raise it for bigger gauges.",
+    "indicator_scale": 100
+  },
+
   "machines": [
     {
       "_comment": "Each machine maps to one card on the Machines tab and one row in SAP DM",
