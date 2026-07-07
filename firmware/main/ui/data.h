@@ -108,6 +108,7 @@ extern int     g_wifi_rssi;
 extern char    g_device_ip[16];
 extern bool    g_tank_drag_active[MAX_TANKS];
 extern char    g_last_pub_topic[128];
+extern char    g_plant_name[40];  // "plant_name" from the active config
 
 // Metric currently open in the detail view (edit hold). While set, sim_tick
 // skips this metric so the simulator cannot overwrite a user edit mid-view.

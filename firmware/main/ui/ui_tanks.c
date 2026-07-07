@@ -22,7 +22,8 @@ static const char *TAG = "tanks";
 #define TANK_TIP_W      28    // flat base width at bottom of taper (px)
 #define TANK_RADIUS     36    // top-corner border radius
 #define TANK_TIP_RADIUS  8    // rounded corner radius at taper tip
-#define LABEL_BTN_H     48    // tank name / badge button height (2 rows)
+#define TANK_MAX_W     300    // width cap so 1–2 tanks stay tank-shaped
+#define LABEL_BTN_H     56    // tank name / status button height (2 rows)
 #define LABEL_BTN_GAP    6    // gap between tank widget and label button
 
 // ─── Per-tank column state ────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ typedef struct {
     lv_obj_t  *tick_labels[3];
     lv_coord_t tick_ys[3];
     lv_obj_t  *badge_label;
+    lv_obj_t  *badge_pill;
 } tank_col_t;
 
 static tank_col_t  s_cols[MAX_TANKS];
@@ -60,6 +62,18 @@ static lv_color_t status_color(float pct) {
     if (pct < 15.0f) return COL_ERR;
     if (pct < 40.0f) return COL_WARN;
     return COL_OK;
+}
+
+static lv_color_t status_bg(float pct) {
+    if (pct < 15.0f) return COL_ERR_LT;
+    if (pct < 40.0f) return COL_WARN_LT;
+    return COL_OK_LT;
+}
+
+static uint32_t status_bd(float pct) {
+    if (pct < 15.0f) return COL_ERR_BD;
+    if (pct < 40.0f) return COL_WARN_BD;
+    return COL_OK_BD;
 }
 
 // ─── Hopper shape helpers ──────────────────────────────────────────────────────
@@ -198,6 +212,15 @@ static void tank_draw_cb(lv_event_t *e) {
             draw_filled_rect(layer, ox + 3, shine_y1, ox + 9, shine_y2,
                              lv_color_white(), LV_OPA_20, SZ_RADIUS_SM);
         }
+
+        /* Waterline highlight — bright edge at the fill surface */
+        if (fill_px > 8) {
+            lv_coord_t hw = (waterline >= jct_y)
+                ? hopper_width_at_fill(w, taper_h, fill_px) : w;
+            draw_filled_rect(layer, ox + (w - hw) / 2 + 2, waterline,
+                             ox + (w + hw) / 2 - 2, waterline + 2,
+                             lv_color_white(), LV_OPA_40, 0);
+        }
     }
 
     /* 4. Taper outline: diagonal lines for the slanted edges — drawn after fill */
@@ -272,9 +295,19 @@ static void refresh_tank(int idx) {
     if (label_y < 0) label_y = 0;
     lv_obj_set_pos(col->pct_label, (col_w - lbl_w) / 2, label_y);
 
+    // White only while the label sits on the fill — dark once the level drops
+    // below it, so a near-empty tank stays readable on the light background.
+    lv_coord_t waterline_y = TANK_TOTAL_H - fill_px;
+    lv_obj_set_style_text_color(col->pct_label,
+        (label_y >= waterline_y - 2) ? lv_color_white() : COL_TX2, 0);
+
     if (col->badge_label) {
         lv_label_set_text(col->badge_label, status_text(pct));
         lv_obj_set_style_text_color(col->badge_label, status_color(pct), 0);
+    }
+    if (col->badge_pill) {
+        lv_obj_set_style_bg_color(col->badge_pill, status_bg(pct), 0);
+        lv_obj_set_style_border_color(col->badge_pill, lv_color_hex(status_bd(pct)), 0);
     }
 }
 
@@ -373,9 +406,10 @@ static void position_tick_labels(int col_idx) {
 // ─── Build one tank column ─────────────────────────────────────────────────────
 static void build_tank_col(lv_obj_t *parent, int idx) {
     Tank      *t    = &g_tanks[idx];
-    lv_coord_t col_w = (g_tank_count > 0)
-        ? (CONTENT_W - COL_GAP * (g_tank_count + 1)) / g_tank_count
-        : CONTENT_W - 2 * COL_GAP;
+    lv_coord_t col_w = (CONTENT_W - COL_GAP * (g_tank_count + 1)) / g_tank_count;
+    // Cap the width so 1–2 tanks stay tank-shaped instead of becoming a wall;
+    // SPACE_EVENLY on the parent centers whatever is left over.
+    if (col_w > TANK_MAX_W) col_w = TANK_MAX_W;
     tank_col_t *col = &s_cols[idx];
     col->tank_idx = idx;
     col->col_w    = col_w;
@@ -450,18 +484,36 @@ static void build_tank_col(lv_obj_t *parent, int idx) {
     lv_obj_set_flex_flow(label_btn, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(label_btn, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(label_btn, 3, 0);
     lv_obj_add_event_cb(label_btn, label_btn_cb, LV_EVENT_SHORT_CLICKED,
                         (void *)(intptr_t)idx);
 
     lv_obj_t *name_lbl = lv_label_create(label_btn);
     lv_label_set_text(name_lbl, t->name);
-    lv_obj_set_style_text_font(name_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(name_lbl, COL_TX2, 0);
+    lv_obj_set_style_text_font(name_lbl, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(name_lbl, COL_TX, 0);
+    lv_obj_set_width(name_lbl, col_w - 16);
+    lv_obj_set_style_text_align(name_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_DOT);
 
-    lv_obj_t *badge_lbl = lv_label_create(label_btn);
+    // Status pill — tinted background matching the level state
+    lv_obj_t *pill = lv_obj_create(label_btn);
+    lv_obj_set_size(pill, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(pill, status_bg(pct), 0);
+    lv_obj_set_style_border_color(pill, lv_color_hex(status_bd(pct)), 0);
+    lv_obj_set_style_border_width(pill, 1, 0);
+    lv_obj_set_style_radius(pill, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_ver(pill, 2, 0);
+    lv_obj_set_style_pad_hor(pill, 8, 0);
+    lv_obj_set_style_shadow_width(pill, 0, 0);
+    lv_obj_clear_flag(pill, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    col->badge_pill = pill;
+
+    lv_obj_t *badge_lbl = lv_label_create(pill);
     lv_label_set_text(badge_lbl, status_text(pct));
     lv_obj_set_style_text_font(badge_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(badge_lbl, status_color(pct), 0);
+    lv_obj_center(badge_lbl);
     col->badge_label = badge_lbl;
 }
 
@@ -477,6 +529,40 @@ void ui_tanks_create(lv_obj_t *parent) {
     lv_obj_add_flag(s_screen, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
     g_screens[VIEW_TANKS] = s_screen;
+
+    /* Empty state — config without tanks */
+    if (g_tank_count == 0) {
+        lv_obj_t *panel = lv_obj_create(s_screen);
+        lv_obj_set_size(panel, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(panel, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(panel, 0, 0);
+        lv_obj_set_style_pad_all(panel, 0, 0);
+        lv_obj_set_style_pad_gap(panel, 10, 0);
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(panel, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_center(panel);
+
+        extern const lv_image_dsc_t tank_icon;
+        lv_obj_t *icon = lv_image_create(panel);
+        lv_image_set_src(icon, &tank_icon);
+        lv_obj_set_style_image_recolor(icon, COL_TX3, 0);
+        lv_obj_set_style_image_recolor_opa(icon, LV_OPA_COVER, 0);
+
+        lv_obj_t *title = lv_label_create(panel);
+        lv_label_set_text(title, "No tanks in this configuration");
+        lv_obj_set_style_text_font(title, FONT_SANS_SM, 0);
+        lv_obj_set_style_text_color(title, COL_TX2, 0);
+
+        lv_obj_t *hint = lv_label_create(panel);
+        lv_label_set_text(hint, "Switch config template from the Home screen");
+        lv_obj_set_style_text_font(hint, FONT_MONO_XXS, 0);
+        lv_obj_set_style_text_color(hint, COL_TX3, 0);
+
+        ESP_LOGW(TAG, "tanks page has zero tanks — empty state shown");
+        return;
+    }
 
     lv_obj_set_flex_flow(s_screen, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(s_screen, LV_FLEX_ALIGN_SPACE_EVENLY,
@@ -496,7 +582,7 @@ void ui_tanks_create(lv_obj_t *parent) {
     s_refresh_timer = lv_timer_create(refresh_timer_cb, TANK_REFRESH_MS, NULL);
     lv_timer_pause(s_refresh_timer);
 
-    ESP_LOGI(TAG, "Tanks screen created");
+    ESP_LOGI(TAG, "Tanks screen created (%d tanks)", g_tank_count);
 }
 
 void ui_tanks_activate(void) {

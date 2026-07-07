@@ -1,6 +1,8 @@
-// ui_machines.c — dynamic 2-column scrollable machine card grid (up to MAX_MACHINES).
-// Each card: header (name + type + status dot), body (sparkline, arc gauges,
-// metric tiles), footer (Start/Stop + Pulse buttons).
+// ui_machines.c — dynamic scrollable machine card grid (up to MAX_MACHINES).
+// Each card: header (name + type + status dot), body (sparkline + metric
+// cells sized to fill the card), footer (Start/Stop + live pulse counter).
+// The grid adapts to the machine count: 1 machine = one full-area card,
+// 2 machines = two full-height columns, 3+ = the standard 2×2 grid.
 // Tapping any metric opens ui_push_detail(machine.name, metric.label).
 
 #include "ui_machines.h"
@@ -36,22 +38,22 @@ static void fmt_value(float v, char *buf, size_t n) {
 
 // ─── Grid geometry ────────────────────────────────────────────────────────────
 // Content area: CONTENT_W × CONTENT_H (720 × 584)
-// 2 columns, 2 rows, 10px gap, 14px outer padding
 #define GRID_PAD   14
 #define GRID_GAP   10
-#define CARD_W     ((CONTENT_W - 2 * GRID_PAD - GRID_GAP) / 2)
-#define CARD_H     ((CONTENT_H - 2 * GRID_PAD - GRID_GAP) / 2)
 
 // Card internal layout
 #define HDR_H      56    // header row height
-#define FTR_H      52    // footer row height
-#define BODY_H     (CARD_H - HDR_H - FTR_H - 2) // 2px border lines
+#define FTR_H      48    // footer row height
 #define DOT_D      14    // status dot diameter
-#define ARC_H      60
-#define ARC_W      ARC_H   // must be square: LVGL pins circle at (x1+r, y1+r), not widget center
-#define SPARK_H    40
+#define CELL_GAP    6    // gap between body rows and metric cells
 
-// ─── Persistent widget references (for refresh / pulse) ───────────────────────
+// Card dimensions adapt to the machine count (computed in ui_machines_create)
+static int s_grid_cols = 2;
+static int s_card_w    = 0;
+static int s_card_h    = 0;
+static int s_body_h    = 0;   // card height minus header/footer/borders
+
+// ─── Persistent widget references (for refresh) ───────────────────────────────
 static lv_obj_t *s_screen                  = NULL;
 static lv_obj_t *s_cards[MAX_MACHINES]    = {NULL};
 static lv_obj_t *s_dots[MAX_MACHINES]     = {NULL};  // status dot
@@ -59,8 +61,10 @@ static lv_obj_t *s_toggle_btns[MAX_MACHINES] = {NULL}; // Start/Stop button
 static lv_obj_t *s_toggle_lbls[MAX_MACHINES] = {NULL}; // button label
 static lv_obj_t *s_charts[MAX_MACHINES]   = {NULL};  // sparkline chart
 static lv_chart_series_t *s_series[MAX_MACHINES] = {NULL};
+static lv_obj_t *s_pulse_lbls[MAX_MACHINES] = {NULL}; // footer pulse counter
+static int       s_prev_pulses[MAX_MACHINES];
 
-// Per-machine, per-metric value labels for tile and arc widgets (for live refresh)
+// Per-machine, per-metric value labels and arc widgets (for live refresh)
 static lv_obj_t *s_metric_val_lbls[MAX_MACHINES][MAX_MACH_METRICS] = {{NULL}};
 static lv_obj_t *s_metric_arcs[MAX_MACHINES][MAX_MACH_METRICS]     = {{NULL}};
 static bool      s_last_render_running[MAX_MACHINES];  // last state drawn, skip redundant restyles
@@ -142,8 +146,8 @@ static void ghost_retake(int idx) {
     // Snapshot includes any ext-draw margin — recenter the image on the card
     // slot so a size mismatch cannot shift the ghost.
     lv_obj_set_pos(s_ghost_imgs[idx],
-                   (idx % 2) * (CARD_W + GRID_GAP) - ((int)rgb->header.w - CARD_W) / 2,
-                   (idx / 2) * (CARD_H + GRID_GAP) - ((int)rgb->header.h - CARD_H) / 2);
+                   (idx % s_grid_cols) * (s_card_w + GRID_GAP) - ((int)rgb->header.w - s_card_w) / 2,
+                   (idx / s_grid_cols) * (s_card_h + GRID_GAP) - ((int)rgb->header.h - s_card_h) / 2);
     lv_image_set_src(s_ghost_imgs[idx], rgb);
 
     lv_draw_buf_t *old = s_ghost_bufs[idx];
@@ -185,16 +189,6 @@ static void machines_scroll_end_cb(lv_event_t *e) {
 static void ghost_retake(int idx) { (void)idx; }
 #endif  // UI_SCROLL_GHOSTS
 
-// ─── Flash restore timer callback ────────────────────────────────────────────
-static void flash_restore_cb(lv_timer_t *timer) {
-    int idx = (int)(intptr_t)lv_timer_get_user_data(timer);
-    if (idx >= 0 && idx < MAX_MACHINES && s_cards[idx]) {
-        lv_obj_set_style_bg_color(s_cards[idx], COL_BASE, 0);
-        ghost_retake(idx);
-    }
-    lv_timer_delete(timer);
-}
-
 // ─── Toggle (Start/Stop) callback ─────────────────────────────────────────────
 static void toggle_cb(lv_event_t *e) {
     MachCtx *ctx = (MachCtx *)lv_event_get_user_data(e);
@@ -231,26 +225,7 @@ static void toggle_cb(lv_event_t *e) {
     ghost_retake(idx);
 }
 
-// ─── Pulse callback ───────────────────────────────────────────────────────────
-static void pulse_cb(lv_event_t *e) {
-    MachCtx *ctx = (MachCtx *)lv_event_get_user_data(e);
-    int idx = ctx->machine;
-    Machine *mc = &g_machines[idx];
-
-    DATA_LOCK();
-    mc->pulses++;
-    int pulses = mc->pulses;
-    DATA_UNLOCK();
-    ESP_LOGI(TAG, "Pulse: %s pulses=%d", mc->id, pulses);
-    mqtt_pub_machine_pulse(mc->id, pulses);
-
-    // Brief visual flash: temporarily brighten card bg, restore after 200ms
-    lv_obj_set_style_bg_color(s_cards[idx], COL_HI_LT, 0);
-    lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, (void *)(intptr_t)idx);
-    lv_timer_set_repeat_count(t, 1);
-}
-
-// ─── Metric tile / arc tap callback ──────────────────────────────────────────
+// ─── Metric cell tap callback ─────────────────────────────────────────────────
 static void metric_tap_cb(lv_event_t *e) {
     MetricCtx *ctx = (MetricCtx *)lv_event_get_user_data(e);
     ui_detail_open_machine_metric(ctx->machine, ctx->metric);
@@ -263,126 +238,110 @@ static void update_card_border(int idx) {
     lv_obj_set_style_border_color(s_cards[idx], bd_col, 0);
 }
 
-// ─── Build one metric tile (for non-SPARK, non-ARC metrics) ──────────────────
-static void build_metric_tile(lv_obj_t *parent, int midx, int kidx, Metric *m) {
-    lv_obj_t *tile = lv_obj_create(parent);
-    lv_obj_set_height(tile, LV_PCT(100));   // fill the tile_row height
-    lv_obj_set_flex_grow(tile, 1);
-    lv_obj_set_style_bg_color(tile, COL_BASE2, 0);
-    lv_obj_set_style_border_color(tile, COL_BD, 0);
-    lv_obj_set_style_border_width(tile, 1, 0);
-    lv_obj_set_style_radius(tile, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_hor(tile, 8, 0);
-    lv_obj_set_style_pad_ver(tile, 4, 0);
-    lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(tile, 2, 0);
-    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+// ─── Build one metric cell (arc gauge or key/value tile) ──────────────────────
+// Cells share a row and grow equally, so the body is filled edge-to-edge no
+// matter how many metrics the machine has; the arc diameter and value fonts
+// scale with the space the cell actually gets.
+static void build_metric_cell(lv_obj_t *parent, int midx, int kidx, Metric *m,
+                              int cell_h, int cell_w) {
+    lv_obj_t *cell = lv_obj_create(parent);
+    lv_obj_set_height(cell, LV_PCT(100));
+    lv_obj_set_flex_grow(cell, 1);
+    lv_obj_set_style_bg_color(cell, COL_BASE2, 0);
+    lv_obj_set_style_border_color(cell, COL_BD, 0);
+    lv_obj_set_style_border_width(cell, 1, 0);
+    lv_obj_set_style_radius(cell, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_hor(cell, 6, 0);
+    lv_obj_set_style_pad_ver(cell, 5, 0);
+    lv_obj_set_flex_flow(cell, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(cell, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(cell, 2, 0);
+    lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Key label (uppercase)
+    // Key label (uppercase, dotted when the cell is narrow)
     char up_key[32];
     to_upper_str(m->label, up_key, 32);
-    lv_obj_t *key_lbl = lv_label_create(tile);
+    lv_obj_t *key_lbl = lv_label_create(cell);
     lv_label_set_text(key_lbl, up_key);
     lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
+    lv_obj_set_width(key_lbl, LV_PCT(100));
+    lv_obj_set_style_text_align(key_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(key_lbl, LV_LABEL_LONG_DOT);
 
-    // Value label (smart decimal, threshold color)
-    lv_color_t val_col = lv_color_hex(metric_color(m));
-    lv_obj_t *val_lbl = lv_label_create(tile);
-    char val_str[32];
-    fmt_value(m->value, val_str, sizeof(val_str));
-    lv_label_set_text(val_lbl, val_str);
-    lv_obj_set_style_text_font(val_lbl, FONT_SANS_SM, 0);
-    lv_obj_set_style_text_color(val_lbl, val_col, 0);
+    lv_obj_t *val_lbl = NULL;
 
-    // Unit label (small gray, separate line)
-    lv_obj_t *unit_lbl = lv_label_create(tile);
-    lv_label_set_text(unit_lbl, m->unit);
-    lv_obj_set_style_text_font(unit_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(unit_lbl, COL_TX3, 0);
+    if (m->viz == VIZ_ARC) {
+        lv_color_t arc_col = lv_color_hex(metric_color(m));
+
+        // Diameter: whatever fits below the key label, capped by cell width
+        int d = cell_h - 18 - 14;               // key label + pads
+        if (d > cell_w - 16) d = cell_w - 16;
+        if (d > 140) d = 140;
+        if (d < 24)  d = 24;
+
+        lv_obj_t *arc = lv_arc_create(cell);
+        lv_obj_set_size(arc, d, d);
+        lv_arc_set_mode(arc, LV_ARC_MODE_NORMAL);
+        lv_arc_set_bg_angles(arc, 135, 45);   // 270° sweep
+        lv_arc_set_range(arc, (int32_t)m->min_val, (int32_t)m->max_val);
+        lv_arc_set_value(arc, (int32_t)m->value);
+
+        lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(arc, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
+        lv_obj_set_style_arc_color(arc, lv_color_hex(0xE0E4EF), LV_PART_MAIN);
+        lv_obj_set_style_arc_width(arc, d >= 90 ? 10 : 7, LV_PART_MAIN);
+
+        lv_obj_set_style_arc_color(arc, arc_col, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(arc, d >= 90 ? 10 : 7, LV_PART_INDICATOR);
+
+        lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
+        lv_obj_set_style_pad_all(arc, 0, LV_PART_KNOB);
+
+        lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+
+        // Value label centered inside the arc (no unit)
+        val_lbl = lv_label_create(arc);
+        char val_str[24];
+        fmt_value(m->value, val_str, sizeof(val_str));
+        lv_label_set_text(val_lbl, val_str);
+        lv_obj_set_style_text_font(val_lbl, d >= 90 ? FONT_SANS_SM : FONT_MONO_XXS, 0);
+        lv_obj_set_style_text_color(val_lbl, arc_col, 0);
+        lv_obj_center(val_lbl);
+
+        if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS)
+            s_metric_arcs[midx][kidx] = arc;
+    } else {
+        // Value label (smart decimal, threshold color)
+        lv_color_t val_col = lv_color_hex(metric_color(m));
+        val_lbl = lv_label_create(cell);
+        char val_str[32];
+        fmt_value(m->value, val_str, sizeof(val_str));
+        lv_label_set_text(val_lbl, val_str);
+        lv_obj_set_style_text_font(val_lbl,
+            cell_h >= 110 ? FONT_SANS_MD : FONT_SANS_SM, 0);
+        lv_obj_set_style_text_color(val_lbl, val_col, 0);
+
+        // Unit label (small gray)
+        if (m->unit[0]) {
+            lv_obj_t *unit_lbl = lv_label_create(cell);
+            lv_label_set_text(unit_lbl, m->unit);
+            lv_obj_set_style_text_font(unit_lbl, FONT_MONO_XXS, 0);
+            lv_obj_set_style_text_color(unit_lbl, COL_TX3, 0);
+        }
+    }
 
     // Tap to open detail
-    lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(cell, LV_OBJ_FLAG_CLICKABLE);
     MetricCtx *ctx = malloc(sizeof(MetricCtx));
     ctx->machine = midx;
     ctx->metric  = kidx;
-    lv_obj_add_event_cb(tile, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
+    lv_obj_add_event_cb(cell, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
 
-    // Store val_lbl for live refresh (child index 1 = val_lbl after key_lbl)
     if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS)
         s_metric_val_lbls[midx][kidx] = val_lbl;
-}
-
-// ─── Build arc gauge widget for one VIZ_ARC metric ───────────────────────────
-static void build_arc_widget(lv_obj_t *parent, int midx, int kidx, Metric *m) {
-    lv_color_t arc_col = lv_color_hex(metric_color(m));
-
-    lv_obj_t *cont = lv_obj_create(parent);
-    lv_obj_set_height(cont, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(cont, COL_BASE2, 0);
-    lv_obj_set_style_border_width(cont, 1, 0);
-    lv_obj_set_style_border_color(cont, COL_BD, 0);
-    lv_obj_set_style_radius(cont, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(cont, 6, 0);
-    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_START,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(cont, 2, 0);
-    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Key label above arc — full label, uppercase
-    char abbrev[32];
-    to_upper_str(m->label, abbrev, 32);
-    lv_obj_t *key_lbl = lv_label_create(cont);
-    lv_label_set_text(key_lbl, abbrev);
-    lv_obj_set_style_text_font(key_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(key_lbl, COL_TX3, 0);
-
-    // Arc widget
-    lv_obj_t *arc = lv_arc_create(cont);
-    lv_obj_set_size(arc, ARC_W, ARC_H);
-    lv_arc_set_mode(arc, LV_ARC_MODE_NORMAL);
-    lv_arc_set_bg_angles(arc, 135, 45);   // 270° sweep
-    lv_arc_set_range(arc, (int16_t)m->min_val, (int16_t)m->max_val);
-    lv_arc_set_value(arc, (int16_t)m->value);
-
-    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(arc, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(arc, lv_color_hex(0xE0E4EF), LV_PART_MAIN);
-    lv_obj_set_style_arc_width(arc, 7, LV_PART_MAIN);
-
-    lv_obj_set_style_arc_color(arc, arc_col, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_width(arc, 7, LV_PART_INDICATOR);
-
-    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_pad_all(arc, 0, LV_PART_KNOB);
-
-    lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-
-    // Value label centered inside the arc (no unit)
-    lv_obj_t *val_lbl = lv_label_create(arc);
-    char val_str[24];
-    snprintf(val_str, sizeof(val_str), "%.0f", m->value);
-    lv_label_set_text(val_lbl, val_str);
-    lv_obj_set_style_text_font(val_lbl, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(val_lbl, arc_col, 0);
-    lv_obj_center(val_lbl);
-
-    // Make container tappable → open detail
-    lv_obj_add_flag(cont, LV_OBJ_FLAG_CLICKABLE);
-    MetricCtx *ctx = malloc(sizeof(MetricCtx));
-    ctx->machine = midx;
-    ctx->metric  = kidx;
-    lv_obj_add_event_cb(cont, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
-
-    // Store arc widget and val_lbl for live refresh
-    if (midx < MAX_MACHINES && kidx < MAX_MACH_METRICS) {
-        s_metric_arcs[midx][kidx]     = arc;
-        s_metric_val_lbls[midx][kidx] = val_lbl;
-    }
 }
 
 // ─── Build one machine card ────────────────────────────────────────────────────
@@ -390,13 +349,13 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     Machine *mc = &g_machines[idx];
 
     // ── Card shell ────────────────────────────────────────────────────────────
-    // Cards are positioned absolutely (2-column grid). Flex ROW_WRAP is
+    // Cards are positioned absolutely (fixed grid). Flex ROW_WRAP is
     // deliberately NOT used: flex skips LV_OBJ_FLAG_HIDDEN children, so the
     // scroll-culling in apply_card_visibility() would reflow the whole grid.
     lv_obj_t *card = lv_obj_create(grid);
-    lv_obj_set_size(card, CARD_W, CARD_H);
-    lv_obj_set_pos(card, (idx % 2) * (CARD_W + GRID_GAP),
-                         (idx / 2) * (CARD_H + GRID_GAP));
+    lv_obj_set_size(card, s_card_w, s_card_h);
+    lv_obj_set_pos(card, (idx % s_grid_cols) * (s_card_w + GRID_GAP),
+                         (idx / s_grid_cols) * (s_card_h + GRID_GAP));
     lv_obj_set_style_bg_color(card, COL_BASE, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_border_color(card,
@@ -417,12 +376,11 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_t *hdr = lv_obj_create(card);
     lv_obj_set_size(hdr, LV_PCT(100), HDR_H);
     lv_obj_set_style_bg_opa(hdr, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(hdr, 0, 0);
     lv_obj_set_style_border_side(hdr, LV_BORDER_SIDE_BOTTOM, 0);
     lv_obj_set_style_border_color(hdr, COL_BD, 0);
     lv_obj_set_style_border_width(hdr, 1, 0);
     lv_obj_set_style_pad_hor(hdr, 12, 0);
-    lv_obj_set_style_pad_ver(hdr, 8, 0);
+    lv_obj_set_style_pad_ver(hdr, 6, 0);
     lv_obj_clear_flag(hdr, LV_OBJ_FLAG_SCROLLABLE);
 
     // Row layout: name+type column on left, dot on right
@@ -439,12 +397,12 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_flex_flow(title_col, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(title_col, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_gap(title_col, 2, 0);
+    lv_obj_set_style_pad_gap(title_col, 0, 0);
     lv_obj_clear_flag(title_col, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *name_lbl = lv_label_create(title_col);
     lv_label_set_text(name_lbl, mc->name);
-    lv_obj_set_style_text_font(name_lbl, FONT_SANS_MD, 0);
+    lv_obj_set_style_text_font(name_lbl, FONT_SANS_SM, 0);
     lv_obj_set_style_text_color(name_lbl, COL_TX, 0);
 
     lv_obj_t *type_lbl = lv_label_create(title_col);
@@ -462,18 +420,26 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
     // ── Body ──────────────────────────────────────────────────────────────────
     lv_obj_t *body = lv_obj_create(card);
-    lv_obj_set_size(body, LV_PCT(100), BODY_H);
+    lv_obj_set_size(body, LV_PCT(100), s_body_h);
     lv_obj_set_style_bg_opa(body, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(body, 0, 0);
     lv_obj_set_style_pad_hor(body, 10, 0);
-    lv_obj_set_style_pad_ver(body, 4, 0);
+    lv_obj_set_style_pad_ver(body, 6, 0);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START,
                           LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(body, 4, 0);
+    lv_obj_set_style_pad_gap(body, CELL_GAP, 0);
     lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
 
-    // ── Sparkline (first VIZ_SPARK metric with history) ──────────────────────
+    // ── Deterministic fill layout ─────────────────────────────────────────────
+    // The body height is known, so the sparkline strip and the metric cell
+    // rows split it exactly — a card with two metrics fills the same area as
+    // a card with five, just with larger widgets.
+    int inner_w = s_card_w - 4 - 20;   // card border 2×2 + body pad_hor 10×2
+    int inner_h = s_body_h - 12;       // body pad_ver 6×2
+
+    // First VIZ_SPARK metric with history becomes the sparkline strip;
+    // every other metric becomes a cell (arc for VIZ_ARC, tile otherwise).
     int spark_idx = -1;
     for (int k = 0; k < mc->metric_count; k++) {
         if (mc->metrics[k].viz == VIZ_SPARK && mc->metrics[k].history_len > 0) {
@@ -481,15 +447,29 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
             break;
         }
     }
+    int n_cells = 0;
+    for (int k = 0; k < mc->metric_count; k++)
+        if (k != spark_idx) n_cells++;
 
+    int spark_h = 0, cells_h = 0;
+    if (spark_idx >= 0 && n_cells > 0) {
+        spark_h = inner_h * 2 / 5;
+        if (spark_h < 64)  spark_h = 64;
+        if (spark_h > 132) spark_h = 132;
+        cells_h = inner_h - spark_h - CELL_GAP;
+    } else if (spark_idx >= 0) {
+        spark_h = inner_h;             // sparkline-only machine: full body
+    } else {
+        cells_h = inner_h;             // no sparkline: cells get everything
+    }
+
+    // ── Sparkline strip ───────────────────────────────────────────────────────
     if (spark_idx >= 0) {
         Metric *sm = &mc->metrics[spark_idx];
         lv_color_t spark_col = sm->color ? lv_color_hex(sm->color) : COL_HI;
 
-        // spark_box: column container with card background
         lv_obj_t *spark_box = lv_obj_create(body);
-        lv_obj_set_width(spark_box, LV_PCT(100));
-        lv_obj_set_height(spark_box, LV_SIZE_CONTENT);
+        lv_obj_set_size(spark_box, LV_PCT(100), spark_h);
         lv_obj_set_style_bg_color(spark_box, COL_BASE2, 0);
         lv_obj_set_style_border_width(spark_box, 1, 0);
         lv_obj_set_style_border_color(spark_box, COL_BD, 0);
@@ -520,14 +500,20 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
 
         lv_obj_t *cur_lbl = lv_label_create(spark_hdr);
         char val_str[20];
-        snprintf(val_str, sizeof(val_str), "%.0f", sm->value);
+        fmt_value(sm->value, val_str, sizeof(val_str));
         lv_label_set_text(cur_lbl, val_str);
         lv_obj_set_style_text_font(cur_lbl, FONT_SANS_SM, 0);
         lv_obj_set_style_text_color(cur_lbl, spark_col, 0);
 
-        // Chart — full width, fixed height
+        // Live refresh updates this label like any other metric value
+        if (idx < MAX_MACHINES && spark_idx < MAX_MACH_METRICS)
+            s_metric_val_lbls[idx][spark_idx] = cur_lbl;
+
+        // Chart — full width, fills the strip below the header row
+        int chart_h = spark_h - 30;    // pads 8 + header 20 + gap 2
+        if (chart_h < 24) chart_h = 24;
         lv_obj_t *chart = lv_chart_create(spark_box);
-        lv_obj_set_size(chart, LV_PCT(100), SPARK_H);
+        lv_obj_set_size(chart, LV_PCT(100), chart_h);
         lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
         lv_chart_set_point_count(chart, HISTORY_LEN);
         lv_chart_set_div_line_count(chart, 0, 0);
@@ -554,57 +540,31 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
         lv_obj_add_event_cb(spark_box, metric_tap_cb, LV_EVENT_SHORT_CLICKED, ctx);
     }
 
-    // ── Arc gauges row ────────────────────────────────────────────────────────
-    // Count VIZ_ARC metrics
-    int arc_count = 0;
-    for (int k = 0; k < mc->metric_count; k++) {
-        if (mc->metrics[k].viz == VIZ_ARC) arc_count++;
-    }
+    // ── Metric cell rows ──────────────────────────────────────────────────────
+    if (n_cells > 0) {
+        int rows    = (n_cells > 4) ? 2 : 1;   // >4 metrics: wrap into two rows
+        int per_row = (n_cells + rows - 1) / rows;
+        int row_h   = (rows == 1) ? cells_h : (cells_h - CELL_GAP) / 2;
+        int cell_w  = (inner_w - (per_row - 1) * CELL_GAP) / per_row;
 
-    if (arc_count > 0) {
-        lv_obj_t *arc_row = lv_obj_create(body);
-        lv_obj_set_size(arc_row, LV_PCT(100), LV_SIZE_CONTENT);
-        lv_obj_set_style_bg_opa(arc_row, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(arc_row, 0, 0);
-        lv_obj_set_style_pad_all(arc_row, 0, 0);
-        lv_obj_set_flex_flow(arc_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(arc_row, LV_FLEX_ALIGN_SPACE_EVENLY,
-                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(arc_row, 8, 0);
-        lv_obj_clear_flag(arc_row, LV_OBJ_FLAG_SCROLLABLE);
-
+        lv_obj_t *row = NULL;
+        int built = 0;
         for (int k = 0; k < mc->metric_count; k++) {
-            if (mc->metrics[k].viz == VIZ_ARC) {
-                build_arc_widget(arc_row, idx, k, &mc->metrics[k]);
+            if (k == spark_idx) continue;
+            if (built % per_row == 0) {
+                row = lv_obj_create(body);
+                lv_obj_set_size(row, LV_PCT(100), row_h);
+                lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+                lv_obj_set_style_border_width(row, 0, 0);
+                lv_obj_set_style_pad_all(row, 0, 0);
+                lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+                lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START,
+                                      LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+                lv_obj_set_style_pad_gap(row, CELL_GAP, 0);
+                lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
             }
-        }
-    }
-
-    // ── Tile metrics row (non-SPARK, non-ARC) ─────────────────────────────────
-    int tile_count = 0;
-    for (int k = 0; k < mc->metric_count; k++) {
-        VizType v = mc->metrics[k].viz;
-        if (v != VIZ_SPARK && v != VIZ_ARC) tile_count++;
-    }
-
-    if (tile_count > 0) {
-        lv_obj_t *tile_row = lv_obj_create(body);
-        lv_obj_set_size(tile_row, LV_PCT(100), LV_SIZE_CONTENT);
-        lv_obj_set_flex_grow(tile_row, 1);
-        lv_obj_set_style_bg_opa(tile_row, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(tile_row, 0, 0);
-        lv_obj_set_style_pad_all(tile_row, 0, 0);
-        lv_obj_set_flex_flow(tile_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(tile_row, LV_FLEX_ALIGN_START,
-                              LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(tile_row, 6, 0);
-        lv_obj_clear_flag(tile_row, LV_OBJ_FLAG_SCROLLABLE);
-
-        for (int k = 0; k < mc->metric_count; k++) {
-            VizType v = mc->metrics[k].viz;
-            if (v != VIZ_SPARK && v != VIZ_ARC) {
-                build_metric_tile(tile_row, idx, k, &mc->metrics[k]);
-            }
+            build_metric_cell(row, idx, k, &mc->metrics[k], row_h, cell_w);
+            built++;
         }
     }
 
@@ -612,7 +572,6 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_t *ftr = lv_obj_create(card);
     lv_obj_set_size(ftr, LV_PCT(100), FTR_H);
     lv_obj_set_style_bg_opa(ftr, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(ftr, 0, 0);
     lv_obj_set_style_border_side(ftr, LV_BORDER_SIDE_TOP, 0);
     lv_obj_set_style_border_color(ftr, COL_BD, 0);
     lv_obj_set_style_border_width(ftr, 1, 0);
@@ -624,14 +583,10 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     lv_obj_set_style_pad_gap(ftr, 8, 0);
     lv_obj_clear_flag(ftr, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Allocate persistent MachCtx (one per machine, reused by both buttons)
+    // Stop / Start button — fills the footer
     MachCtx *mctx = malloc(sizeof(MachCtx));
     mctx->machine = idx;
 
-    MachCtx *mctx2 = malloc(sizeof(MachCtx));
-    mctx2->machine = idx;
-
-    // Stop / Start button
     lv_obj_t *tog_btn = lv_obj_create(ftr);
     lv_obj_set_size(tog_btn, LV_SIZE_CONTENT, FTR_H - 12);
     lv_obj_set_style_radius(tog_btn, SZ_RADIUS_SM, 0);
@@ -661,33 +616,33 @@ static void build_machine_card(lv_obj_t *grid, int idx) {
     s_toggle_btns[idx] = tog_btn;
     s_toggle_lbls[idx] = tog_lbl;
 
-    // Pulse button (ghost style)
-    lv_obj_t *pulse_btn = lv_obj_create(ftr);
-    lv_obj_set_size(pulse_btn, LV_SIZE_CONTENT, FTR_H - 12);
-    lv_obj_set_flex_grow(pulse_btn, 1);
-    lv_obj_set_style_bg_color(pulse_btn, COL_BASE, 0);
-    lv_obj_set_style_border_color(pulse_btn, COL_BD_STR, 0);
-    lv_obj_set_style_border_width(pulse_btn, 1, 0);
-    lv_obj_set_style_radius(pulse_btn, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_hor(pulse_btn, 14, 0);
-    lv_obj_set_style_pad_ver(pulse_btn, 0, 0);
-    lv_obj_clear_flag(pulse_btn, LV_OBJ_FLAG_SCROLLABLE);
+    // Pulse counter — production count published to MQTT
+    // (factory/machines/<id>/pulses); auto_pulse machines tick it up live.
+    lv_obj_t *pulse_pill = lv_obj_create(ftr);
+    lv_obj_set_size(pulse_pill, LV_SIZE_CONTENT, FTR_H - 12);
+    lv_obj_set_style_bg_color(pulse_pill, COL_BASE2, 0);
+    lv_obj_set_style_border_color(pulse_pill, COL_BD, 0);
+    lv_obj_set_style_border_width(pulse_pill, 1, 0);
+    lv_obj_set_style_radius(pulse_pill, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_hor(pulse_pill, 10, 0);
+    lv_obj_set_style_pad_ver(pulse_pill, 0, 0);
+    lv_obj_clear_flag(pulse_pill, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
-    lv_obj_t *pulse_lbl = lv_label_create(pulse_btn);
-    lv_label_set_text(pulse_lbl, "Pulse");
-    lv_obj_set_style_text_font(pulse_lbl, FONT_SANS_XS, 0);
+    lv_obj_t *pulse_lbl = lv_label_create(pulse_pill);
+    lv_label_set_text_fmt(pulse_lbl, "%d pulses", mc->pulses);
+    lv_obj_set_style_text_font(pulse_lbl, FONT_MONO_XXS, 0);
     lv_obj_set_style_text_color(pulse_lbl, COL_TX2, 0);
     lv_obj_center(pulse_lbl);
 
-    lv_obj_add_flag(pulse_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(pulse_btn, pulse_cb, LV_EVENT_SHORT_CLICKED, mctx2);
+    s_pulse_lbls[idx]  = pulse_lbl;
+    s_prev_pulses[idx] = mc->pulses;
 
 #if UI_SCROLL_GHOSTS
     // Image proxy shown in place of the card during scroll gestures. Same slot
     // position; pixels arrive via ghost_retake() once the card has a layout.
     lv_obj_t *ghost = lv_image_create(grid);
-    lv_obj_set_pos(ghost, (idx % 2) * (CARD_W + GRID_GAP),
-                          (idx / 2) * (CARD_H + GRID_GAP));
+    lv_obj_set_pos(ghost, (idx % s_grid_cols) * (s_card_w + GRID_GAP),
+                          (idx / s_grid_cols) * (s_card_h + GRID_GAP));
     lv_obj_add_flag(ghost, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(ghost, LV_OBJ_FLAG_CLICKABLE);
     s_ghost_imgs[idx] = ghost;
@@ -761,12 +716,52 @@ void ui_machines_create(lv_obj_t *parent) {
     lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLL_ELASTIC);
     g_screens[VIEW_MACHINES] = s_screen;
 
-    // Scrollable 2-column grid (up to MAX_MACHINES cards). Cards are placed at
-    // fixed coordinates — no flex — so hiding off-screen cards never reflows
-    // the layout (flex skips hidden children; see build_machine_card).
-    int rows = (g_machine_count + 1) / 2;
-    int grid_h = rows > 0 ? rows * CARD_H + (rows - 1) * GRID_GAP : 0;
+    // ── Empty state — config without machines ────────────────────────────────
+    if (g_machine_count == 0) {
+        lv_obj_t *panel = lv_obj_create(s_screen);
+        lv_obj_set_size(panel, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(panel, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(panel, 0, 0);
+        lv_obj_set_style_pad_all(panel, 0, 0);
+        lv_obj_set_style_pad_gap(panel, 10, 0);
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(panel, LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_center(panel);
 
+        lv_obj_t *icon = lv_label_create(panel);
+        lv_label_set_text(icon, LV_SYMBOL_SETTINGS);
+        lv_obj_set_style_text_font(icon, FONT_SANS_XL, 0);
+        lv_obj_set_style_text_color(icon, COL_TX3, 0);
+
+        lv_obj_t *title = lv_label_create(panel);
+        lv_label_set_text(title, "No machines in this configuration");
+        lv_obj_set_style_text_font(title, FONT_SANS_SM, 0);
+        lv_obj_set_style_text_color(title, COL_TX2, 0);
+
+        lv_obj_t *hint = lv_label_create(panel);
+        lv_label_set_text(hint, "Switch config template from the Home screen");
+        lv_obj_set_style_text_font(hint, FONT_MONO_XXS, 0);
+        lv_obj_set_style_text_color(hint, COL_TX3, 0);
+
+        ESP_LOGW(TAG, "machines page has zero cards — empty state shown");
+        return;
+    }
+
+    // ── Grid geometry — adapt card size to the machine count ─────────────────
+    s_grid_cols  = (g_machine_count <= 1) ? 1 : 2;
+    int vis_rows = (g_machine_count <= 2) ? 1 : 2;
+    s_card_w = (CONTENT_W - 2 * GRID_PAD - (s_grid_cols - 1) * GRID_GAP) / s_grid_cols;
+    s_card_h = (CONTENT_H - 2 * GRID_PAD - (vis_rows - 1) * GRID_GAP) / vis_rows;
+    s_body_h = s_card_h - HDR_H - FTR_H - 4;   // 4 = card border top+bottom
+
+    int rows_total = (g_machine_count + s_grid_cols - 1) / s_grid_cols;
+    int grid_h = rows_total * s_card_h + (rows_total - 1) * GRID_GAP;
+
+    // Scrollable card grid. Cards are placed at fixed coordinates — no flex —
+    // so hiding off-screen cards never reflows the layout (flex skips hidden
+    // children; see build_machine_card).
     lv_obj_t *grid = lv_obj_create(s_screen);
     lv_obj_set_size(grid, CONTENT_W - 2 * GRID_PAD, grid_h + GRID_PAD);
     lv_obj_set_pos(grid, GRID_PAD, GRID_PAD);
@@ -798,8 +793,8 @@ void ui_machines_create(lv_obj_t *parent) {
     // once the screen is actually laid out on the display. Running it here,
     // while the screen is still LV_OBJ_FLAG_HIDDEN, would hide every card
     // permanently (zero-extent coords → nothing tests in-view).
-    ESP_LOGI(TAG, "machines page: built %d cards", g_machine_count);
-    if (g_machine_count == 0) ESP_LOGW(TAG, "machines page has zero cards — config not loaded?");
+    ESP_LOGI(TAG, "machines page: built %d cards (%dx%d px, %d col)",
+             g_machine_count, s_card_w, s_card_h, s_grid_cols);
 }
 
 // ─── Public: called from ui_main on view enter ───────────────────────────────
@@ -834,6 +829,7 @@ void ui_machines_activate(void) {
 // so the sim task never blocks on LVGL work.
 typedef struct {
     bool     running;
+    int      pulses;
     int      metric_count;
     float    value[MAX_MACH_METRICS];
     uint32_t color[MAX_MACH_METRICS];
@@ -858,6 +854,7 @@ void ui_machines_refresh(void) {
         Machine  *mc = &g_machines[i];
         MachSnap *s  = &snap[i];
         s->running      = mc->running;
+        s->pulses       = mc->pulses;
         s->metric_count = mc->metric_count < MAX_MACH_METRICS
                         ? mc->metric_count : MAX_MACH_METRICS;
         s->spark_idx    = -1;
@@ -903,6 +900,13 @@ void ui_machines_refresh(void) {
             card_changed[i] = true;
         }
 
+        // Pulse counter — only redraw when the count moved
+        if (s_pulse_lbls[i] && s->pulses != s_prev_pulses[i]) {
+            s_prev_pulses[i] = s->pulses;
+            lv_label_set_text_fmt(s_pulse_lbls[i], "%d pulses", s->pulses);
+            card_changed[i] = true;
+        }
+
         // Push new sparkline point if chart exists
         if (s_charts[i] && s_series[i] && s->spark_idx >= 0) {
             lv_chart_set_next_value(s_charts[i], s_series[i],
@@ -911,7 +915,7 @@ void ui_machines_refresh(void) {
             card_changed[i] = true;
         }
 
-        // Update tile val labels and arc widgets — but only for metrics whose
+        // Update value labels and arc widgets — but only for metrics whose
         // value or threshold color actually moved since the last render, so an
         // idle tick doesn't restyle and invalidate every widget on screen
         for (int k = 0; k < s->metric_count; k++) {
@@ -932,7 +936,7 @@ void ui_machines_refresh(void) {
             }
             lv_obj_t *arc = s_metric_arcs[i][k];
             if (arc) {
-                lv_arc_set_value(arc, (int16_t)s->value[k]);
+                lv_arc_set_value(arc, (int32_t)s->value[k]);
                 card_changed[i] = true;
             }
         }
@@ -947,25 +951,4 @@ void ui_machines_refresh(void) {
 #else
     (void)card_changed;
 #endif
-}
-
-// ─── Public: pulse the first running machine ──────────────────────────────────
-void ui_machines_pulse_first(void) {
-    for (int i = 0; i < g_machine_count; i++) {
-        if (g_machines[i].running) {
-            DATA_LOCK();
-            g_machines[i].pulses++;
-            int pulses = g_machines[i].pulses;
-            DATA_UNLOCK();
-            ESP_LOGI(TAG, "Pulse: %s pulses=%d", g_machines[i].id, pulses);
-
-            // Flash card background briefly
-            if (s_cards[i]) {
-                lv_obj_set_style_bg_color(s_cards[i], COL_HI_LT, 0);
-                lv_timer_t *t = lv_timer_create(flash_restore_cb, 200, (void *)(intptr_t)i);
-                lv_timer_set_repeat_count(t, 1);
-            }
-            return;
-        }
-    }
 }

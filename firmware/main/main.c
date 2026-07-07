@@ -11,6 +11,7 @@
 #include "ui/data.h"
 #include "config.h"
 #include "config_loader.h"
+#include "config_store.h"
 #include "wifi_manager.h"
 #include "mqtt_task.h"
 #include "sim_task.h"
@@ -96,6 +97,7 @@ void app_main(void) {
     // Load config from SD (or fall back to embedded defaults)
     ConfigResult cr = config_load();
     ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
+    config_store_init();   // template store lock (portal + Configuration screen)
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),

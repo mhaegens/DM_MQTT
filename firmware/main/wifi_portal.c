@@ -4,20 +4,16 @@
 #include "ui/ui_wifi_setup.h"
 #include "config.h"
 #include "config_loader.h"
+#include "config_store.h"
 #include "esp_http_server.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_system.h"
-#include "esp_vfs_fat.h"
-#include "esp_spiffs.h"
-#include "driver/sdmmc_host.h"
-#include "sdmmc_cmd.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
 #include "lwip/sockets.h"
-#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -29,67 +25,9 @@ static httpd_handle_t s_server          = NULL;
 static TimerHandle_t  s_stop_timer      = NULL;
 static bool           s_portal_connecting = false;
 
-// ─── Config store helpers ─────────────────────────────────────────────────────
-// Active config lives in two places: SPIFFS (always present, factory image +
-// uploads) and the SD card (external override — it outranks SPIFFS at boot,
-// see config_loader.c). Every write targets both so whichever store wins at
-// the next boot carries the latest upload.
-
-#define PORTAL_SD_CONFIG_PATH     "/sdcard/sapdm_config.json"
-#define PORTAL_SPIFFS_CONFIG_PATH "/spiffs/sapdm_config.json"
+// SPIFFS/SD access and active-config persistence live in config_store.c —
+// shared with the on-device Configuration screen so both behave identically.
 #define PORTAL_JSON_MAX           (32 * 1024)
-
-static sdmmc_card_t *s_card = NULL;
-
-// SPIFFS is registered (and left mounted) by config_load() at boot; re-register
-// here only if that failed, e.g. after a flash erase without a SPIFFS image.
-static bool portal_spiffs_ready(void)
-{
-    if (esp_spiffs_mounted("spiffs")) return true;
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = "/spiffs",
-        .partition_label = "spiffs",
-        .max_files = 4,
-        .format_if_mount_failed = false,
-    };
-    return esp_vfs_spiffs_register(&conf) == ESP_OK;
-}
-
-static bool portal_sd_mount(void) {
-    if (s_card) return true;
-    sdmmc_host_t host        = SDMMC_HOST_DEFAULT();
-    // CRITICAL: ESP-Hosted C6 Wi-Fi bridge owns SDMMC slot 1 (SDIO 4-bit).
-    // SDMMC_HOST_DEFAULT() picks slot 1 on P4 by default — mounting the SD card
-    // there yanks the Wi-Fi bus mid-transaction and panics. The BSP puts the
-    // SD card on slot 0; both sockets have to be explicit.
-    host.slot                = SDMMC_HOST_SLOT_0;
-    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot.width = 4;
-    slot.clk   = GPIO_SD_CLK;
-    slot.cmd   = GPIO_SD_CMD;
-    slot.d0    = GPIO_SD_D0;
-    slot.d1    = GPIO_SD_D1;
-    slot.d2    = GPIO_SD_D2;
-    slot.d3    = GPIO_SD_D3;
-    esp_vfs_fat_sdmmc_mount_config_t cfg = {
-        .format_if_mount_failed = false,
-        .max_files = 4,
-        .allocation_unit_size = 16 * 1024,
-    };
-    esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &cfg, &s_card);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "SD mount failed: %s", esp_err_to_name(err));
-        s_card = NULL;
-        return false;
-    }
-    return true;
-}
-
-static void portal_sd_unmount(void) {
-    if (!s_card) return;
-    esp_vfs_fat_sdcard_unmount("/sdcard", s_card);
-    s_card = NULL;
-}
 
 // ─── DNS hijack ───────────────────────────────────────────────────────────────
 
@@ -526,46 +464,6 @@ static esp_err_t redirect_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-// ─── Active-config write (shared by /upload-config and /set-config) ──────────
-
-static bool write_whole_file(const char *path, const char *data, int len)
-{
-    FILE *f = fopen(path, "w");
-    if (!f) return false;
-    bool ok = (fwrite(data, 1, len, f) == (size_t)len);
-    fclose(f);
-    return ok;
-}
-
-// Persist a validated config blob as the active config in both stores.
-// Returns NULL on success, or a static error string for the HTTP response.
-static const char *save_active_config(const char *data, int len)
-{
-    bool spiffs_saved = portal_spiffs_ready() &&
-                        write_whole_file(PORTAL_SPIFFS_CONFIG_PATH, data, len);
-
-    bool sd_present = portal_sd_mount();
-    bool sd_saved   = false;
-    if (sd_present) {
-        sd_saved = write_whole_file(PORTAL_SD_CONFIG_PATH, data, len);
-        portal_sd_unmount();
-    }
-
-    // An inserted SD card outranks SPIFFS at boot — if it exists but could not
-    // be written, the stale card config would mask this upload. Fail loudly.
-    if (sd_present && !sd_saved) {
-        return spiffs_saved
-            ? "Saved to flash, but the inserted SD card failed to write - remove or replace the card, then retry"
-            : "Cannot write config to SD card or flash";
-    }
-    if (!spiffs_saved && !sd_saved)
-        return "Cannot save config (flash and SD card both unavailable)";
-
-    ESP_LOGI(TAG, "active config saved (%d bytes, spiffs=%d sd=%d)",
-             len, spiffs_saved, sd_saved);
-    return NULL;
-}
-
 // ─── POST /upload-config ──────────────────────────────────────────────────────
 
 static esp_err_t post_upload_config_handler(httpd_req_t *req)
@@ -595,7 +493,7 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    const char *save_err = save_active_config(body, received);
+    const char *save_err = config_store_save_active(body, received);
     free(body);
     if (save_err) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
@@ -615,64 +513,36 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
 
 #define LIST_BUF_CAP 2048
 
-// Append every *.json in dirpath to the JSON array in buf as
-// {"name":...,"src":...,"active":...}. Returns the new write position.
-static int list_json_dir(const char *dirpath, const char *src_tag,
-                         char *buf, int pos, bool *first)
-{
-    DIR *dir = opendir(dirpath);
-    if (!dir) return pos;
-
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // FAT VFS always returns DT_UNKNOWN — filter by .json extension only
-        const char *name = entry->d_name;
-        size_t nlen = strlen(name);
-        if (nlen < 5 || strcasecmp(name + nlen - 5, ".json") != 0) continue;
-        if (pos > LIST_BUF_CAP - 160) break;  // safety cap
-
-        // The active config is the SPIFFS copy unless an SD card overrides it;
-        // both copies are kept in sync by save_active_config, so tagging the
-        // flash one is accurate either way.
-        bool active = (strcmp(src_tag, "flash") == 0 &&
-                       strcmp(name, "sapdm_config.json") == 0);
-        if (!*first) buf[pos++] = ',';
-        *first = false;
-        pos += snprintf(buf + pos, LIST_BUF_CAP - pos,
-                        "{\"name\":\"%s\",\"src\":\"%s\",\"active\":%s}",
-                        name, src_tag, active ? "true" : "false");
-    }
-    closedir(dir);
-    return pos;
-}
-
 static esp_err_t get_list_configs_handler(httpd_req_t *req)
 {
-    // Heap-allocate response buffer — stack is too precious (only ~17 KB internal SRAM free)
-    char *buf = malloc(LIST_BUF_CAP);
-    if (!buf) {
+    // Heap-allocate buffers — stack is too precious (only ~17 KB internal SRAM free)
+    char           *buf  = malloc(LIST_BUF_CAP);
+    ConfigTemplate *tpls = malloc(sizeof(ConfigTemplate) * CFG_TPL_MAX);
+    if (!buf || !tpls) {
+        free(buf);
+        free(tpls);
         httpd_resp_send_500(req);
         return ESP_OK;
     }
-    int  pos   = 0;
-    bool first = true;
+
+    int count = config_store_list(tpls, CFG_TPL_MAX);
+    int pos   = 0;
     buf[pos++] = '[';
-
-    if (portal_spiffs_ready())
-        pos = list_json_dir("/spiffs", "flash", buf, pos, &first);
-
-    if (portal_sd_mount()) {
-        pos = list_json_dir("/sdcard", "sd", buf, pos, &first);
-        portal_sd_unmount();
+    for (int i = 0; i < count && pos < LIST_BUF_CAP - 160; i++) {
+        if (i > 0) buf[pos++] = ',';
+        pos += snprintf(buf + pos, LIST_BUF_CAP - pos,
+                        "{\"name\":\"%s\",\"src\":\"%s\",\"active\":%s}",
+                        tpls[i].name, tpls[i].from_sd ? "sd" : "flash",
+                        tpls[i].active ? "true" : "false");
     }
-
     buf[pos++] = ']';
     buf[pos]   = '\0';
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, buf);
-    ESP_LOGI(TAG, "GET /list-configs: %d bytes", pos);
+    ESP_LOGI(TAG, "GET /list-configs: %d templates", count);
     free(buf);
+    free(tpls);
     return ESP_OK;
 }
 
@@ -711,56 +581,12 @@ static esp_err_t post_set_config_handler(httpd_req_t *req)
     json_get_str(body, "src", src, sizeof(src));
     bool from_sd = (strcmp(src, "sd") == 0);
 
-    // Validate: must end in .json, no slashes, no ..
-    if (flen < 5 || strcasecmp(filename + flen - 5, ".json") != 0 ||
-        strchr(filename, '/') || strstr(filename, "..")) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid filename");
-        return ESP_OK;
-    }
-
-    // Read the source file into RAM (≤32 KB), then persist it as the active
-    // config in both stores via the same path the upload endpoint uses.
-    char src_path[96];
-    snprintf(src_path, sizeof(src_path), "%s/%s", from_sd ? "/sdcard" : "/spiffs", filename);
-
-    if (from_sd && !portal_sd_mount()) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "SD not available");
-        return ESP_OK;
-    }
-    if (!from_sd && !portal_spiffs_ready()) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash storage not available");
-        return ESP_OK;
-    }
-
-    char *data = malloc(PORTAL_JSON_MAX);
-    int   dlen = -1;
-    if (data) {
-        FILE *f = fopen(src_path, "r");
-        if (f) {
-            dlen = (int)fread(data, 1, PORTAL_JSON_MAX - 1, f);
-            fclose(f);
-            if (dlen >= PORTAL_JSON_MAX - 1) dlen = -2;  // too big — refuse truncation
-            else data[dlen] = '\0';
-        }
-    }
-    if (from_sd) portal_sd_unmount();
-
-    if (!data) { httpd_resp_send_500(req); return ESP_OK; }
-    if (dlen == -1) {
-        free(data);
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
-        return ESP_OK;
-    }
-    if (dlen < 0 || !config_json_valid(data)) {
-        free(data);
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File is not a valid config");
-        return ESP_OK;
-    }
-
-    const char *save_err = save_active_config(data, dlen);
-    free(data);
-    if (save_err) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
+    // config_store_activate validates the filename, reads + validates the
+    // file, and persists it to both stores — same path the on-device
+    // Configuration screen uses.
+    const char *err = config_store_activate(filename, from_sd);
+    if (err) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, err);
         return ESP_OK;
     }
 

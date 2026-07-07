@@ -105,6 +105,14 @@ static void parse_metric(const cJSON *j, Metric *m) {
 static void populate_from_json(const cJSON *root) {
     const cJSON *arr, *item;
 
+    const cJSON *pn = cJSON_GetObjectItem(root, "plant_name");
+    if (cJSON_IsString(pn)) {
+        strncpy(g_plant_name, pn->valuestring, sizeof(g_plant_name) - 1);
+        g_plant_name[sizeof(g_plant_name) - 1] = '\0';
+    } else {
+        strncpy(g_plant_name, PLANT_NAME, sizeof(g_plant_name) - 1);
+    }
+
     arr = cJSON_GetObjectItem(root, "machines");
     g_machine_count = 0;
     cJSON_ArrayForEach(item, arr) {

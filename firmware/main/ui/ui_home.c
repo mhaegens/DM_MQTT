@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-static void wifi_kpi_cb(lv_event_t *e)  { (void)e; ui_push_wifi_setup(); }
-static void mqtt_kpi_cb(lv_event_t *e)  { (void)e; ui_push_mqtt_detail(); }
+static void wifi_kpi_cb(lv_event_t *e)   { (void)e; ui_push_wifi_setup(); }
+static void mqtt_kpi_cb(lv_event_t *e)   { (void)e; ui_push_mqtt_detail(); }
+static void config_kpi_cb(lv_event_t *e) { (void)e; ui_push_config_select(); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ui_home.c - Home screen: 2×2 KPI grid + status rows.
@@ -209,20 +210,26 @@ void ui_home_create(lv_obj_t *parent)
     lv_obj_set_style_pad_row(grid, SZ_GAP, LV_PART_MAIN);
 
     static const struct { const char *label, *val, *meta; } kpi[4] = {
-        { "RUNNING",      "0 / 0", "Loading..."       },
-        { "PULSES TODAY", "0",     "00:00:00"          },
-        { "MQTT MSGS",    "0",     "since boot"        },
-        { "WIFI RSSI",    "--",    "dBm"               },
+        { "RUNNING",         "0 / 0", "Loading..."            },
+        { "CONFIG TEMPLATE", "--",    "Tap to switch template" },
+        { "MQTT MSGS",       "0",     "since boot"             },
+        { "WIFI RSSI",       "--",    "dBm"                    },
     };
-    lv_color_t acc[4] = { COL_HI, COL_HI, COL_WARN, COL_TEAL };
+    lv_color_t acc[4] = { COL_HI, COL_PUR, COL_WARN, COL_TEAL };
 
     lv_obj_t *cards[4];
     for (int i = 0; i < 4; i++) {
         cards[i] = make_kpi_card(grid, i, kpi[i].label, kpi[i].val, kpi[i].meta, acc[i]);
     }
-    // s_kpi_meta[1] will hold the uptime counter
-    s_uptime_lbl = s_kpi_meta[1];
+    // KPI 1: active config template — value is fixed for the whole boot
+    lv_label_set_text(s_kpi_val[1], g_plant_name[0] ? g_plant_name : PLANT_NAME);
+    lv_obj_set_width(s_kpi_val[1], LV_PCT(100));
+    lv_label_set_long_mode(s_kpi_val[1], LV_LABEL_LONG_DOT);
+    // s_kpi_meta[2] holds the uptime counter (next to the MQTT message count)
+    s_uptime_lbl = s_kpi_meta[2];
 
+    lv_obj_add_flag(cards[1], LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(cards[1], config_kpi_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(cards[2], LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(cards[2], mqtt_kpi_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_add_flag(cards[3], LV_OBJ_FLAG_CLICKABLE);
@@ -282,14 +289,13 @@ void ui_home_refresh(void)
     if (!s_screen) return;
 
     // Aggregate machine stats under the lock, render after release
-    int  running = 0, total_pulses = 0;
+    int  running = 0;
     char stopped_name[32] = "";
     DATA_LOCK();
     for (int i = 0; i < g_machine_count; i++) {
         if (g_machines[i].running) running++;
         else if (!stopped_name[0])
             strncpy(stopped_name, g_machines[i].name, sizeof(stopped_name) - 1);
-        total_pulses += g_machines[i].pulses;
     }
     int machine_count = g_machine_count;
     DATA_UNLOCK();
@@ -301,19 +307,17 @@ void ui_home_refresh(void)
     else
         lv_label_set_text(s_kpi_meta[0], "All running");
 
-    // KPI 1: Pulses today; meta = uptime HH:MM:SS
-    lv_label_set_text_fmt(s_kpi_val[1], "%d", total_pulses);
+    // KPI 1 (config template) is static per boot — set once in create.
 
+    // KPI 2: MQTT message count; meta = uptime HH:MM:SS
+    lv_label_set_text_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
     if (s_uptime_lbl) {
         int64_t secs = esp_timer_get_time() / 1000000LL;
         int h = (int)(secs / 3600);
         int m = (int)((secs % 3600) / 60);
         int s = (int)(secs % 60);
-        lv_label_set_text_fmt(s_uptime_lbl, "%02d:%02d:%02d", h, m, s);
+        lv_label_set_text_fmt(s_uptime_lbl, "up %02d:%02d:%02d", h, m, s);
     }
-
-    // KPI 2: MQTT message count
-    lv_label_set_text_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
 
     // KPI 3: WiFi RSSI (g_wifi_rssi is maintained by the wifi_manager event handler)
     if (g_wifi_connected)
