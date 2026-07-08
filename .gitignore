@@ -23,3 +23,6 @@ scripts/split_pdfs.py
 
 # Superpowers AI session cache
 .superpowers/
+
+# Git worktrees
+.worktrees/
