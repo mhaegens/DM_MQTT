@@ -8,7 +8,7 @@ spec: "~/.claude/plans/context-you-must-load-sparkling-brooks.md"
 
 # Brainstorm Output v1
 
-Emitted by the **Demo Brainstorm Agent**. Consumed by Build Demo's `dm-demo-orchestrator` and (indirectly, via orchestrator forwarding) Asset Sim.
+Emitted by the [[../agents/demo-brainstorm|Demo Brainstorm Agent]]. Consumed by Build Demo's `dm-demo-orchestrator` and (indirectly, via orchestrator forwarding) Asset Sim.
 
 ## Canonical schema
 

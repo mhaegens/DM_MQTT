@@ -2,6 +2,7 @@
 type: agent
 tags: [agent-network, agents, demo-brainstorm]
 status: v1
+date: 2026-07-08
 ---
 
 # Demo Brainstorm
@@ -53,11 +54,11 @@ Six sequential passes:
 | D5 | Moments of expertise: curate from research first; B-fill from bank to minimum 2 |
 | D6 | Interactive mode: front-load block of 4 questions in one message |
 | D7 | Gap handling: load-bearing gaps are hard gates in interactive, needs-review in auto |
-| D8 | product.order_type decoupled from product.type (see [[../decisions/ADR-010-order-type]]) |
+| D8 | product.order_type decoupled from product.type (see [[../decisions/ADR-011-order-type]]) |
 
 ## Mode
 
-`may_prompt: true` (see [[../../../../.claude/agents/dm-demo-shared/mode-contract|mode-contract]]).
+`may_prompt: true` (see `~/.claude/agents/dm-demo-shared/mode-contract.md`).
 
 ## Spec
 
