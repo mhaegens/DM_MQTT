@@ -130,7 +130,7 @@ Wait for the agent to complete.
 - [ ] **Step 3: Verify output files exist**
 
 ```bash
-SLUG_DIR=$(ls -d "/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos"/yanmar-* 2>/dev/null | tail -1)
+SLUG_DIR=$(ls -d "/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos"/yanmar-* 2>/dev/null | tail -1)
 echo "Slug dir: $SLUG_DIR"
 ls "$SLUG_DIR/"
 ```
@@ -143,7 +143,7 @@ Expected: `research_output_v1.json` and `research-summary.md` both present.
 python3 -c "
 import json, jsonschema, pathlib, sys
 schema_path = pathlib.Path('/Users/I584748/.claude/agents/dm-demo-shared/research-output-schema.json')
-slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos').glob('yanmar-*'))[-1]
+slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos').glob('yanmar-*'))[-1]
 schema = json.loads(schema_path.read_text())
 data = json.loads((slug_dir / 'research_output_v1.json').read_text())
 try:
@@ -162,7 +162,7 @@ Expected: `SCHEMA: PASS`
 ```bash
 python3 -c "
 import json, pathlib
-slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos').glob('yanmar-*'))[-1]
+slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos').glob('yanmar-*'))[-1]
 data = json.loads((slug_dir / 'research_output_v1.json').read_text())
 
 # Criterion 2: zero unresolved gaps
@@ -190,7 +190,7 @@ Review the output. If there are unresolved gaps, note them — these are expecte
 - [ ] **Step 6: Copy output as expected fixture**
 
 ```bash
-SLUG_DIR=$(ls -d "/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos"/yanmar-* | tail -1)
+SLUG_DIR=$(ls -d "/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos"/yanmar-* | tail -1)
 SLUG=$(basename "$SLUG_DIR")
 FIXTURE_DIR="/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/Projects/Agent Network/golden-fixtures/$SLUG"
 mkdir -p "$FIXTURE_DIR"
@@ -210,7 +210,7 @@ INPUT="$FIXTURE_DIR/input.json"
 EXPECTED_JSON="$FIXTURE_DIR/research_output_v1.expected.json"
 EXPECTED_SUMMARY="$FIXTURE_DIR/research-summary.expected.md"
 SCHEMA="$HOME/.claude/agents/dm-demo-shared/research-output-schema.json"
-DEMOS_DIR="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos"
+DEMOS_DIR="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos"
 PASS=0
 FAIL=0
 
@@ -388,7 +388,7 @@ No questions will be asked in auto mode.
 python3 -c "
 import json, jsonschema, pathlib, sys
 schema = json.loads(pathlib.Path('/Users/I584748/.claude/agents/dm-demo-shared/research-output-schema.json').read_text())
-slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos').glob('umicore-*'))[-1]
+slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos').glob('umicore-*'))[-1]
 data = json.loads((slug_dir / 'research_output_v1.json').read_text())
 jsonschema.validate(data, schema)
 print('SCHEMA: PASS')
@@ -493,7 +493,7 @@ Task(
 python3 -c "
 import json, jsonschema, pathlib
 schema = json.loads(pathlib.Path('/Users/I584748/.claude/agents/dm-demo-shared/research-output-schema.json').read_text())
-slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/1 - DM/Demos').glob('barco-*'))[-1]
+slug_dir = sorted(pathlib.Path('/Users/I584748/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mitchell/SAP Solutions/DM/Demos').glob('barco-*'))[-1]
 data = json.loads((slug_dir / 'research_output_v1.json').read_text())
 jsonschema.validate(data, schema)
 print('SCHEMA: PASS')
