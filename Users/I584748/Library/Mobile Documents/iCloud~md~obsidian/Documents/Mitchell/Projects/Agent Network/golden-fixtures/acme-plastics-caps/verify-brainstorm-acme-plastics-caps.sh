@@ -67,6 +67,30 @@ else:
 " && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
+import json, pathlib
+data = json.loads(pathlib.Path('$ACTUAL_JSON').read_text())
+steps = data['production_flow']['steps']
+seqs = [s['seq'] for s in steps]
+expected_seqs = list(range(1, len(steps)+1))
+if seqs == expected_seqs:
+    print(f'PASS: production_flow steps seqs are sequential: {seqs}')
+else:
+    print(f'FAIL: production_flow steps seqs = {seqs} (expected {expected_seqs})')
+    exit(1)
+" && ((PASS+=1)) || ((FAIL+=1))
+
+python3 -c "
+import json, pathlib
+data = json.loads(pathlib.Path('$ACTUAL_JSON').read_text())
+bm = data.get('materials_hint', {}).get('batch_managed')
+if bm == True:
+    print('PASS: materials_hint.batch_managed = true')
+else:
+    print(f'FAIL: materials_hint.batch_managed = {bm} (expected true)')
+    exit(1)
+" && ((PASS+=1)) || ((FAIL+=1))
+
+python3 -c "
 import json, pathlib, sys
 def strip_variable(d):
     if isinstance(d, dict):

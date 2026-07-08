@@ -80,6 +80,28 @@ else:
 " && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
+import json, pathlib
+data = json.loads(pathlib.Path('$ACTUAL_JSON').read_text())
+ser = data.get('materials_hint', {}).get('serialized')
+if ser == True:
+    print('PASS: materials_hint.serialized = true')
+else:
+    print(f'FAIL: materials_hint.serialized = {ser} (expected true)')
+    exit(1)
+" && ((PASS+=1)) || ((FAIL+=1))
+
+python3 -c "
+import json, pathlib
+data = json.loads(pathlib.Path('$ACTUAL_JSON').read_text())
+dur = data['scenario']['duration_min']
+if dur == 60:
+    print(f'PASS: scenario.duration_min = {dur}')
+else:
+    print(f'FAIL: scenario.duration_min = {dur} (expected 60)')
+    exit(1)
+" && ((PASS+=1)) || ((FAIL+=1))
+
+python3 -c "
 import json, pathlib, sys
 def strip_variable(d):
     if isinstance(d, dict):
