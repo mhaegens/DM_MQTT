@@ -1,0 +1,1217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%AD%3C/text%3E%3C/svg%3E">
+<style>*{margin:0;padding:0}html,body{height:100%}</style>
+<title>SAP DM Config Studio</title>
+<style>
+/* ═══ Workbench chrome — dark studio bench, light device ═══ */
+:root{
+  --bg:#0E1420; --panel:#151D2C; --panel2:#111827; --field:#0D1522;
+  --line:#263349; --line2:#1C2739; --ink:#E7ECF5; --ink2:#9AAAC4; --ink3:#5F7091;
+  --hi:#3D96F8; --hi-deep:#0070F2; --ok:#3DBE77; --warn:#F2A048; --err:#F0655F;
+  --chip:#1B2538;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#EEF1F7; --panel:#FFFFFF; --panel2:#F5F7FB; --field:#F2F5FA;
+    --line:#D5DCE8; --line2:#E4E9F2; --ink:#1D2D3E; --ink2:#4A6080; --ink3:#8090A8;
+    --hi:#0070F2; --hi-deep:#0070F2; --ok:#107E3E; --warn:#C86A00; --err:#BB0000;
+    --chip:#E8EEF8; }
+}
+:root[data-theme="light"]{ --bg:#EEF1F7; --panel:#FFFFFF; --panel2:#F5F7FB; --field:#F2F5FA;
+  --line:#D5DCE8; --line2:#E4E9F2; --ink:#1D2D3E; --ink2:#4A6080; --ink3:#8090A8;
+  --hi:#0070F2; --hi-deep:#0070F2; --ok:#107E3E; --warn:#C86A00; --err:#BB0000; --chip:#E8EEF8; }
+:root[data-theme="dark"]{ --bg:#0E1420; --panel:#151D2C; --panel2:#111827; --field:#0D1522;
+  --line:#263349; --line2:#1C2739; --ink:#E7ECF5; --ink2:#9AAAC4; --ink3:#5F7091;
+  --hi:#3D96F8; --hi-deep:#0070F2; --ok:#3DBE77; --warn:#F2A048; --err:#F0655F; --chip:#1B2538; }
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{ margin:0; background:var(--bg); color:var(--ink);
+  font:13.5px/1.5 "Montserrat",-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex; flex-direction:column; }
+.mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; padding:0; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+[tabindex]:focus-visible{ outline:2px solid var(--hi); outline-offset:1px; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--field);
+  border:1px solid var(--line); border-radius:6px; padding:5px 8px; min-width:0; }
+input[type=checkbox]{ accent-color:var(--hi-deep); width:15px; height:15px; }
+input[type=color]{ padding:1px 2px; height:29px; width:40px; cursor:pointer; }
+input[type=range]{ accent-color:var(--hi-deep); padding:0; border:none; background:none; }
+
+/* ── Header ── */
+header{ display:flex; align-items:center; gap:14px; padding:10px 16px;
+  background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.brand{ display:flex; align-items:center; gap:10px; }
+.brand .cube{ width:30px; height:30px; border-radius:7px; background:#0F2647; position:relative; overflow:hidden; flex:none;}
+.brand .cube::after{ content:''; position:absolute; inset:6px 6px 10px 6px; border-radius:2px;
+  background:linear-gradient(135deg,#5BB2FF 0%,#0070F2 60%,#0F2647 100%); }
+.brand .eyebrow{ font-size:10px; letter-spacing:.22em; color:var(--ink3); text-transform:uppercase; }
+.brand h1{ font-size:16px; margin:0; font-weight:600; letter-spacing:-.01em; white-space:nowrap; }
+.spacer{ flex:1; }
+.hbtn{ display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:7px;
+  border:1px solid var(--line); background:var(--panel2); font-size:12.5px; }
+.hbtn:hover{ border-color:var(--hi); }
+.hbtn.primary{ background:var(--hi-deep); border-color:var(--hi-deep); color:#fff; }
+.menu{ position:relative; }
+.menu-pop{ position:absolute; right:0; top:calc(100% + 6px); background:var(--panel);
+  border:1px solid var(--line); border-radius:8px; padding:4px; min-width:190px; z-index:40;
+  box-shadow:0 12px 30px rgba(0,0,0,.35); display:none; }
+.menu-pop.open{ display:block; }
+.menu-pop button{ display:block; width:100%; text-align:left; padding:7px 10px; border-radius:6px; font-size:12.5px; }
+.menu-pop button:hover{ background:var(--chip); }
+.menu-pop .mhint{ font-size:10.5px; color:var(--ink3); }
+
+/* ── Main split ── */
+main{ flex:1; display:flex; min-height:0; }
+#editor{ width:470px; flex:none; overflow-y:auto; border-right:1px solid var(--line);
+  background:var(--panel2); padding:14px 14px 60px; }
+#stage{ flex:1; min-width:0; display:flex; flex-direction:column; }
+@media (max-width: 980px){ main{ flex-direction:column; overflow-y:auto; }
+  #editor{ width:auto; border-right:none; border-bottom:1px solid var(--line); max-height:none; overflow:visible; }
+  #stage{ min-height:600px; } }
+
+/* ── Editor panels ── */
+.sect{ background:var(--panel); border:1px solid var(--line); border-radius:10px; margin-bottom:12px; overflow:hidden; }
+.sect > .shead{ display:flex; align-items:center; gap:8px; padding:9px 12px; width:100%; text-align:left; }
+.sect > .shead:hover{ background:var(--chip); }
+.shead .caret{ transition:transform .15s; color:var(--ink3); font-size:10px; }
+.sect.open > .shead .caret{ transform:rotate(90deg); }
+.shead .stitle{ font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; }
+.shead .scount{ font-size:11px; color:var(--ink3); }
+.sbody{ display:none; padding:4px 12px 12px; border-top:1px solid var(--line2); }
+.sect.open > .sbody{ display:block; }
+
+.item{ border:1px solid var(--line); border-radius:8px; margin:8px 0; background:var(--panel2); }
+.item.sel{ border-color:var(--hi); box-shadow:0 0 0 1px var(--hi); }
+.ihead{ display:flex; align-items:center; gap:8px; padding:7px 10px; width:100%; text-align:left; }
+.ihead:hover{ background:var(--chip); }
+.ihead .iname{ font-weight:600; font-size:13px; }
+.ihead .isub{ font-size:11px; color:var(--ink3); }
+.ihead .flex1{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rundot{ width:9px; height:9px; border-radius:50%; background:var(--ok); flex:none; }
+.rundot.off{ background:var(--err); }
+.ibody{ display:none; padding:10px; border-top:1px solid var(--line2); }
+.item.open > .ibody{ display:block; }
+
+.mrow{ border:1px solid var(--line2); border-radius:7px; margin:6px 0; background:var(--panel); }
+.mrow.sel{ border-color:var(--hi); }
+.mhead{ display:flex; align-items:center; gap:7px; padding:6px 9px; width:100%; text-align:left; font-size:12px; }
+.mhead:hover{ background:var(--chip); }
+.mhead .mkey{ font-weight:600; }
+.vizchip{ font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px;
+  border-radius:99px; background:var(--chip); color:var(--ink2); border:1px solid var(--line); flex:none;}
+.swatch{ width:12px; height:12px; border-radius:3px; border:1px solid var(--line); flex:none; }
+.mbody{ display:none; padding:9px; border-top:1px solid var(--line2); }
+.mrow.open > .mbody{ display:block; }
+.topic{ font-size:10.5px; color:var(--ink3); margin-top:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.grid4{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; }
+.fld{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.fld > span{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); }
+.fld input,.fld select{ width:100%; }
+.fld .withswatch{ display:flex; gap:6px; align-items:center; }
+.check{ display:flex; align-items:center; gap:7px; font-size:12.5px; padding-top:16px; }
+.hint{ font-size:11px; color:var(--ink3); margin:6px 0 2px; }
+.hint b{ color:var(--ink2); font-weight:600; }
+
+.rowbtns{ display:flex; gap:4px; margin-left:auto; flex:none; }
+.ico{ width:24px; height:24px; border-radius:5px; display:inline-flex; align-items:center;
+  justify-content:center; color:var(--ink3); font-size:12px; border:1px solid transparent; flex:none;}
+.ico:hover{ background:var(--chip); color:var(--ink); border-color:var(--line); }
+.ico.danger:hover{ color:var(--err); border-color:var(--err); }
+.addbtn{ display:flex; align-items:center; gap:6px; padding:7px 10px; border:1px dashed var(--line);
+  border-radius:7px; color:var(--ink2); font-size:12px; width:100%; justify-content:center; margin-top:8px; }
+.addbtn:hover{ border-color:var(--hi); color:var(--hi); }
+.thr-row{ display:flex; gap:6px; align-items:center; margin:4px 0; }
+.thr-row input[type=number]{ flex:1; }
+.subh{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink3);
+  margin:12px 0 4px; display:flex; align-items:center; gap:8px; }
+.subh::after{ content:''; flex:1; height:1px; background:var(--line2); }
+
+/* ── Stage / preview ── */
+.stagebar{ display:flex; align-items:center; gap:10px; padding:8px 14px;
+  border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+.stagebar .lbl{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink3); }
+.seg{ display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+.seg button{ padding:5px 12px; font-size:12px; color:var(--ink2); background:var(--panel2); }
+.seg button.on{ background:var(--hi-deep); color:#fff; }
+.simtgl{ display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--ink2); }
+#viewport{ flex:1; overflow:auto; padding:22px; display:flex; justify-content:center; align-items:flex-start; }
+#devscale{ transform-origin:top center; }
+.devnote{ text-align:center; font-size:11px; color:var(--ink3); padding:0 14px 10px; }
+
+/* ── Status bar ── */
+#statusbar{ display:flex; align-items:center; gap:14px; padding:7px 16px;
+  background:var(--panel); border-top:1px solid var(--line); font-size:12px; flex-wrap:wrap; }
+.vchip{ display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px;
+  font-size:11.5px; border:1px solid var(--line); }
+.vchip.good{ color:var(--ok); border-color:var(--ok); }
+.vchip.bad{ color:var(--err); border-color:var(--err); }
+.vchip.warny{ color:var(--warn); border-color:var(--warn); }
+.sizebar{ display:flex; align-items:center; gap:8px; color:var(--ink3); }
+.sizebar .track{ width:110px; height:5px; border-radius:3px; background:var(--chip); overflow:hidden; }
+.sizebar .fillb{ height:100%; background:var(--hi-deep); border-radius:3px; }
+#issuepane{ display:none; position:fixed; right:14px; bottom:46px; width:380px; max-height:45vh;
+  overflow-y:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:10px; z-index:50; box-shadow:0 16px 40px rgba(0,0,0,.4); }
+#issuepane.open{ display:block; }
+.iss{ display:flex; gap:8px; padding:5px 6px; font-size:12px; border-radius:6px; }
+.iss:hover{ background:var(--chip); }
+.iss .tag{ flex:none; font-size:9.5px; letter-spacing:.06em; padding:2px 6px; border-radius:4px;
+  text-transform:uppercase; align-self:flex-start; margin-top:1px;}
+.iss.error .tag{ background:var(--err); color:#fff; } .iss.warn .tag{ background:var(--warn); color:#fff; }
+
+/* ── JSON drawer ── */
+#jsonmodal{ display:none; position:fixed; inset:0; background:rgba(5,10,20,.6); z-index:60;
+  align-items:center; justify-content:center; padding:24px; }
+#jsonmodal.open{ display:flex; }
+.jbox{ background:var(--panel); border:1px solid var(--line); border-radius:12px; width:min(860px,100%);
+  height:min(640px,100%); display:flex; flex-direction:column; padding:14px; gap:10px; }
+.jbox textarea{ flex:1; resize:none; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+  line-height:1.5; white-space:pre; }
+.jbox .jbar{ display:flex; gap:8px; align-items:center; }
+.jerr{ color:var(--err); font-size:12px; flex:1; }
+
+#toast{ position:fixed; left:50%; bottom:52px; transform:translateX(-50%); background:var(--ink);
+  color:var(--bg); padding:8px 16px; border-radius:8px; font-size:12.5px; opacity:0;
+  transition:opacity .2s; pointer-events:none; z-index:70; }
+#toast.show{ opacity:1; }
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+/* ═══ Device replica — firmware tokens, always light ═══ */
+.device{ width:720px; background:#F2F4FA; border-radius:16px; overflow:hidden; flex:none;
+  border:8px solid #10151f; box-shadow:0 18px 50px rgba(0,0,0,.45); color:#1D2D3E;
+  font-family:"Montserrat",-apple-system,"Segoe UI",Roboto,sans-serif; }
+.device *{ box-sizing:border-box; }
+.dv-shell{ height:64px; background:#fff; border-bottom:2px solid #0070F2; display:flex;
+  align-items:center; gap:12px; padding:0 16px; }
+.dv-logo{ width:40px; height:40px; background:#0F2647; border-radius:6px; position:relative; overflow:hidden; flex:none;}
+.dv-logo::after{ content:''; position:absolute; inset:8px 8px 14px 8px; border-radius:2px;
+  background:linear-gradient(135deg,#5BB2FF 0%,#0070F2 60%,#0F2647 100%); }
+.dv-t1{ font-size:19px; font-weight:600; line-height:1.15; }
+.dv-t2{ font-size:12.5px; color:#4A6080; }
+.dv-pills{ margin-left:auto; display:flex; gap:8px; }
+.dv-pill{ font-size:13px; padding:4px 12px; border-radius:8px; background:#E3F5EC; color:#107E3E; border:1px solid #9ADDB8; }
+.dv-pill i{ display:inline-block; width:7px; height:7px; border-radius:50%; background:#107E3E; margin-right:5px; }
+.dv-content{ height:584px; position:relative; overflow-y:auto; scrollbar-width:none; }
+.dv-content::-webkit-scrollbar{ display:none; }
+.dv-tabs{ height:72px; background:#fff; border-top:1px solid #DDE1EA; display:flex; }
+.dv-tab{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; font-size:14px; color:#8090A8; font-family:inherit; }
+.dv-tab.act{ color:#0070F2; box-shadow:inset 0 3px 0 #0070F2; }
+.dv-tab:disabled{ opacity:.45; cursor:default; }
+.dv-tab svg{ width:22px; height:22px; stroke:currentColor; fill:none; stroke-width:2; }
+.dv-empty{ position:absolute; inset:0; display:flex; flex-direction:column; gap:8px;
+  align-items:center; justify-content:center; color:#8090A8; text-align:center; }
+.dv-empty .big{ font-size:19px; color:#4A6080; }
+
+/* machine cards — geometry set inline from the firmware math */
+.mcard{ position:absolute; background:#fff; border:2px solid #9ADDB8; border-radius:12px;
+  display:flex; flex-direction:column; overflow:hidden; cursor:pointer; }
+.mcard.stopped{ border-color:#FFAAAA; }
+.mcard.hilite{ box-shadow:0 0 0 3px #0070F2; }
+.mc-hdr{ height:56px; border-bottom:1px solid #DDE1EA; padding:6px 12px; display:flex; align-items:center; flex:none;}
+.mc-tc{ flex:1; min-width:0; padding-right:8px; }
+.mc-nm{ font-size:19px; font-weight:600; line-height:26px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc-ty{ font-size:13px; line-height:20px; color:#8090A8; letter-spacing:1px; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mc-dot{ width:14px; height:14px; border-radius:50%; background:#107E3E; box-shadow:0 0 0 3px #E3F5EC; flex:none; }
+.mcard.stopped .mc-dot{ background:#BB0000; box-shadow:0 0 0 3px #FFE8E8; }
+.mc-body{ padding:6px 10px; display:flex; flex-direction:column; gap:6px; flex:none; }
+.mc-strip{ background:#EEF1F8; border:1px solid #DDE1EA; border-radius:8px; padding:4px 8px;
+  display:flex; flex-direction:column; gap:2px; }
+.mc-srow{ height:20px; display:flex; align-items:center; }
+.mc-slbl{ flex:1; font-size:13px; color:#8090A8; letter-spacing:1px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+.mc-sval{ font-weight:500; font-size:19px; }
+.mc-strip svg{ display:block; width:100%; }
+.mc-row{ display:flex; gap:6px; }
+.mc-cell{ flex:1; min-width:0; background:#EEF1F8; border:1px solid #DDE1EA; border-radius:8px; position:relative;}
+.mc-cell.hilite{ border-color:#0070F2; box-shadow:0 0 0 2px #0070F2; }
+.mc-one{ display:flex; align-items:center; gap:4px; padding:0 8px; }
+.mc-one .k{ flex:1; font-size:13px; color:#8090A8; letter-spacing:1px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+.mc-one .v{ font-size:16px; font-weight:500; }
+.mc-one .u{ font-size:13px; color:#8090A8; }
+.mc-tile{ display:flex; flex-direction:column; justify-content:center; gap:2px; padding:6px 10px; }
+.mc-tile .k{ font-size:13px; color:#8090A8; letter-spacing:1px; line-height:20px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+.mc-tile .v{ font-weight:500; }
+.mc-tile .u{ font-size:13px; color:#8090A8; }
+.mc-gau{ display:flex; flex-direction:column; align-items:center; }
+.mc-gau .k{ font-size:13px; color:#8090A8; letter-spacing:1px; line-height:20px; max-width:92%;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:uppercase; }
+.mc-gwrap{ position:relative; }
+.mc-gwrap .v{ position:absolute; left:50%; transform:translateX(-50%); font-weight:500; }
+.mc-ftr{ height:48px; border-top:1px solid #DDE1EA; padding:6px 10px; display:flex; gap:8px;
+  margin-top:auto; flex:none; }
+.mc-btn{ flex:1; height:36px; border-radius:8px; border:1px solid #FFAAAA; background:#FFE8E8;
+  color:#BB0000; font-size:16px; display:flex; align-items:center; justify-content:center; }
+.mc-btn.start{ background:#E3F5EC; border-color:#9ADDB8; color:#107E3E; }
+.mc-pill{ height:36px; border-radius:8px; border:1px solid #DDE1EA; background:#EEF1F8;
+  color:#4A6080; font-size:13px; display:flex; align-items:center; padding:0 10px; white-space:nowrap;}
+
+/* tanks (representative) */
+.tk-wrap{ display:flex; gap:12px; padding:14px; height:100%; }
+.tk-col{ flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; cursor:pointer; }
+.tk-col.hilite .tk-body{ box-shadow:0 0 0 3px #0070F2; }
+.tk-name{ font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#4A6080;
+  text-align:center; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tk-body{ flex:1; background:#ECF0F8; border:2px solid #B8BFCC; border-radius:12px 12px 8px 8px;
+  position:relative; overflow:hidden; box-shadow:inset 0 2px 8px rgba(30,50,100,.09); }
+.tk-fill{ position:absolute; left:0; right:0; bottom:0; }
+.tk-pct{ position:absolute; left:0; right:0; text-align:center; font-size:24px; font-weight:600;
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.25); }
+.tk-mets{ display:flex; flex-direction:column; gap:4px; }
+.tk-met{ background:#fff; border:1px solid #DDE1EA; border-radius:8px; padding:5px 10px;
+  display:flex; align-items:center; gap:6px; font-size:13px; }
+.tk-met .k{ flex:1; color:#4A6080; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tk-met .v{ font-weight:600; }
+.tk-met .u{ color:#8090A8; font-size:12px; }
+.tk-met .dotc{ width:7px; height:7px; border-radius:50%; flex:none; }
+
+/* people (representative) */
+.pp-wrap{ display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:16px; }
+.pp-card{ border-radius:16px; padding:14px 16px; color:#fff; position:relative; overflow:hidden;
+  min-height:170px; display:flex; flex-direction:column; cursor:pointer; }
+.pp-card.hilite{ box-shadow:0 0 0 3px #0070F2; }
+.pp-card::before{ content:''; position:absolute; inset:0;
+  background:radial-gradient(120% 90% at 85% -10%, rgba(255,255,255,.16), transparent 55%); pointer-events:none;}
+.pp-top{ display:flex; justify-content:space-between; font-size:10px; letter-spacing:.18em;
+  text-transform:uppercase; opacity:.75; }
+.pp-mid{ display:flex; align-items:center; gap:12px; margin:12px 0 8px; }
+.pp-av{ width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:600; font-size:16px; border:2px solid rgba(255,255,255,.5); flex:none; }
+.pp-nm{ font-size:17px; font-weight:600; line-height:1.2; }
+.pp-rl{ font-size:12px; opacity:.85; }
+.pp-meta{ font-size:11px; opacity:.7; }
+.pp-certs{ display:flex; flex-wrap:wrap; gap:5px; margin-top:auto; padding-top:10px; }
+.pp-cert{ font-size:10px; padding:2px 8px; border-radius:99px; background:rgba(255,255,255,.16);
+  border:1px solid rgba(255,255,255,.28); }
+.pp-uid{ position:absolute; right:14px; bottom:12px; font-size:10px; opacity:.6;
+  font-family:ui-monospace,Menlo,monospace; }
+</style>
+
+</head>
+<body>
+<header>
+  <div class="brand"><div class="cube"></div>
+    <div><div class="eyebrow">SAP DM &middot; MQTT Demo</div><h1>Shop Floor Config Studio</h1></div>
+  </div>
+  <div class="spacer"></div>
+  <div class="menu" id="newmenu">
+    <button class="hbtn" data-a="menu">New from template &#9662;</button>
+    <div class="menu-pop">
+      <button data-a="tpl" data-t="default">Plant BE01 <span class="mhint">&middot; firmware default</span></button>
+      <button data-a="tpl" data-t="bakery">Bakery LE02 <span class="mhint">&middot; mixers &amp; ovens</span></button>
+      <button data-a="tpl" data-t="empty">Empty config</button>
+    </div>
+  </div>
+  <button class="hbtn" data-a="upload">&#8682; Upload JSON</button>
+  <input type="file" id="filein" accept=".json,application/json" hidden>
+  <button class="hbtn" data-a="json">{&hellip;} Edit JSON</button>
+  <button class="hbtn" data-a="copy">Copy</button>
+  <button class="hbtn primary" data-a="download">&#8681; Download</button>
+  <button class="hbtn" data-a="theme" title="Toggle light/dark">&#9681;</button>
+</header>
+
+<main>
+  <div id="editor"></div>
+  <div id="stage">
+    <div class="stagebar">
+      <span class="lbl">Preview</span>
+      <div class="seg" id="tabseg">
+        <button data-tab="machines" class="on">Machines</button>
+        <button data-tab="tanks">Tanks</button>
+        <button data-tab="people">People</button>
+      </div>
+      <label class="simtgl"><input type="checkbox" id="simtgl"> Live simulation</label>
+      <div class="spacer"></div>
+      <span class="lbl">Zoom</span>
+      <div class="seg" id="zoomseg">
+        <button data-z="fit" class="on">Fit</button><button data-z="0.75">75%</button><button data-z="1">100%</button>
+      </div>
+    </div>
+    <div id="viewport"><div id="devscale"><div class="device" id="device"></div></div></div>
+    <div class="devnote" id="devnote"></div>
+  </div>
+</main>
+
+<div id="statusbar">
+  <button class="vchip good" id="vchip" data-a="issues">&#10003; Valid</button>
+  <div class="sizebar"><span id="sizetxt" class="mono">0 KB / 32 KB</span>
+    <div class="track"><div class="fillb" id="sizefill" style="width:0%"></div></div></div>
+  <div class="spacer"></div>
+  <span style="color:var(--ink3);font-size:11.5px" id="savenote">autosaved locally</span>
+</div>
+<div id="issuepane"></div>
+
+<div id="jsonmodal">
+  <div class="jbox">
+    <div style="font-weight:600">sapdm_config.json</div>
+    <textarea id="jsontext" spellcheck="false"></textarea>
+    <div class="jbar">
+      <span class="jerr" id="jsonerr"></span>
+      <button class="hbtn" data-a="jsonclose">Cancel</button>
+      <button class="hbtn primary" data-a="jsonapply">Apply</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════════
+   SAP DM Config Studio — single-file visual editor for sapdm_config.json
+   The machines preview replicates firmware/main/ui/ui_machines.c layout
+   math exactly (grid, spark strip, cell modes, gauge geometry, fonts).
+   Tanks & People previews are representative.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Firmware constants & limits (config_loader.c / data.h) ── */
+const LIM = { machines:10, tanks:3, people:12, metrics:8, certs:6, thr:3, json:32*1024-1,
+  len:{ plant_name:39, m_id:15, m_name:31, m_type:47, key:31, label:47, unit:15,
+        p_id:15, p_name:47, p_role:47, p_rolekey:15, p_dept:31, p_plant:31, p_uid:23, cert:31,
+        t_id:15, t_name:31 } };
+const VIZ = ['spark','arc','thermo','ph','tank','bullet'];
+const PROFILES = ['random_walk','sine','ramp','steady'];
+const ROLEKEYS = ['operator','lead','engineer','supervisor','quality'];
+const ROLE_GRAD = {
+  operator:  'linear-gradient(135deg,#0F2647 0%,#1A3A6B 55%,#102040 100%)',
+  lead:      'linear-gradient(135deg,#0A3D2B 0%,#155F3C 55%,#0A3020 100%)',
+  engineer:  'linear-gradient(135deg,#3D1F00 0%,#6B3800 55%,#341A00 100%)',
+  supervisor:'linear-gradient(135deg,#1A0A3D 0%,#2E1566 55%,#140830 100%)',
+  quality:   'linear-gradient(135deg,#2A0000 0%,#5A0000 55%,#220000 100%)' };
+/* LVGL montserrat 16/18/22/24 → CSS px (calibrated against device photos) */
+const FPX = { xxs:13, xs:16, sm:19, md:21 };
+const HIST = 32;
+
+/* ── Templates ── */
+const TPL = {};
+TPL.empty = { plant_name:'My Plant', ui:{indicator_scale:100}, machines:[], tanks:[], people:[] };
+TPL.default = {"plant_name":"Plant BE01","ui":{"indicator_scale":100},"machines":[
+ {"id":"cnc01","name":"CNC-01","type":"CNC Machining","running":true,"auto_pulse":true,"pulses":426,"metrics":[
+  {"key":"rpm","label":"Spindle RPM","unit":"RPM","viz":"spark","input":"step","color":"0x0070F2","init_val":4850,"min_val":0,"max_val":8000,"step":50,"sim":{"profile":"random_walk","rand_min":2000,"rand_max":7000}},
+  {"key":"spindleLoad","label":"Spindle Load","unit":"%","viz":"arc","input":"slider","init_val":62,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":40,"color":"0x107E3E"},{"limit":70,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":20,"rand_max":95}},
+  {"key":"toolWear","label":"Tool Wear","unit":"%","viz":"arc","input":"slider","init_val":34,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":40,"color":"0x107E3E"},{"limit":70,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"ramp"}},
+  {"key":"feedRate","label":"Feed Rate","unit":"mm/m","viz":"bullet","input":"step","color":"0x0070F2","init_val":380,"min_val":0,"max_val":600,"step":10,"sim":{"profile":"random_walk","rand_min":200,"rand_max":550}},
+  {"key":"machTemp","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":41.2,"min_val":15,"max_val":80,"step":0.5,"sim":{"profile":"sine","amplitude":3.0,"period_s":120,"offset":41.2}}]},
+ {"id":"cnc02","name":"CNC-02","type":"CNC Machining","running":false,"auto_pulse":false,"pulses":210,"metrics":[
+  {"key":"rpm","label":"Spindle RPM","unit":"RPM","viz":"spark","input":"step","color":"0x0070F2","init_val":0,"min_val":0,"max_val":8000,"step":50,"sim":{"profile":"random_walk","rand_min":2000,"rand_max":7000}},
+  {"key":"spindleLoad","label":"Spindle Load","unit":"%","viz":"arc","input":"slider","init_val":0,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":40,"color":"0x107E3E"},{"limit":70,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":20,"rand_max":95}},
+  {"key":"toolWear","label":"Tool Wear","unit":"%","viz":"arc","input":"slider","init_val":71,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":40,"color":"0x107E3E"},{"limit":70,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"ramp"}},
+  {"key":"feedRate","label":"Feed Rate","unit":"mm/m","viz":"bullet","input":"step","color":"0x0070F2","init_val":0,"min_val":0,"max_val":600,"step":10,"sim":{"profile":"random_walk","rand_min":200,"rand_max":550}},
+  {"key":"machTemp","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":28.3,"min_val":15,"max_val":80,"step":0.5,"sim":{"profile":"sine","amplitude":2.0,"period_s":120,"offset":28.3}}]},
+ {"id":"fill01","name":"FILL-01","type":"Filling Line","running":true,"auto_pulse":true,"pulses":418,"metrics":[
+  {"key":"flowRate","label":"Flow Rate","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":12.4,"min_val":0,"max_val":25,"step":0.5,"sim":{"profile":"random_walk","rand_min":8,"rand_max":18}},
+  {"key":"fillPres","label":"Fill Pressure","unit":"bar","viz":"arc","input":"step","init_val":2.1,"min_val":0,"max_val":5,"step":0.05,"thresholds":[{"limit":3.5,"color":"0x107E3E"},{"limit":4.5,"color":"0xE76500"},{"limit":5.0,"color":"0xBB0000"}],"sim":{"profile":"sine","amplitude":0.3,"period_s":30,"offset":2.1}},
+  {"key":"machTemp","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":36.8,"min_val":15,"max_val":80,"step":0.2,"sim":{"profile":"sine","amplitude":2.0,"period_s":90,"offset":36.8}}]},
+ {"id":"pack01","name":"PACK-01","type":"Packaging","running":true,"auto_pulse":true,"pulses":309,"metrics":[
+  {"key":"lineSpeed","label":"Line Speed","unit":"ppm","viz":"spark","input":"step","color":"0x0070F2","init_val":48,"min_val":0,"max_val":80,"step":2,"sim":{"profile":"random_walk","rand_min":40,"rand_max":65}},
+  {"key":"oee","label":"OEE","unit":"%","viz":"arc","input":"slider","init_val":91,"min_val":0,"max_val":100,"step":0.5,"thresholds":[{"limit":60,"color":"0xBB0000"},{"limit":80,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"random_walk","rand_min":85,"rand_max":97}},
+  {"key":"machTemp","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":33.5,"min_val":15,"max_val":80,"step":0.2,"sim":{"profile":"sine","amplitude":2.0,"period_s":90,"offset":33.5}}]}],
+"tanks":[
+ {"id":"raw","name":"Raw Material","metrics":[
+  {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":68,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":60,"rand_max":80}},
+  {"key":"temperature","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":22.4,"min_val":5,"max_val":70,"step":0.5,"sim":{"profile":"sine","amplitude":2.0,"period_s":60,"offset":22.4}},
+  {"key":"flowIn","label":"Flow In","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":4.2,"min_val":0,"max_val":20,"step":0.5,"sim":{"profile":"random_walk","rand_min":2,"rand_max":10}}]},
+ {"id":"prod","name":"Production","metrics":[
+  {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":28,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":20,"rand_max":40}},
+  {"key":"temperature","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":38.1,"min_val":5,"max_val":70,"step":0.5,"sim":{"profile":"sine","amplitude":3.0,"period_s":45,"offset":38.1}},
+  {"key":"pressure","label":"Pressure","unit":"bar","viz":"arc","input":"step","init_val":1.4,"min_val":0,"max_val":5,"step":0.05,"thresholds":[{"limit":3.0,"color":"0x107E3E"},{"limit":4.0,"color":"0xE76500"},{"limit":5.0,"color":"0xBB0000"}],"sim":{"profile":"sine","amplitude":0.2,"period_s":20,"offset":1.4}}]},
+ {"id":"waste","name":"Waste","metrics":[
+  {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":11,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":5,"rand_max":25}},
+  {"key":"temperature","label":"Temperature","unit":"°C","viz":"thermo","input":"step","init_val":18.6,"min_val":5,"max_val":70,"step":0.5,"sim":{"profile":"sine","amplitude":1.5,"period_s":90,"offset":18.6}},
+  {"key":"ph","label":"pH","unit":"pH","viz":"ph","input":"step","init_val":5.2,"min_val":0,"max_val":14,"step":0.1,"sim":{"profile":"random_walk","rand_min":4.0,"rand_max":7.0}},
+  {"key":"flowOut","label":"Flow Out","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":1.1,"min_val":0,"max_val":20,"step":0.5,"sim":{"profile":"random_walk","rand_min":0.5,"rand_max":5}}]}],
+"people":[
+ {"id":"EMP-0042","name":"Michiel Haegens","role":"Shift Lead","role_key":"lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91","avatar_color":"0x0050BE","certs":["ISO 9001","Lean","PLC Certified"]},
+ {"id":"EMP-0117","name":"Jana Kovacevic","role":"CNC Operator","role_key":"operator","dept":"Machining","plant":"Plant BE01","uid":"B1:2E:9A:04","avatar_color":"0x0070F2","certs":["CNC Level 3","Safety"]},
+ {"id":"EMP-0089","name":"Lars Vermeulen","role":"Process Engineer","role_key":"engineer","dept":"Engineering","plant":"Plant BE01","uid":"C4:88:F1:3D","avatar_color":"0xB84D00","certs":["Six Sigma GB","HAZOP","ISO 14001"]},
+ {"id":"EMP-0201","name":"Amira El-Sayed","role":"Quality Inspector","role_key":"quality","dept":"Quality","plant":"Plant BE01","uid":"D7:A3:55:E9","avatar_color":"0x8A0000","certs":["ISO 9001 Lead","FMEA","8D"]},
+ {"id":"EMP-0033","name":"Pieter van Dijk","role":"Production Supervisor","role_key":"supervisor","dept":"Operations","plant":"Plant BE01","uid":"E2:CF:71:B8","avatar_color":"0x4A1A8C","certs":["MES Certified","Lean Black","IFS"]}]};
+TPL.bakery = {"plant_name":"Bakery LE02","ui":{"indicator_scale":100},"machines":[
+ {"id":"mix01","name":"MIX-01","type":"Dough Mixer","running":true,"auto_pulse":true,"pulses":128,"metrics":[
+  {"key":"mixSpeed","label":"Mixer Speed","unit":"RPM","viz":"spark","input":"step","color":"0x0070F2","init_val":220,"min_val":0,"max_val":400,"step":10,"sim":{"profile":"random_walk","rand_min":180,"rand_max":320}},
+  {"key":"doughTemp","label":"Dough Temp","unit":"°C","viz":"thermo","input":"step","init_val":24.5,"min_val":10,"max_val":40,"step":0.2,"sim":{"profile":"sine","amplitude":1.5,"period_s":90,"offset":24.5}},
+  {"key":"batchProg","label":"Batch Progress","unit":"%","viz":"arc","input":"slider","init_val":42,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":50,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"ramp"}}]},
+ {"id":"prov01","name":"PROV-01","type":"Proofing Chamber","running":true,"auto_pulse":false,"pulses":62,"metrics":[
+  {"key":"chambTemp","label":"Chamber Temp","unit":"°C","viz":"thermo","input":"step","init_val":32.0,"min_val":20,"max_val":45,"step":0.2,"sim":{"profile":"sine","amplitude":0.8,"period_s":180,"offset":32.0}},
+  {"key":"humidity","label":"Humidity","unit":"%","viz":"arc","input":"slider","init_val":78,"min_val":40,"max_val":100,"step":1,"thresholds":[{"limit":60,"color":"0xBB0000"},{"limit":75,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"random_walk","rand_min":72,"rand_max":86}}]},
+ {"id":"oven01","name":"OVEN-01","type":"Deck Oven","running":true,"auto_pulse":true,"pulses":341,"metrics":[
+  {"key":"ovenTemp","label":"Oven Temp","unit":"°C","viz":"thermo","input":"step","init_val":215.0,"min_val":100,"max_val":280,"step":1,"sim":{"profile":"sine","amplitude":6.0,"period_s":60,"offset":215.0}},
+  {"key":"bakeTime","label":"Bake Timer","unit":"s","viz":"arc","input":"slider","init_val":900,"min_val":0,"max_val":1800,"step":10,"thresholds":[{"limit":600,"color":"0x107E3E"},{"limit":1200,"color":"0xE76500"},{"limit":1800,"color":"0xBB0000"}],"sim":{"profile":"ramp"}},
+  {"key":"steamPres","label":"Steam Pressure","unit":"bar","viz":"bullet","input":"step","color":"0x0070F2","init_val":1.4,"min_val":0,"max_val":3,"step":0.05,"sim":{"profile":"sine","amplitude":0.15,"period_s":30,"offset":1.4}}]},
+ {"id":"pack01","name":"PACK-01","type":"Wrapping Line","running":false,"auto_pulse":false,"pulses":74,"metrics":[
+  {"key":"lineSpeed","label":"Line Speed","unit":"ppm","viz":"spark","input":"step","color":"0x0070F2","init_val":0,"min_val":0,"max_val":120,"step":5,"sim":{"profile":"random_walk","rand_min":80,"rand_max":110}},
+  {"key":"rejectRate","label":"Reject Rate","unit":"%","viz":"arc","input":"slider","init_val":1.8,"min_val":0,"max_val":10,"step":0.1,"thresholds":[{"limit":2,"color":"0x107E3E"},{"limit":5,"color":"0xE76500"},{"limit":10,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":1.2,"rand_max":3.5}}]}],
+"tanks":[
+ {"id":"flour","name":"Flour Silo","metrics":[
+  {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":72,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":65,"rand_max":82}},
+  {"key":"temperature","label":"Silo Temp","unit":"°C","viz":"thermo","input":"step","init_val":18.5,"min_val":5,"max_val":40,"step":0.2,"sim":{"profile":"sine","amplitude":1.0,"period_s":120,"offset":18.5}}]},
+ {"id":"water","name":"Water Buffer","metrics":[
+  {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":54,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":20,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":48,"rand_max":66}},
+  {"key":"temperature","label":"Water Temp","unit":"°C","viz":"thermo","input":"step","init_val":14.2,"min_val":2,"max_val":30,"step":0.2,"sim":{"profile":"sine","amplitude":0.5,"period_s":180,"offset":14.2}}]}],
+"people":[
+ {"id":"EMP-B001","name":"Sofie Peeters","role":"Head Baker","role_key":"lead","dept":"Production","plant":"Bakery LE02","uid":"B0:11:AA:20","avatar_color":"0x8A4A00","certs":["HACCP","Lean Bakery"]},
+ {"id":"EMP-B012","name":"Youssef Ait","role":"Oven Operator","role_key":"operator","dept":"Baking","plant":"Bakery LE02","uid":"B0:11:BB:44","avatar_color":"0xE76500","certs":["HACCP","Safety"]},
+ {"id":"EMP-B033","name":"Els Vermeersch","role":"QA Inspector","role_key":"quality","dept":"Quality","plant":"Bakery LE02","uid":"B0:11:CC:71","avatar_color":"0xBB0000","certs":["ISO 22000","HACCP Lead"]}]};
+
+/* ── App state ── */
+let cfg = null;
+const ui = { tab:'machines', zoom:'fit', sim:false, sel:null, open:new Set(['sec-plant','sec-machines']) };
+const sim = { timer:null, t:0, vals:new Map(), hist:new Map(), pulses:new Map() };
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── helpers: color & number ── */
+const cssCol = fw => { const m=/^0x([0-9a-fA-F]{6})$/.exec(fw||''); return m ? '#'+m[1] : '#0070F2'; };
+const fwCol  = css => '0x' + (css||'#0070F2').replace('#','').toUpperCase();
+const fmtVal = v => Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1);
+const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+function metricColor(m, v){
+  const thr = m.thresholds || [];
+  for (const t of thr) if (v <= t.limit) return cssCol(t.color);
+  if (thr.length) return '#BB0000';
+  return m.color ? cssCol(m.color) : '#0070F2';
+}
+const scaled = px => Math.floor(px * clamp(cfg.ui?.indicator_scale ?? 100, 50, 200) / 100);
+
+/* ── normalize an uploaded/parsed config to the firmware schema ── */
+function normalize(raw){
+  const c = { plant_name: String(raw.plant_name ?? 'Plant'), ui: { indicator_scale: clamp(Math.round(raw.ui?.indicator_scale ?? 100), 50, 200) },
+              machines: [], tanks: [], people: [] };
+  const num = (v,d)=> (typeof v === 'number' && isFinite(v)) ? v : d;
+  const nMetric = j => ({
+    key: String(j.key ?? 'metric'), label: String(j.label ?? j.key ?? 'Metric'), unit: String(j.unit ?? ''),
+    viz: VIZ.includes(j.viz) ? j.viz : 'spark',
+    input: j.input === 'slider' ? 'slider' : 'step',
+    color: /^0x[0-9a-fA-F]{6}$/.test(j.color||'') ? j.color : '',
+    init_val: num(j.init_val,0), min_val: num(j.min_val,0), max_val: num(j.max_val,100), step: num(j.step,1),
+    thresholds: (Array.isArray(j.thresholds)?j.thresholds:[]).slice(0,LIM.thr)
+      .map(t=>({limit:num(t.limit,0), color:/^0x[0-9a-fA-F]{6}$/.test(t.color||'')?t.color:'0x107E3E'})),
+    sim: { profile: PROFILES.includes(j.sim?.profile) ? j.sim.profile : 'random_walk',
+      rand_min:num(j.sim?.rand_min,0), rand_max:num(j.sim?.rand_max,0),
+      amplitude:num(j.sim?.amplitude,0), period_s:num(j.sim?.period_s,60), offset:num(j.sim?.offset,0) } });
+  for (const m of (raw.machines||[]).slice(0,LIM.machines))
+    c.machines.push({ id:String(m.id??'mach'), name:String(m.name??'MACHINE'), type:String(m.type??''),
+      running: m.running!==false, auto_pulse: !!m.auto_pulse, pulses: Math.round(num(m.pulses,0)),
+      metrics:(m.metrics||[]).slice(0,LIM.metrics).map(nMetric) });
+  for (const t of (raw.tanks||[]).slice(0,LIM.tanks))
+    c.tanks.push({ id:String(t.id??'tank'), name:String(t.name??'Tank'),
+      metrics:(t.metrics||[]).slice(0,LIM.metrics).map(nMetric) });
+  for (const p of (raw.people||[]).slice(0,LIM.people))
+    c.people.push({ id:String(p.id??'EMP-0000'), name:String(p.name??'Name'), role:String(p.role??''),
+      role_key: ROLEKEYS.includes(p.role_key)?p.role_key:'operator', dept:String(p.dept??''),
+      plant:String(p.plant??''), uid:String(p.uid??''),
+      avatar_color:/^0x[0-9a-fA-F]{6}$/.test(p.avatar_color||'')?p.avatar_color:'0x0070F2',
+      certs:(Array.isArray(p.certs)?p.certs:[]).slice(0,LIM.certs).map(String) });
+  return c;
+}
+
+/* ── serialize with stable key order (matches shipped templates) ── */
+function toJSON(){
+  const met = m => { const o = { key:m.key, label:m.label, unit:m.unit, viz:m.viz, input:m.input };
+    if (m.color) o.color = m.color;
+    o.init_val=m.init_val; o.min_val=m.min_val; o.max_val=m.max_val; o.step=m.step;
+    if (m.thresholds?.length) o.thresholds = m.thresholds.map(t=>({limit:t.limit,color:t.color}));
+    const s = { profile:m.sim.profile };
+    if (m.sim.profile==='random_walk'){ s.rand_min=m.sim.rand_min; s.rand_max=m.sim.rand_max; }
+    if (m.sim.profile==='sine'){ s.amplitude=m.sim.amplitude; s.period_s=m.sim.period_s; s.offset=m.sim.offset; }
+    o.sim = s; return o; };
+  return JSON.stringify({ plant_name:cfg.plant_name, ui:{indicator_scale:cfg.ui.indicator_scale},
+    machines:cfg.machines.map(m=>({id:m.id,name:m.name,type:m.type,running:m.running,
+      auto_pulse:m.auto_pulse,pulses:m.pulses,metrics:m.metrics.map(met)})),
+    tanks:cfg.tanks.map(t=>({id:t.id,name:t.name,metrics:t.metrics.map(met)})),
+    people:cfg.people.map(p=>({id:p.id,name:p.name,role:p.role,role_key:p.role_key,dept:p.dept,
+      plant:p.plant,uid:p.uid,avatar_color:p.avatar_color,certs:p.certs})) }, null, 2);
+}
+
+/* ── validation (mirrors config_loader.c limits & firmware assumptions) ── */
+function validate(){
+  const out = [];
+  const err=(m)=>out.push({lvl:'error',msg:m}), warn=(m)=>out.push({lvl:'warn',msg:m});
+  const L=(v,max,what)=>{ if((v||'').length>max) err(`${what} "${v.slice(0,18)}…" exceeds ${max} chars (firmware truncates)`); };
+  L(cfg.plant_name, LIM.len.plant_name, 'plant_name');
+  if (!cfg.machines.length && !cfg.tanks.length && !cfg.people.length)
+    err('Config needs at least one of machines / tanks / people — the firmware upload validator rejects it otherwise');
+  if (cfg.machines.length > LIM.machines) err(`More than ${LIM.machines} machines`);
+  if (cfg.tanks.length > LIM.tanks) err(`More than ${LIM.tanks} tanks — extras are ignored by the firmware`);
+  if (cfg.people.length > LIM.people) err(`More than ${LIM.people} people`);
+  const ids = new Set();
+  cfg.machines.forEach((m,i)=>{ const n=`Machine ${m.id||'#'+(i+1)}`;
+    if(!m.id) err(`${n}: id is required (used in MQTT topics)`);
+    if(ids.has(m.id)) err(`Duplicate machine id "${m.id}"`); ids.add(m.id);
+    L(m.id,LIM.len.m_id,`${n} id`); L(m.name,LIM.len.m_name,`${n} name`); L(m.type,LIM.len.m_type,`${n} type`);
+    if(m.metrics.length>LIM.metrics) err(`${n}: more than ${LIM.metrics} metrics`);
+    if(!m.metrics.length) warn(`${n}: no metrics — card body will be empty`);
+    const keys=new Set();
+    m.metrics.forEach(mt=>{
+      if(!mt.key) err(`${n}: metric with empty key`);
+      if(keys.has(mt.key)) err(`${n}: duplicate metric key "${mt.key}"`); keys.add(mt.key);
+      L(mt.key,LIM.len.key,`${n}/${mt.key} key`); L(mt.label,LIM.len.label,`${n}/${mt.key} label`); L(mt.unit,LIM.len.unit,`${n}/${mt.key} unit`);
+      if(mt.min_val>=mt.max_val) err(`${n}/${mt.key}: min_val must be below max_val`);
+      if(mt.init_val<mt.min_val||mt.init_val>mt.max_val) warn(`${n}/${mt.key}: init_val outside [min,max]`);
+      let last=-Infinity; for(const t of mt.thresholds||[]){ if(t.limit<last) { warn(`${n}/${mt.key}: thresholds not ascending — firmware picks the first limit ≥ value`); break;} last=t.limit; }
+      if(mt.sim.profile==='random_walk' && mt.sim.rand_min>=mt.sim.rand_max && (mt.sim.rand_min||mt.sim.rand_max))
+        warn(`${n}/${mt.key}: sim rand_min ≥ rand_max`);
+      if(mt.sim.profile==='sine' && mt.sim.period_s<=0) warn(`${n}/${mt.key}: sine period_s should be > 0`);
+    });
+  });
+  const tids=new Set();
+  cfg.tanks.forEach((t,i)=>{ const n=`Tank ${t.id||'#'+(i+1)}`;
+    if(!t.id) err(`${n}: id is required`);
+    if(tids.has(t.id)) err(`Duplicate tank id "${t.id}"`); tids.add(t.id);
+    if(!t.metrics.length) err(`${n}: needs metrics — the first must be viz "tank" (the fill level)`);
+    else if(t.metrics[0].viz!=='tank') err(`${n}: the FIRST metric must have viz "tank" — the firmware reads the level from metrics[0]`);
+    if(t.metrics.filter(x=>x.viz==='tank').length>1) warn(`${n}: more than one "tank" viz metric`);
+  });
+  const pids=new Set();
+  cfg.people.forEach((p,i)=>{ const n=`Person ${p.id||'#'+(i+1)}`;
+    if(pids.has(p.id)) err(`Duplicate person id "${p.id}"`); pids.add(p.id);
+    L(p.name,LIM.len.p_name,`${n} name`); L(p.uid,LIM.len.p_uid,`${n} uid`);
+    if(p.certs.length>LIM.certs) err(`${n}: more than ${LIM.certs} certs`);
+    p.certs.forEach(c=>L(c,LIM.len.cert,`${n} cert`));
+  });
+  const bytes = new Blob([toJSON()]).size;
+  if (bytes > LIM.json) err(`Config is ${(bytes/1024).toFixed(1)} KB — over the firmware's 32 KB JSON buffer`);
+  return out;
+}
+
+/* ════════ Simulation (mirrors sim_task profiles) ════════ */
+function simKey(kind,i,k){ return kind+':'+i+':'+k; }
+function metricValue(kind, i, k, m){
+  if (ui.sim && sim.vals.has(simKey(kind,i,k))) return sim.vals.get(simKey(kind,i,k));
+  return m.init_val;
+}
+function stepMetric(m, v, t){
+  const p = m.sim||{};
+  switch(p.profile){
+    case 'sine': return (p.offset||0) + (p.amplitude||0) * Math.sin(2*Math.PI*t*1.5/(p.period_s||60));
+    case 'ramp': { const span=m.max_val-m.min_val; v += span/40; return v>m.max_val? m.min_val : v; }
+    case 'steady': return v;
+    default: { const lo = (p.rand_min||p.rand_max)? p.rand_min : m.min_val;
+      const hi = (p.rand_min||p.rand_max)? p.rand_max : m.max_val;
+      v += (Math.random()-0.5) * Math.max(hi-lo,1) * 0.18; return clamp(v, lo, hi); } }
+}
+function simTick(){
+  sim.t++;
+  cfg.machines.forEach((mc,i)=>{ if(!mc.running) return;
+    mc.metrics.forEach((m,k)=>{ const key=simKey('m',i,k);
+      const v = stepMetric(m, sim.vals.get(key) ?? m.init_val, sim.t);
+      sim.vals.set(key, v);
+      if (m.viz==='spark'){ const h = sim.hist.get(key) || []; h.push(v); if(h.length>HIST) h.shift(); sim.hist.set(key,h); }
+    });
+    if (mc.auto_pulse && Math.random()<0.6) sim.pulses.set('m:'+i, (sim.pulses.get('m:'+i) ?? mc.pulses)+1);
+  });
+  cfg.tanks.forEach((tk,i)=> tk.metrics.forEach((m,k)=>{ const key=simKey('t',i,k);
+    sim.vals.set(key, stepMetric(m, sim.vals.get(key) ?? m.init_val, sim.t)); }));
+  renderPreview();
+}
+function setSim(on){
+  ui.sim = on;
+  if (sim.timer){ clearInterval(sim.timer); sim.timer=null; }
+  sim.vals.clear(); sim.hist.clear(); sim.pulses.clear(); sim.t=0;
+  if (on) sim.timer = setInterval(simTick, 1500);
+  renderPreview();
+}
+/* deterministic static history (no sim): shows the auto-zoom wiggle at rest */
+function staticHist(m, seedStr){
+  let seed = 7; for (const ch of seedStr) seed = (seed*31 + ch.charCodeAt(0)) % 1e6;
+  const rnd = () => { seed = (seed*9301+49297)%233280; return seed/233280; };
+  const p = m.sim||{}; let v = m.init_val; const out = [];
+  const lo = (p.rand_min||p.rand_max)? p.rand_min : m.min_val;
+  const hi = (p.rand_min||p.rand_max)? p.rand_max : m.max_val;
+  for (let i=0;i<HIST;i++){
+    if (p.profile==='sine') v = (p.offset||0)+(p.amplitude||0)*Math.sin(2*Math.PI*i*1.5/(p.period_s||60));
+    else if (p.profile==='ramp') { v += (m.max_val-m.min_val)/40; if(v>m.max_val) v=m.min_val; }
+    else if (p.profile!=='steady') v = clamp(v + (rnd()-0.5)*Math.max(hi-lo,1)*0.18, lo, hi);
+    out.push(v);
+  }
+  // end the walk exactly on init_val so the strip value matches the line
+  if (p.profile!=='sine' && p.profile!=='ramp') out[out.length-1] = m.init_val;
+  return out;
+}
+
+/* ════════ Machines preview — exact ui_machines.c layout math ════════ */
+function sparkSVG(hist, w, h, color){
+  if (!hist || hist.length<2) return `<svg width="${w}" height="${h}"></svg>`;
+  let lo=Math.min(...hist), hi=Math.max(...hist), span=hi-lo;
+  if (span<1e-3) span = Math.abs(hi)>1 ? Math.abs(hi)*0.1 : 1;
+  lo -= span*0.08; hi += span*0.10;
+  const n=hist.length;
+  const pts = hist.map((v,i)=> (i/(n-1)*w).toFixed(1)+','+(h-2-((v-lo)/(hi-lo))*(h-4)).toFixed(1)).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+}
+function gaugeHTML(d, frac, color, valTxt){
+  const stroke = clamp(Math.round(d/9),5,10);
+  const r = d/2 - stroke/2, cx=d/2, cy=d/2, boxH = Math.round(d*0.76)+12;
+  const pt = a => { a=a*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; };
+  const arc = (a1,a2)=>{ const p=pt(a1), q=pt(a2);
+    return `M ${p[0].toFixed(1)} ${p[1].toFixed(1)} A ${r.toFixed(1)} ${r.toFixed(1)} 0 ${a2-a1>180?1:0} 1 ${q[0].toFixed(1)} ${q[1].toFixed(1)}`; };
+  const end = 198 + 144*clamp(frac,0.02,1);
+  const fs = d>=84 ? FPX.sm : d>=56 ? FPX.xs : FPX.xxs;
+  return `<div class="mc-gwrap" style="width:${d}px;height:${boxH}px">
+    <svg width="${d}" height="${boxH}" viewBox="0 0 ${d} ${boxH}">
+      <path d="${arc(198,342)}" stroke="#E0E4EF" stroke-width="${stroke}" fill="none" stroke-linecap="round"/>
+      <path d="${arc(198,end)}" stroke="${color}" stroke-width="${stroke}" fill="none" stroke-linecap="round"/></svg>
+    <span class="v" style="color:${color};font-size:${fs}px;top:${(cy + d*0.26 - fs*0.7).toFixed(0)}px">${esc(valTxt)}</span></div>`;
+}
+function renderMachines(){
+  const N = cfg.machines.length;
+  if (!N) return `<div class="dv-empty"><div style="font-size:34px">&#9881;</div>
+    <div class="big">No machines in this configuration</div>
+    <div style="font-size:13px">Add one in the editor panel</div></div>`;
+  const cols = N<=1?1:2, visRows = N<=2?1:2;
+  const cardW = Math.floor((720-28-(cols-1)*10)/cols);
+  const cardH = Math.floor((584-28-(visRows-1)*10)/visRows);
+  const bodyH = cardH-56-48-4;
+  const rowsTotal = Math.ceil(N/cols);
+  const gridH = rowsTotal*cardH + (rowsTotal-1)*10 + 28;
+  let html = `<div style="position:relative;height:${gridH}px">`;
+  cfg.machines.forEach((mc,i)=>{
+    const x = 14 + (i%cols)*(cardW+10), y = 14 + Math.floor(i/cols)*(cardH+10);
+    const selCard = ui.sel && ui.sel.kind==='m' && ui.sel.i===i;
+    const innerW = cardW-24, innerH = bodyH-12;
+    const sparkIdx = mc.metrics.findIndex(m=>m.viz==='spark');
+    const nCells = mc.metrics.length - (sparkIdx>=0?1:0);
+    let rows=0, perRow=0;
+    if (nCells>0){ rows=Math.ceil(nCells/3); perRow=Math.ceil(nCells/rows); }
+    let sparkH=0, cellsH=0;
+    if (sparkIdx>=0 && nCells>0){
+      sparkH = Math.floor(innerH*2/5);
+      sparkH = Math.min(sparkH, scaled(132));
+      const cellsMin = rows*40 + (rows-1)*6;
+      if (innerH - sparkH - 6 < cellsMin) sparkH = innerH - 6 - cellsMin;
+      sparkH = Math.max(sparkH, 48);
+      cellsH = innerH - sparkH - 6;
+    } else if (sparkIdx>=0) sparkH = innerH; else cellsH = innerH;
+
+    let body = '';
+    if (sparkIdx>=0){
+      const m = mc.metrics[sparkIdx];
+      const key = simKey('m',i,sparkIdx);
+      const hist = ui.sim ? (sim.hist.get(key) || [metricValue('m',i,sparkIdx,m)]) : staticHist(m, mc.id+m.key);
+      const v = ui.sim ? (sim.vals.get(key) ?? m.init_val) : m.init_val;
+      const col = m.color ? cssCol(m.color) : '#0070F2';
+      const chartH = Math.max(sparkH-30, 16);
+      const selCell = selCard && ui.sel.m===sparkIdx;
+      body += `<div class="mc-strip ${selCell?'hilite':''}" data-sel="m:${i}:${sparkIdx}" style="height:${sparkH}px">
+        <div class="mc-srow"><span class="mc-slbl">${esc(m.label)}</span>
+        <span class="mc-sval" style="color:${metricColor(m,v)}">${fmtVal(v)}</span></div>
+        ${sparkSVG(hist, innerW-16, chartH, col)}</div>`;
+    }
+    if (nCells>0){
+      const rowH = Math.floor((cellsH-(rows-1)*6)/rows);
+      const cellW = Math.floor((innerW-(perRow-1)*6)/perRow);
+      const cells = mc.metrics.map((m,k)=>({m,k})).filter(x=>x.k!==sparkIdx);
+      for (let r=0;r<rows;r++){
+        body += `<div class="mc-row" style="height:${rowH}px">`;
+        for (const {m,k} of cells.slice(r*perRow,(r+1)*perRow)){
+          const v = metricValue('m',i,k,m);
+          const col = metricColor(m,v);
+          const selCell = selCard && ui.sel.m===k;
+          const avail = rowH-8-20-2;
+          let d = Math.floor((avail-12)*100/76);
+          d = Math.min(d, cellW-12, scaled(96));
+          let inner;
+          if (rowH < 64){
+            inner = `<div class="mc-one" style="height:${rowH-2}px"><span class="k">${esc(m.label)}</span>
+              <span class="v" style="color:${col}">${fmtVal(v)}</span>
+              ${m.unit?`<span class="u">${esc(m.unit)}</span>`:''}</div>`;
+          } else if (m.viz==='arc' && d>=44){
+            const contentH = 20+2+Math.round(d*0.76)+12;
+            const top = Math.max(Math.floor((rowH-contentH)/2), 4);
+            const frac = (v-m.min_val)/Math.max(m.max_val-m.min_val,1e-6);
+            inner = `<div class="mc-gau" style="height:${rowH-2}px;padding-top:${top}px">
+              <span class="k">${esc(m.label)}</span>${gaugeHTML(d, frac, col, fmtVal(v))}</div>`;
+          } else {
+            const vf = rowH>=110 ? FPX.md : FPX.sm;
+            inner = `<div class="mc-tile" style="height:${rowH-2}px"><span class="k">${esc(m.label)}</span>
+              <span class="v" style="color:${col};font-size:${vf}px">${fmtVal(v)}</span>
+              ${m.unit?`<span class="u">${esc(m.unit)}</span>`:''}</div>`;
+          }
+          body += `<div class="mc-cell ${selCell?'hilite':''}" data-sel="m:${i}:${k}">${inner}</div>`;
+        }
+        body += `</div>`;
+      }
+    }
+    const pulses = ui.sim ? (sim.pulses.get('m:'+i) ?? mc.pulses) : mc.pulses;
+    html += `<div class="mcard ${mc.running?'':'stopped'} ${selCard&&ui.sel.m==null?'hilite':''}"
+      data-sel="m:${i}" style="left:${x}px;top:${y}px;width:${cardW}px;height:${cardH}px">
+      <div class="mc-hdr"><div class="mc-tc"><div class="mc-nm">${esc(mc.name)}</div>
+        <div class="mc-ty">${esc(mc.type)}</div></div><div class="mc-dot"></div></div>
+      <div class="mc-body" style="height:${bodyH}px">${body}</div>
+      <div class="mc-ftr"><div class="mc-btn ${mc.running?'':'start'}">${mc.running?'Stop':'Start'}</div>
+        <div class="mc-pill">${pulses} pulses</div></div></div>`;
+  });
+  return html + '</div>';
+}
+
+/* ════════ Tanks preview (representative) ════════ */
+function tankFillColor(m, pct){
+  for (const t of (m.thresholds||[])) if (pct <= t.limit) return cssCol(t.color);
+  return pct < 75 ? '#0070F2' : '#0092D1';
+}
+function renderTanks(){
+  if (!cfg.tanks.length) return `<div class="dv-empty"><div style="font-size:34px">&#128167;</div>
+    <div class="big">No tanks in this configuration</div><div style="font-size:13px">Add one in the editor panel</div></div>`;
+  let html = '<div class="tk-wrap">';
+  cfg.tanks.forEach((tk,i)=>{
+    const lvlM = tk.metrics[0]?.viz==='tank' ? tk.metrics[0] : tk.metrics.find(m=>m.viz==='tank');
+    const lvl = lvlM ? clamp(metricValue('t',i,tk.metrics.indexOf(lvlM),lvlM),0,100) : 0;
+    const col = lvlM ? tankFillColor(lvlM,lvl) : '#0070F2';
+    const selT = ui.sel && ui.sel.kind==='t' && ui.sel.i===i;
+    let mets = '';
+    tk.metrics.forEach((m,k)=>{ if (m===lvlM) return;
+      const v = metricValue('t',i,k,m);
+      mets += `<div class="tk-met"><span class="dotc" style="background:${metricColor(m,v)}"></span>
+        <span class="k">${esc(m.label)}</span><span class="v" style="color:${metricColor(m,v)}">${fmtVal(v)}</span>
+        <span class="u">${esc(m.unit)}</span></div>`; });
+    html += `<div class="tk-col ${selT?'hilite':''}" data-sel="t:${i}">
+      <div class="tk-name">${esc(tk.name)}</div>
+      <div class="tk-body"><div class="tk-fill" style="height:${lvl}%;background:linear-gradient(180deg,${col}CC,${col})"></div>
+        <div class="tk-pct" style="${lvl>18?`bottom:calc(${lvl}% - 38px)`:`bottom:calc(${lvl}% + 10px);color:#4A6080;text-shadow:none`}">${Math.round(lvl)}%</div></div>
+      ${mets?`<div class="tk-mets">${mets}</div>`:''}</div>`;
+  });
+  return html + '</div>';
+}
+
+/* ════════ People preview (representative badge cards) ════════ */
+function renderPeople(){
+  if (!cfg.people.length) return `<div class="dv-empty"><div style="font-size:34px">&#128100;</div>
+    <div class="big">No people in this configuration</div><div style="font-size:13px">Add one in the editor panel</div></div>`;
+  let html = '<div class="pp-wrap">';
+  cfg.people.forEach((p,i)=>{
+    const ini = p.name.split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+    const selP = ui.sel && ui.sel.kind==='p' && ui.sel.i===i;
+    html += `<div class="pp-card ${selP?'hilite':''}" data-sel="p:${i}"
+        style="background:${ROLE_GRAD[p.role_key]||ROLE_GRAD.operator}">
+      <div class="pp-top"><span>SAP DM &middot; Operator Badge</span><span>${esc(p.plant)}</span></div>
+      <div class="pp-mid"><div class="pp-av" style="background:${cssCol(p.avatar_color)}">${esc(ini)}</div>
+        <div><div class="pp-nm">${esc(p.name)}</div><div class="pp-rl">${esc(p.role)}</div>
+        <div class="pp-meta">${esc(p.dept)} &middot; ${esc(p.id)}</div></div></div>
+      <div class="pp-certs">${p.certs.map(c=>`<span class="pp-cert">${esc(c)}</span>`).join('')}</div>
+      <div class="pp-uid">NFC ${esc(p.uid)}</div></div>`;
+  });
+  return html + '</div>';
+}
+
+/* ════════ Device frame ════════ */
+const TABSVG = {
+  home:'<svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 01-1 1h-5v-7h-6v7H4a1 1 0 01-1-1z"/></svg>',
+  machines:'<svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>',
+  tanks:'<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 13h14"/></svg>',
+  debug:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4"/><rect x="3" y="10" width="18" height="4"/><rect x="3" y="16" width="18" height="4"/></svg>',
+  people:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>' };
+function renderPreview(){
+  const view = ui.tab==='machines' ? renderMachines() : ui.tab==='tanks' ? renderTanks() : renderPeople();
+  $('#device').innerHTML = `
+    <div class="dv-shell"><div class="dv-logo"></div>
+      <div><div class="dv-t1">Shop Floor Simulator</div>
+      <div class="dv-t2">SAP Digital Manufacturing - ${esc(cfg.plant_name)}</div></div>
+      <div class="dv-pills"><span class="dv-pill"><i></i>MQTT</span><span class="dv-pill"><i></i>WiFi</span></div></div>
+    <div class="dv-content">${view}</div>
+    <div class="dv-tabs">
+      <button class="dv-tab" disabled>${TABSVG.home}Home</button>
+      <button class="dv-tab ${ui.tab==='machines'?'act':''}" data-tab="machines">${TABSVG.machines}Machines</button>
+      <button class="dv-tab ${ui.tab==='tanks'?'act':''}" data-tab="tanks">${TABSVG.tanks}Tanks</button>
+      <button class="dv-tab" disabled>${TABSVG.debug}Debug</button>
+      <button class="dv-tab ${ui.tab==='people'?'act':''}" data-tab="people">${TABSVG.people}People</button></div>`;
+  const notes = { machines:'Machines tab — pixel-accurate replica of the firmware card layout (720×720). Click a card or a metric cell to edit it.',
+    tanks:'Tanks tab — representative preview (the device adds the animated wave & drag-to-set). Click a tank to edit it.',
+    people:'People tab — representative badge cards (the device shows a swipe carousel). Click a badge to edit it.' };
+  $('#devnote').textContent = notes[ui.tab];
+  applyZoom();
+}
+function applyZoom(){
+  const wrap = $('#devscale'), vp = $('#viewport');
+  let z = ui.zoom==='fit' ? Math.min(1, (vp.clientWidth-44)/736) : parseFloat(ui.zoom);
+  z = Math.max(z, 0.35);
+  wrap.style.transform = `scale(${z})`;
+  wrap.style.height = (736*z)+'px'; wrap.style.width = (736*z)+'px';
+}
+
+/* ════════ Editor panel ════════ */
+function fld(label, inner){ return `<label class="fld"><span>${label}</span>${inner}</label>`; }
+function txt(p,v,max,ph){ return `<input type="text" data-p="${p}" value="${esc(v)}" ${max?`maxlength="${max}"`:''} ${ph?`placeholder="${esc(ph)}"`:''}>`; }
+function numf(p,v,step){ return `<input type="number" data-p="${p}" value="${v}" step="${step??'any'}">`; }
+function self(p,v,opts){ return `<select data-p="${p}">${opts.map(o=>`<option value="${o}" ${o===v?'selected':''}>${o}</option>`).join('')}</select>`; }
+function colf(p,v){ return `<div class="withswatch"><input type="color" data-p="${p}" value="${cssCol(v)}">
+  <span class="mono" style="font-size:11px;color:var(--ink3)">${v||'default'}</span></div>`; }
+
+function metricEditor(base, m, i, k, topicRoot){
+  const open = ui.sel && ui.sel.kind===base[0] && ui.sel.i===i && ui.sel.m===k;
+  const simFields = m.sim.profile==='random_walk'
+      ? `<div class="grid2">${fld('rand_min',numf(`${base}.${i}.metrics.${k}.sim.rand_min`,m.sim.rand_min))}
+         ${fld('rand_max',numf(`${base}.${i}.metrics.${k}.sim.rand_max`,m.sim.rand_max))}</div>`
+    : m.sim.profile==='sine'
+      ? `<div class="grid3">${fld('amplitude',numf(`${base}.${i}.metrics.${k}.sim.amplitude`,m.sim.amplitude))}
+         ${fld('period_s',numf(`${base}.${i}.metrics.${k}.sim.period_s`,m.sim.period_s))}
+         ${fld('offset',numf(`${base}.${i}.metrics.${k}.sim.offset`,m.sim.offset))}</div>`
+      : `<div class="hint">${m.sim.profile==='ramp'?'Ramps min → max, then resets.':'Value never changes on its own.'}</div>`;
+  const thr = (m.thresholds||[]).map((t,j)=>`
+    <div class="thr-row"><span class="mono" style="font-size:11px;color:var(--ink3)">&le;</span>
+      <input type="number" data-p="${base}.${i}.metrics.${k}.thresholds.${j}.limit" value="${t.limit}" step="any">
+      <input type="color" data-p="${base}.${i}.metrics.${k}.thresholds.${j}.color" value="${cssCol(t.color)}">
+      <button class="ico danger" data-act="del" data-list="${base}.${i}.metrics.${k}.thresholds" data-idx="${j}" title="Remove threshold">&#10005;</button></div>`).join('');
+  return `<div class="mrow ${open?'open sel':''}" data-mkey="${base}:${i}:${k}">
+    <button class="mhead" data-act="selmet" data-b="${base}" data-i="${i}" data-k="${k}">
+      <span class="swatch" style="background:${metricColor(m,m.init_val)}"></span>
+      <span class="mkey mono">${esc(m.key)}</span>
+      <span class="vizchip">${m.viz}</span>
+      <span style="flex:1"></span>
+      <span class="rowbtns">
+        <button class="ico" data-act="up"   data-list="${base}.${i}.metrics" data-idx="${k}" title="Move up">&#9650;</button>
+        <button class="ico" data-act="down" data-list="${base}.${i}.metrics" data-idx="${k}" title="Move down">&#9660;</button>
+        <button class="ico" data-act="dup"  data-list="${base}.${i}.metrics" data-idx="${k}" title="Duplicate">&#10697;</button>
+        <button class="ico danger" data-act="del" data-list="${base}.${i}.metrics" data-idx="${k}" title="Delete">&#10005;</button>
+      </span></button>
+    <div class="mbody">
+      <div class="grid3">
+        ${fld('key '+`<i class="mono" style="letter-spacing:0">MQTT</i>`, txt(`${base}.${i}.metrics.${k}.key`,m.key,LIM.len.key))}
+        ${fld('label', txt(`${base}.${i}.metrics.${k}.label`,m.label,LIM.len.label))}
+        ${fld('unit', txt(`${base}.${i}.metrics.${k}.unit`,m.unit,LIM.len.unit))}
+      </div>
+      <div class="grid3" style="margin-top:8px">
+        ${fld('viz', self(`${base}.${i}.metrics.${k}.viz`,m.viz,VIZ))}
+        ${fld('input', self(`${base}.${i}.metrics.${k}.input`,m.input,['step','slider']))}
+        ${fld('color', colf(`${base}.${i}.metrics.${k}.color`,m.color))}
+      </div>
+      <div class="grid4" style="margin-top:8px">
+        ${fld('init', numf(`${base}.${i}.metrics.${k}.init_val`,m.init_val))}
+        ${fld('min',  numf(`${base}.${i}.metrics.${k}.min_val`,m.min_val))}
+        ${fld('max',  numf(`${base}.${i}.metrics.${k}.max_val`,m.max_val))}
+        ${fld('step', numf(`${base}.${i}.metrics.${k}.step`,m.step))}
+      </div>
+      <div class="subh">Thresholds <span style="text-transform:none;letter-spacing:0">(color when value &le; limit)</span></div>
+      ${thr}
+      ${(m.thresholds||[]).length<LIM.thr?`<button class="addbtn" data-act="addthr" data-list="${base}.${i}.metrics.${k}.thresholds">+ threshold</button>`:''}
+      <div class="subh">Simulation</div>
+      ${fld('profile', self(`${base}.${i}.metrics.${k}.sim.profile`,m.sim.profile,PROFILES))}
+      <div style="margin-top:8px">${simFields}</div>
+      <div class="topic mono">${topicRoot}/${esc(m.key)}</div>
+    </div></div>`;
+}
+
+function renderEditor(){
+  const M = cfg.machines, T = cfg.tanks, P = cfg.people;
+  const secOpen = id => ui.open.has(id) ? 'open' : '';
+  let h = '';
+  /* plant & display */
+  h += `<div class="sect ${secOpen('sec-plant')}" id="sec-plant">
+    <button class="shead" data-act="sect" data-id="sec-plant"><span class="caret">&#9654;</span>
+      <span class="stitle">Plant &amp; display</span></button>
+    <div class="sbody">
+      ${fld('Plant name — shell bar subtitle', txt('plant_name',cfg.plant_name,LIM.len.plant_name))}
+      <div class="fld" style="margin-top:10px"><span>indicator_scale — gauge &amp; sparkline size caps
+        (<b id="iscval" class="mono">${cfg.ui.indicator_scale}%</b>)</span>
+        <input type="range" min="50" max="200" step="5" data-p="ui.indicator_scale" value="${cfg.ui.indicator_scale}"></div>
+      <div class="hint">100% matches the HTML PoC proportions. The firmware clamps to 50&ndash;200.</div>
+    </div></div>`;
+  /* machines */
+  h += `<div class="sect ${secOpen('sec-machines')}" id="sec-machines">
+    <button class="shead" data-act="sect" data-id="sec-machines"><span class="caret">&#9654;</span>
+      <span class="stitle">Machines</span><span class="scount">${M.length} / ${LIM.machines}</span></button>
+    <div class="sbody">`;
+  M.forEach((mc,i)=>{
+    const open = ui.sel && ui.sel.kind==='m' && ui.sel.i===i;
+    h += `<div class="item ${open?'open sel':''}" data-ikey="m:${i}">
+      <button class="ihead" data-act="selent" data-b="m" data-i="${i}">
+        <span class="rundot ${mc.running?'':'off'}"></span>
+        <span class="flex1"><span class="iname">${esc(mc.name)}</span>
+          <span class="isub mono">&nbsp;${esc(mc.id)}</span></span>
+        <span class="isub">${mc.metrics.length} metrics</span>
+        <span class="rowbtns">
+          <button class="ico" data-act="up" data-list="machines" data-idx="${i}" title="Move up">&#9650;</button>
+          <button class="ico" data-act="down" data-list="machines" data-idx="${i}" title="Move down">&#9660;</button>
+          <button class="ico" data-act="dup" data-list="machines" data-idx="${i}" title="Duplicate">&#10697;</button>
+          <button class="ico danger" data-act="del" data-list="machines" data-idx="${i}" title="Delete">&#10005;</button>
+        </span></button>
+      <div class="ibody">
+        <div class="grid3">
+          ${fld('id', txt(`machines.${i}.id`,mc.id,LIM.len.m_id))}
+          ${fld('name', txt(`machines.${i}.name`,mc.name,LIM.len.m_name))}
+          ${fld('type', txt(`machines.${i}.type`,mc.type,LIM.len.m_type))}
+        </div>
+        <div class="grid3" style="margin-top:8px">
+          <label class="check"><input type="checkbox" data-p="machines.${i}.running" ${mc.running?'checked':''}> running</label>
+          <label class="check"><input type="checkbox" data-p="machines.${i}.auto_pulse" ${mc.auto_pulse?'checked':''}> auto_pulse</label>
+          ${fld('pulses', numf(`machines.${i}.pulses`,mc.pulses,1))}
+        </div>
+        <div class="subh">Metrics <span style="text-transform:none;letter-spacing:0">(first "spark" becomes the strip; order = cell order)</span></div>
+        ${mc.metrics.map((m,k)=>metricEditor('machines',m,i,k,`factory/machines/${esc(mc.id)}`)).join('')}
+        ${mc.metrics.length<LIM.metrics?`<button class="addbtn" data-act="addmet" data-list="machines.${i}.metrics">+ metric</button>`:''}
+      </div></div>`;
+  });
+  h += `${M.length<LIM.machines?'<button class="addbtn" data-act="addmach">+ machine</button>':''}</div></div>`;
+  /* tanks */
+  h += `<div class="sect ${secOpen('sec-tanks')}" id="sec-tanks">
+    <button class="shead" data-act="sect" data-id="sec-tanks"><span class="caret">&#9654;</span>
+      <span class="stitle">Tanks</span><span class="scount">${T.length} / ${LIM.tanks}</span></button>
+    <div class="sbody">
+      <div class="hint">The <b>first metric must be viz "tank"</b> — the firmware reads the fill level from metrics[0].</div>`;
+  T.forEach((tk,i)=>{
+    const open = ui.sel && ui.sel.kind==='t' && ui.sel.i===i;
+    h += `<div class="item ${open?'open sel':''}" data-ikey="t:${i}">
+      <button class="ihead" data-act="selent" data-b="t" data-i="${i}">
+        <span class="flex1"><span class="iname">${esc(tk.name)}</span>
+          <span class="isub mono">&nbsp;${esc(tk.id)}</span></span>
+        <span class="isub">${tk.metrics.length} metrics</span>
+        <span class="rowbtns">
+          <button class="ico" data-act="up" data-list="tanks" data-idx="${i}">&#9650;</button>
+          <button class="ico" data-act="down" data-list="tanks" data-idx="${i}">&#9660;</button>
+          <button class="ico danger" data-act="del" data-list="tanks" data-idx="${i}">&#10005;</button>
+        </span></button>
+      <div class="ibody">
+        <div class="grid2">
+          ${fld('id', txt(`tanks.${i}.id`,tk.id,LIM.len.t_id))}
+          ${fld('name', txt(`tanks.${i}.name`,tk.name,LIM.len.t_name))}
+        </div>
+        <div class="subh">Metrics</div>
+        ${tk.metrics.map((m,k)=>metricEditor('tanks',m,i,k,`factory/tanks/${esc(tk.id)}`)).join('')}
+        ${tk.metrics.length<LIM.metrics?`<button class="addbtn" data-act="addmet" data-list="tanks.${i}.metrics">+ metric</button>`:''}
+      </div></div>`;
+  });
+  h += `${T.length<LIM.tanks?'<button class="addbtn" data-act="addtank">+ tank</button>':''}</div></div>`;
+  /* people */
+  h += `<div class="sect ${secOpen('sec-people')}" id="sec-people">
+    <button class="shead" data-act="sect" data-id="sec-people"><span class="caret">&#9654;</span>
+      <span class="stitle">People</span><span class="scount">${P.length} / ${LIM.people}</span></button>
+    <div class="sbody">`;
+  P.forEach((p,i)=>{
+    const open = ui.sel && ui.sel.kind==='p' && ui.sel.i===i;
+    h += `<div class="item ${open?'open sel':''}" data-ikey="p:${i}">
+      <button class="ihead" data-act="selent" data-b="p" data-i="${i}">
+        <span class="swatch" style="background:${cssCol(p.avatar_color)};border-radius:50%"></span>
+        <span class="flex1"><span class="iname">${esc(p.name)}</span>
+          <span class="isub">&nbsp;${esc(p.role)}</span></span>
+        <span class="rowbtns">
+          <button class="ico" data-act="up" data-list="people" data-idx="${i}">&#9650;</button>
+          <button class="ico" data-act="down" data-list="people" data-idx="${i}">&#9660;</button>
+          <button class="ico danger" data-act="del" data-list="people" data-idx="${i}">&#10005;</button>
+        </span></button>
+      <div class="ibody">
+        <div class="grid2">
+          ${fld('id', txt(`people.${i}.id`,p.id,LIM.len.p_id))}
+          ${fld('name', txt(`people.${i}.name`,p.name,LIM.len.p_name))}
+          ${fld('role', txt(`people.${i}.role`,p.role,LIM.len.p_role))}
+          ${fld('role_key — badge style', self(`people.${i}.role_key`,p.role_key,ROLEKEYS))}
+          ${fld('dept', txt(`people.${i}.dept`,p.dept,LIM.len.p_dept))}
+          ${fld('plant', txt(`people.${i}.plant`,p.plant,LIM.len.p_plant))}
+          ${fld('NFC uid', txt(`people.${i}.uid`,p.uid,LIM.len.p_uid,'A3:F7:C2:91'))}
+          ${fld('avatar color', colf(`people.${i}.avatar_color`,p.avatar_color))}
+        </div>
+        <div style="margin-top:8px">${fld('certs — comma separated (max '+LIM.certs+')',
+          `<input type="text" data-p="people.${i}.certs" data-certs="1" value="${esc(p.certs.join(', '))}">`)}</div>
+      </div></div>`;
+  });
+  h += `${P.length<LIM.people?'<button class="addbtn" data-act="addperson">+ person</button>':''}</div></div>`;
+  $('#editor').innerHTML = h;
+}
+
+/* ════════ state plumbing ════════ */
+function getByPath(obj, parts){ return parts.reduce((o,p)=>o?.[p], obj); }
+function setByPath(obj, path, val){
+  const parts = path.split('.');
+  const last = parts.pop();
+  const tgt = getByPath(obj, parts);
+  if (tgt) tgt[last] = val;
+}
+let saveTimer = null;
+function persist(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{ try{
+    localStorage.setItem('sapdm-config-studio', JSON.stringify({cfg, theme:document.documentElement.dataset.theme||''}));
+    $('#savenote').textContent = 'autosaved ' + new Date().toLocaleTimeString();
+  }catch(e){} }, 400);
+}
+function refreshStatus(){
+  const issues = validate();
+  const errs = issues.filter(i=>i.lvl==='error').length, warns = issues.length-errs;
+  const chip = $('#vchip');
+  chip.className = 'vchip ' + (errs?'bad':warns?'warny':'good');
+  chip.innerHTML = errs ? `&#9888; ${errs} error${errs>1?'s':''}${warns?` · ${warns} warning${warns>1?'s':''}`:''}`
+    : warns ? `&#9888; ${warns} warning${warns>1?'s':''}` : '&#10003; Valid';
+  $('#issuepane').innerHTML = issues.length
+    ? issues.map(i=>`<div class="iss ${i.lvl==='error'?'error':'warn'}"><span class="tag">${i.lvl}</span><span>${esc(i.msg)}</span></div>`).join('')
+    : '<div class="iss"><span>No issues — ready for the device.</span></div>';
+  const bytes = new Blob([toJSON()]).size;
+  $('#sizetxt').textContent = (bytes/1024).toFixed(1)+' KB / 32 KB';
+  $('#sizefill').style.width = Math.min(100, bytes/LIM.json*100)+'%';
+  $('#sizefill').style.background = bytes>LIM.json ? 'var(--err)' : 'var(--hi-deep)';
+}
+function fullRender(){ renderEditor(); renderPreview(); refreshStatus(); persist(); }
+let pvTimer=null;
+function lightRender(){ // field edits: preview+status only, keep input focus
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(()=>{ renderPreview(); refreshStatus(); }, 120);
+  persist();
+}
+
+/* defaults for new entities */
+const newMetric = n => ({ key:'metric'+n, label:'New Metric', unit:'%', viz:'arc', input:'slider',
+  color:'', init_val:50, min_val:0, max_val:100, step:1,
+  thresholds:[{limit:60,color:'0x107E3E'},{limit:85,color:'0xE76500'},{limit:100,color:'0xBB0000'}],
+  sim:{profile:'random_walk',rand_min:20,rand_max:80,amplitude:0,period_s:60,offset:0} });
+const newSpark = n => Object.assign(newMetric(n), { key:'rate'+n, label:'Rate', viz:'spark', input:'step',
+  color:'0x0070F2', thresholds:[] });
+function newMachine(){ const n = cfg.machines.length+1;
+  return { id:'mach'+String(n).padStart(2,'0'), name:'MACH-'+String(n).padStart(2,'0'), type:'Machine',
+    running:true, auto_pulse:false, pulses:0, metrics:[newSpark(1), newMetric(2)] }; }
+function newTank(){ const n = cfg.tanks.length+1;
+  return { id:'tank'+String(n).padStart(2,'0'), name:'Tank '+n, metrics:[
+    { key:'level', label:'Fill Level', unit:'%', viz:'tank', input:'slider', color:'',
+      init_val:60, min_val:0, max_val:100, step:1,
+      thresholds:[{limit:15,color:'0xBB0000'},{limit:40,color:'0xE76500'}],
+      sim:{profile:'random_walk',rand_min:40,rand_max:80,amplitude:0,period_s:60,offset:0} }] }; }
+function newPerson(){ const n = cfg.people.length+1;
+  return { id:'EMP-'+String(1000+n), name:'New Operator', role:'Operator', role_key:'operator',
+    dept:'Production', plant:cfg.plant_name, uid:'00:00:00:00', avatar_color:'0x0070F2', certs:[] }; }
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200); }
+
+/* ════════ events ════════ */
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id==='simtgl'){ setSim(el.checked); return; }
+  const p = el.dataset.p;
+  if (!p) return;
+  let val;
+  if (el.dataset.certs) val = el.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,LIM.certs);
+  else if (el.type==='checkbox') val = el.checked;
+  else if (el.type==='number' || el.type==='range') val = parseFloat(el.value) || 0;
+  else if (el.type==='color') val = fwCol(el.value);
+  else val = el.value;
+  if (p==='ui.indicator_scale'){ val = clamp(Math.round(val),50,200); const l=$('#iscval'); if(l) l.textContent = val+'%'; }
+  setByPath(cfg, p, val);
+  /* live-patch editor headers without a rebuild (keeps typing focus) */
+  const mM = /^machines\.(\d+)\.(name|id|running)$/.exec(p);
+  if (mM){ const item = document.querySelector(`[data-ikey="m:${mM[1]}"]`); if(item){
+    if(mM[2]==='name') item.querySelector('.iname').textContent = cfg.machines[mM[1]].name;
+    if(mM[2]==='id') item.querySelector('.isub.mono').textContent = ' '+cfg.machines[mM[1]].id;
+    if(mM[2]==='running') item.querySelector('.rundot').classList.toggle('off', !cfg.machines[mM[1]].running); } }
+  lightRender();
+});
+document.addEventListener('change', e => {   // selects & checkboxes may need structure refresh
+  const p = e.target.dataset.p;
+  if (p && (/\.viz$|\.sim\.profile$|\.role_key$/.test(p))) fullRender();
+});
+
+document.addEventListener('click', e => {
+  const menu = $('#newmenu .menu-pop');
+  const actEl = e.target.closest('[data-act],[data-a],[data-sel],[data-tab],[data-z]');
+  if (!e.target.closest('#newmenu')) menu.classList.remove('open');
+  if (!actEl) { $('#issuepane').classList.remove('open'); return; }
+  const a = actEl.dataset.a, act = actEl.dataset.act;
+
+  /* header actions */
+  if (a==='menu'){ menu.classList.toggle('open'); return; }
+  if (a==='tpl'){ cfg = normalize(JSON.parse(JSON.stringify(TPL[actEl.dataset.t]))); ui.sel=null;
+    setSim(false); $('#simtgl').checked=false; menu.classList.remove('open'); fullRender();
+    toast('Loaded template'); return; }
+  if (a==='upload'){ $('#filein').click(); return; }
+  if (a==='download'){ const blob = new Blob([toJSON()],{type:'application/json'});
+    const u = URL.createObjectURL(blob); const link = document.createElement('a');
+    link.href=u; link.download='sapdm_config.json'; link.click(); URL.revokeObjectURL(u);
+    toast('Downloaded sapdm_config.json'); return; }
+  if (a==='copy'){ navigator.clipboard?.writeText(toJSON()).then(()=>toast('JSON copied'),
+      ()=>toast('Clipboard unavailable')); return; }
+  if (a==='json'){ $('#jsontext').value = toJSON(); $('#jsonerr').textContent='';
+    $('#jsonmodal').classList.add('open'); return; }
+  if (a==='jsonclose'){ $('#jsonmodal').classList.remove('open'); return; }
+  if (a==='jsonapply'){ try{ const parsed = JSON.parse($('#jsontext').value);
+      cfg = normalize(parsed); ui.sel=null; $('#jsonmodal').classList.remove('open'); fullRender();
+      toast('JSON applied'); }catch(ex){ $('#jsonerr').textContent = 'Parse error: '+ex.message; } return; }
+  if (a==='theme'){ const r=document.documentElement;
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const cur = r.dataset.theme || (dark?'dark':'light');
+    r.dataset.theme = cur==='dark' ? 'light' : 'dark'; persist(); return; }
+  if (a==='issues'){ $('#issuepane').classList.toggle('open'); return; }
+
+  /* stage controls */
+  if (actEl.dataset.tab){ ui.tab = actEl.dataset.tab;
+    document.querySelectorAll('#tabseg button').forEach(b=>b.classList.toggle('on', b.dataset.tab===ui.tab));
+    renderPreview(); return; }
+  if (actEl.dataset.z){ ui.zoom = actEl.dataset.z;
+    document.querySelectorAll('#zoomseg button').forEach(b=>b.classList.toggle('on', b.dataset.z===ui.zoom));
+    applyZoom(); return; }
+
+  /* preview click → select entity/metric in editor */
+  if (actEl.dataset.sel){ e.stopPropagation();
+    const [kind,i,k] = actEl.dataset.sel.split(':');
+    ui.sel = { kind, i:+i, m: k===undefined||k===''? null : +k };
+    const secId = kind==='m'?'sec-machines':kind==='t'?'sec-tanks':'sec-people';
+    ui.open.add(secId);
+    fullRender();
+    const target = document.querySelector(k!==undefined&&k!==''?`[data-mkey="${kind==='m'?'machines':'tanks'}:${i}:${k}"]`:`[data-ikey="${kind}:${i}"]`);
+    target?.scrollIntoView({block:'center', behavior:'smooth'});
+    return; }
+
+  /* editor structure ops */
+  if (act==='sect'){ const id = actEl.dataset.id;
+    ui.open.has(id) ? ui.open.delete(id) : ui.open.add(id);
+    document.getElementById(id).classList.toggle('open'); return; }
+  if (act==='selent'){ if (e.target.closest('.rowbtns')) {} else {
+      const b=actEl.dataset.b, i=+actEl.dataset.i;
+      ui.sel = (ui.sel && ui.sel.kind===b && ui.sel.i===i && ui.sel.m==null) ? null : {kind:b,i,m:null};
+      fullRender(); return; } }
+  if (act==='selmet'){ if (e.target.closest('.rowbtns')) {} else {
+      const b=actEl.dataset.b==='machines'?'m':actEl.dataset.b, i=+actEl.dataset.i, k=+actEl.dataset.k;
+      const kind = actEl.dataset.b==='machines'||actEl.dataset.b==='m' ? 'm':'t';
+      ui.sel = (ui.sel && ui.sel.kind===kind && ui.sel.i===i && ui.sel.m===k) ? {kind,i,m:null} : {kind,i,m:k};
+      fullRender(); return; } }
+
+  const list = actEl.dataset.list;
+  if (act && list !== undefined && ['up','down','del','dup'].includes(act)){
+    const arr = getByPath(cfg, list.split('.'));
+    const i = +actEl.dataset.idx;
+    if (act==='del') arr.splice(i,1);
+    if (act==='dup') arr.splice(i+1,0, JSON.parse(JSON.stringify(arr[i])));
+    if (act==='up' && i>0) [arr[i-1],arr[i]] = [arr[i],arr[i-1]];
+    if (act==='down' && i<arr.length-1) [arr[i+1],arr[i]] = [arr[i],arr[i+1]];
+    ui.sel = null; fullRender(); return;
+  }
+  if (act==='addmach'){ cfg.machines.push(newMachine()); ui.sel={kind:'m',i:cfg.machines.length-1,m:null}; fullRender(); return; }
+  if (act==='addtank'){ cfg.tanks.push(newTank()); ui.sel={kind:'t',i:cfg.tanks.length-1,m:null}; fullRender(); return; }
+  if (act==='addperson'){ cfg.people.push(newPerson()); ui.sel={kind:'p',i:cfg.people.length-1,m:null}; fullRender(); return; }
+  if (act==='addmet'){ const arr = getByPath(cfg, actEl.dataset.list.split('.'));
+    arr.push(newMetric(arr.length+1)); fullRender(); return; }
+  if (act==='addthr'){ const arr = getByPath(cfg, actEl.dataset.list.split('.'));
+    arr.push({limit:100,color:'0x107E3E'}); fullRender(); return; }
+});
+
+$('#filein').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { try {
+      const parsed = JSON.parse(rd.result);
+      if (!Array.isArray(parsed.machines) && !Array.isArray(parsed.tanks) && !Array.isArray(parsed.people))
+        throw new Error('no machines/tanks/people arrays — not a sapdm config');
+      cfg = normalize(parsed); ui.sel = null; fullRender(); toast('Loaded '+f.name);
+    } catch(ex){ toast('Upload failed: '+ex.message); } };
+  rd.readAsText(f); e.target.value = '';
+});
+window.addEventListener('resize', ()=>{ if (ui.zoom==='fit') applyZoom(); });
+
+/* ── boot ── */
+(function(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('sapdm-config-studio')||'null');
+    if (saved?.cfg){ cfg = normalize(saved.cfg); if(saved.theme) document.documentElement.dataset.theme = saved.theme; }
+  } catch(e){}
+  if (!cfg) cfg = normalize(JSON.parse(JSON.stringify(TPL.default)));
+  fullRender();
+})();
+</script>
+</body>
+</html>
