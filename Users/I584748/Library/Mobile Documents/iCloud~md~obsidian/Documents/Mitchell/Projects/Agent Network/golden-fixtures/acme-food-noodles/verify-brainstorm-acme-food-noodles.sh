@@ -19,8 +19,8 @@ echo "Slug dir: $SLUG_DIR"
 ACTUAL_JSON="$SLUG_DIR/brainstorm_output_v1.json"
 ACTUAL_SUMMARY="$SLUG_DIR/brainstorm-summary.md"
 
-if [ -f "$ACTUAL_JSON" ]; then echo "PASS: brainstorm_output_v1.json exists"; ((PASS++)); else echo "FAIL: brainstorm_output_v1.json missing"; ((FAIL++)); fi
-if [ -f "$ACTUAL_SUMMARY" ]; then echo "PASS: brainstorm-summary.md exists"; ((PASS++)); else echo "FAIL: brainstorm-summary.md missing"; ((FAIL++)); fi
+if [ -f "$ACTUAL_JSON" ]; then echo "PASS: brainstorm_output_v1.json exists"; ((PASS+=1)); else echo "FAIL: brainstorm_output_v1.json missing"; ((FAIL+=1)); fi
+if [ -f "$ACTUAL_SUMMARY" ]; then echo "PASS: brainstorm-summary.md exists"; ((PASS+=1)); else echo "FAIL: brainstorm-summary.md missing"; ((FAIL+=1)); fi
 
 python3 -c "
 import json, pathlib
@@ -31,7 +31,7 @@ if v == 1:
 else:
     print(f'FAIL: brainstorm_output_version = {v} (expected 1)')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
@@ -42,7 +42,7 @@ if slug == 'acme-food-noodles-20260707':
 else:
     print(f'FAIL: slug = {slug}')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
@@ -53,7 +53,7 @@ if ot == 'process_order':
 else:
     print(f'FAIL: product.order_type = {ot} (expected process_order)')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
@@ -64,18 +64,18 @@ if rl == True:
 else:
     print(f'FAIL: has_rework_loop = {rl} (expected true)')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
 data = json.loads(pathlib.Path('$ACTUAL_JSON').read_text())
 rft = data['production_flow']['rework_from_to']
-if isinstance(rft, list) and len(rft) == 2 and rft[0] is not None:
+if isinstance(rft, list) and len(rft) == 2 and rft[0] is not None and rft[1] is not None:
     print(f'PASS: rework_from_to = {rft}')
 else:
     print(f'FAIL: rework_from_to = {rft} (expected non-null 2-element array)')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
@@ -86,7 +86,7 @@ if n >= 2:
 else:
     print(f'FAIL: moments_of_expertise count = {n} (need >= 2)')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib
@@ -99,7 +99,7 @@ if seqs == expected_seqs:
 else:
     print(f'FAIL: production_flow steps seqs = {seqs} (expected {expected_seqs})')
     exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 python3 -c "
 import json, pathlib, sys
@@ -123,7 +123,7 @@ else:
     print('FAIL: output differs from expected:')
     print('\n'.join(diff[:80]))
     sys.exit(1)
-" && ((PASS++)) || ((FAIL++))
+" && ((PASS+=1)) || ((FAIL+=1))
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
