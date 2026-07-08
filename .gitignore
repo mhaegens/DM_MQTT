@@ -49,3 +49,6 @@ pod-plugin/build/
 pod-plugin/.qa/
 __pycache__/
 *.py[cod]
+
+# dm-check CLI dependencies (source lives in DM_Demo_Assistant)
+tools/dm-check/node_modules/
