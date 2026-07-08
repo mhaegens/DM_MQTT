@@ -1,0 +1,126 @@
+{
+  "brainstorm_output_version": 1,
+  "slug": "acme-plastics-caps-20260707",
+  "company": "acme",
+  "industry": "plastics",
+  "product": {
+    "name": "28mm PET Cap",
+    "short": "caps",
+    "type": "discrete",
+    "order_type": "production_order"
+  },
+  "scenario": {
+    "title": "Injection molding line: mold changeover and post-trim QC",
+    "story": "Every plastics line dances with changeover, the winners cut it in half. Acme's cap line runs two molds on a single injection machine producing 28mm PET caps, with average changeover taking twelve minutes per variant switch. Mold changeover eats capacity and batch flash defects surface late, leaving the plant manager dispatching orders from a whiteboard. This demo shows the dispatcher releasing and prioritizing the injection queue in DM and tracking batch traceability from mold to outgoing lot. The plant manager watches a released order move to dispatched with a single action and the batch QC result attach automatically. Without DM, mold changeover planning stays on paper and batch flash defects surface only at the customer.",
+    "duration_min": 30,
+    "focus": ["dispatching", "throughput"],
+    "audience_role": "plant_manager",
+    "has_rework_loop": false,
+    "rework_rationale": "No signals fired: rework_common not confirmed, no quality pain points at medium+ confidence in focus area.",
+    "pain_points_addressed": [
+      "mold changeover eats capacity",
+      "batch flash defects surface late"
+    ]
+  },
+  "production_flow": {
+    "steps": [
+      {
+        "seq": 1,
+        "name": "Injection",
+        "dm_operation_hint": "OP-10-INJ",
+        "type": "machine",
+        "hint_resource": "injector"
+      },
+      {
+        "seq": 2,
+        "name": "Trim",
+        "dm_operation_hint": "OP-20-TRIM",
+        "type": "machine",
+        "hint_resource": "trimmer"
+      },
+      {
+        "seq": 3,
+        "name": "QC",
+        "dm_operation_hint": "OP-30-QC",
+        "type": "inspection"
+      }
+    ],
+    "rework_from_to": [null, null]
+  },
+  "materials_hint": {
+    "finished_product_uom": "PC",
+    "batch_managed": true,
+    "components": [
+      {"name": "HDPE Pellet", "kind": "raw"}
+    ]
+  },
+  "workforce_hint": {
+    "operator_count": 3,
+    "supervisor_count": 1,
+    "cert_requirements": []
+  },
+  "tools_hint": [{"name": "Mold A"}, {"name": "Mold B"}],
+  "moments_of_expertise": [
+    {
+      "claim": "Every plastics line dances with changeover, the winners cut it in half.",
+      "evidence": "Acme cap line averages 12-minute changeover; dispatching visibility cuts planning waste.",
+      "source": "research",
+      "bank_entry_ref": null
+    },
+    {
+      "claim": "Batch traceability is boring until you get a customer complaint.",
+      "evidence": "Flash defects surface late and the batch link is manual today.",
+      "source": "research",
+      "bank_entry_ref": null
+    }
+  ],
+  "terminology": [],
+  "meta": {
+    "mode": "auto",
+    "created": "2026-07-07",
+    "research_source": "Mitchell/Projects/Agent Network/golden-fixtures/acme-plastics-caps/research_output_v1.expected.json",
+    "assumptions": [
+      {
+        "id": "A001",
+        "phase": "presales-intent",
+        "field_path": "scenario.audience_role",
+        "value_chosen": "plant_manager",
+        "rationale": "Default for known_to_sap=true company.",
+        "confidence": "medium",
+        "source": "default",
+        "resolved": false
+      },
+      {
+        "id": "A002",
+        "phase": "presales-intent",
+        "field_path": "scenario.duration_min",
+        "value_chosen": "30",
+        "rationale": "Default duration.",
+        "confidence": "medium",
+        "source": "default",
+        "resolved": false
+      },
+      {
+        "id": "A003",
+        "phase": "scenario-frame",
+        "field_path": "scenario.has_rework_loop",
+        "value_chosen": "false",
+        "rationale": "No signals fired: rework_common not confirmed, focus does not include quality-rework.",
+        "confidence": "high",
+        "source": "inferred",
+        "resolved": false
+      },
+      {
+        "id": "A004",
+        "phase": "story",
+        "field_path": "scenario.story",
+        "value_chosen": "auto-authored",
+        "rationale": "Story authored from research facts in auto mode.",
+        "confidence": "medium",
+        "source": "inferred",
+        "resolved": false
+      }
+    ],
+    "gaps_flagged": []
+  }
+}
