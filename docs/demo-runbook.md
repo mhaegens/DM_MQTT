@@ -51,6 +51,13 @@ Credentials are saved to NVS. The next power cycle will connect automatically.
 
 The entire demo content (machine names, metrics, operators) is driven by `sapdm_config.json`. To use a different scenario for a different customer:
 
+### Via the captive portal (recommended)
+
+1. Start the soft-AP and join **SAP-DM-Setup** as described above, then open `http://192.168.4.1` and switch to the **Config** tab.
+2. Pick a profile from the list to activate it, or upload a new JSON file from your phone.
+3. Uploads are kept **permanently** under their original filename — they appear in the profile list and survive switching profiles and reboots. The SD card is the home of the profile library (the bundled scenarios are copied onto it at boot); with no card inserted, profiles are kept in flash instead.
+4. Activating or uploading a profile reboots the device into the new scenario.
+
 ### Via the web editor (no SD card needed)
 
 1. Open `https://mqttfordm.haegens.be/editor/` in a browser.
