@@ -59,12 +59,23 @@ Demo content is driven by `sapdm_config.json`, looked up in this order:
 2. **SPIFFS** — `/spiffs/sapdm_config.json` (factory image + captive-portal uploads)
 3. **Embedded default** — compiled into the firmware (`main/default_config.c`)
 
+**The SD card is the home of the profile library.** At boot, any bundled
+config missing from the card (`config_brewery.json`, `config_bakery.json`,
+`config_ev_battery.json`, the annotated schema doc, and the active config)
+is copied onto it — card copies are never overwritten, so edits made on the
+card survive. With no card inserted everything keeps working from flash,
+falling back to the embedded default when flash is empty too.
+
 The captive portal (WiFi tab → Setup via Phone → Config) can upload a new
-config or activate one of the bundled scenarios (`config_brewery.json`,
-`config_bakery.json`, `config_ev_battery.json`). Uploads are validated
-(parseable JSON with `machines`/`tanks`/`people`) and written to **both**
-SPIFFS and the SD card when one is inserted, so the active store always
-carries the latest upload. No SD card is required for any of this.
+config or activate any profile from the list. Uploads are validated
+(parseable JSON with `machines`/`tanks`/`people`), stored **permanently as a
+named profile under their original filename** (SD card preferred, flash
+fallback) so they stay in the list across profile switches and reboots, and
+then activated. Activating a profile writes it to `sapdm_config.json` on
+**both** SPIFFS and the SD card, so the two stores stay in sync; if a card
+that was present stops responding during a save, the portal reports an error
+instead of letting the stale card copy win at the next boot. The profile
+list shows each file once — the SD copy wins when it exists on both stores.
 
 Schema reference: [`main/spiffs_image/sapdm_config.annotated.json`](main/spiffs_image/sapdm_config.annotated.json)
 

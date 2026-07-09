@@ -221,7 +221,7 @@ static const char HTML_TAIL[] =
     "<div id='cfgList'><em style='color:#8090A8'>Loading...</em></div>"
     "<div id='cfgStatus' style='margin-top:8px;font-size:13px'></div>"
     "<hr style='border:none;border-top:1px solid #DDE1EA;margin:16px 0'>"
-    "<p>Upload a new config (saves as sapdm_config.json and reboots):</p>"
+    "<p>Upload a new config (stored in the list above, activated, then reboots):</p>"
     "<div id='dropzone' onclick='document.getElementById(\"fInput\").click()'>"
     "Tap to select JSON file"
     "</div>"
@@ -296,7 +296,7 @@ static const char HTML_TAIL[] =
     "var st=document.getElementById('upload-status');"
     "st.style.display='none';"
     "var xhr=new XMLHttpRequest();"
-    "xhr.open('POST','/upload-config',true);"
+    "xhr.open('POST','/upload-config?name='+encodeURIComponent(_file.name),true);"
     "xhr.setRequestHeader('Content-Type','application/json');"
     "xhr.onreadystatechange=function(){"
     "if(xhr.readyState!==4)return;"
@@ -493,14 +493,29 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    const char *save_err = config_store_save_active(body, received);
+    // Keep the upload forever as a named template (?name=<original filename>,
+    // SD card preferred) so it stays in the profile list across switches...
+    char raw_name[CFG_TPL_NAME_MAX] = {0};
+    char query[160];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char enc[128];
+        if (httpd_query_key_value(query, "name", enc, sizeof(enc)) == ESP_OK)
+            url_decode(raw_name, enc, sizeof(raw_name));
+    }
+    char tpl_name[CFG_TPL_NAME_MAX];
+    config_store_sanitize_tpl_name(raw_name, tpl_name, sizeof(tpl_name));
+
+    const char *save_err = config_store_save_template(tpl_name, body, received, NULL);
+
+    // ...and make it the active config for the reboot below.
+    if (!save_err) save_err = config_store_save_active(body, received);
     free(body);
     if (save_err) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "config uploaded (%d bytes) — rebooting", received);
+    ESP_LOGI(TAG, "config uploaded as %s (%d bytes) — rebooting", tpl_name, received);
     ui_wifi_setup_set_ap_status("Config saved — rebooting...");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true}");

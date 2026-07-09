@@ -98,6 +98,9 @@ void app_main(void) {
     ConfigResult cr = config_load();
     ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
     config_store_init();   // template store lock (portal + Configuration screen)
+    // The SD card is the home of the profile library — copy any bundled
+    // config missing from the card onto it (card copies are never touched).
+    config_store_seed_sd();
 
     bsp_display_cfg_t cfg = {
         .lvgl_port_cfg = ESP_LVGL_PORT_INIT_CONFIG(),

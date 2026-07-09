@@ -283,8 +283,8 @@ void ui_config_select_activate(void)
 
     if (s_hint_lbl)
         lv_label_set_text_fmt(s_hint_lbl,
-            "Active config: %s. Templates below are stored on flash and "
-            "SD card - applying one reboots the device.",
+            "Active config: %s. Profiles live on the SD card (flash when "
+            "no card is inserted) - applying one reboots the device.",
             g_plant_name[0] ? g_plant_name : "unknown");
 
     // Blocking file IO (SPIFFS + optional SD mount) — acceptable one-shot cost
