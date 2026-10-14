@@ -22,7 +22,7 @@ Started: 2026-05-13
 
 ## US-003 — Move editor to /editor path and update cloudflared config (2026-05-13)
 - `git mv dashboard/html/editor.html dashboard/html/editor/index.html` — editor now served at /editor/
-- Updated `cloudflared/config.yml.example`: hostname changed to `mqttfordm.haegens.be`; three ordered ingress rules: /editor.* and /dashboard.* route to http://dashboard:80, catch-all routes to ws://mosquitto:9001; fallback http_status:404 retained
+- Updated `cloudflared/config.yml.example`: hostname changed to `mqtt.example.com`; three ordered ingress rules: /editor.* and /dashboard.* route to http://dashboard:80, catch-all routes to ws://mosquitto:9001; fallback http_status:404 retained
 - Added comment block explaining that HTTP path rules must precede the WS catch-all to avoid all traffic going to Mosquitto
 - YAML validated via python3 yaml.safe_load
 - Committed: 9c30bf2

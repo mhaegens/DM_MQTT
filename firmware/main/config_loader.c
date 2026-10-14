@@ -1,4 +1,6 @@
 #include "config_loader.h"
+#include "config_store.h"
+#include "config_validation.h"
 #include "default_config.h"
 #include "ui/data.h"
 #include "config.h"
@@ -67,6 +69,7 @@ static void parse_metric(const cJSON *j, Metric *m) {
     NUM("max_val",  m->max_val);
     NUM("step",     m->step);
     m->value = m->init_val;
+    m->sim_period_s = 60.0f;
 
     const cJSON *thrs = cJSON_GetObjectItem(j, "thresholds");
     if (cJSON_IsArray(thrs)) {
@@ -95,6 +98,7 @@ static void parse_metric(const cJSON *j, Metric *m) {
         if ((v = cJSON_GetObjectItem(sim, "period_s"))  && cJSON_IsNumber(v)) m->sim_period_s  = (float)v->valuedouble;
         if ((v = cJSON_GetObjectItem(sim, "offset"))    && cJSON_IsNumber(v)) m->sim_offset    = (float)v->valuedouble;
     }
+    if (!(m->sim_period_s > 0.0f)) m->sim_period_s = 60.0f;
     #undef STR
     #undef NUM
 
@@ -232,17 +236,15 @@ static int read_json_file(const char *path, char *buf) {
 }
 
 static ConfigResult parse_and_populate(const char *json_str) {
-    // Route cJSON tree allocations to SPIRAM for duration of parse
-    cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
-    cJSON_InitHooks(&hooks);
-
-    cJSON *root = cJSON_Parse(json_str);
-
-    // Restore default cJSON allocator before any early return
-    cJSON_InitHooks(NULL);
+    cJSON *root = cJSON_ParseWithOpts(json_str, NULL, true);
 
     if (!root) {
         ESP_LOGE(TAG, "cJSON parse failed: %s", cJSON_GetErrorPtr());
+        return CONFIG_PARSE_ERROR;
+    }
+    if (!config_root_valid(root)) {
+        cJSON_Delete(root);
+        ESP_LOGE(TAG, "Configuration violates device limits or metric bounds");
         return CONFIG_PARSE_ERROR;
     }
     populate_from_json(root);
@@ -251,14 +253,9 @@ static ConfigResult parse_and_populate(const char *json_str) {
 }
 
 bool config_json_valid(const char *json_str) {
-    cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
-    cJSON_InitHooks(&hooks);
-    cJSON *root = cJSON_Parse(json_str);
-    cJSON_InitHooks(NULL);
-    if (!root) return false;
-    bool ok = cJSON_IsArray(cJSON_GetObjectItem(root, "machines")) ||
-              cJSON_IsArray(cJSON_GetObjectItem(root, "tanks"))    ||
-              cJSON_IsArray(cJSON_GetObjectItem(root, "people"));
+    if (!json_str || strlen(json_str) >= JSON_BUF_SIZE) return false;
+    cJSON *root = cJSON_ParseWithOpts(json_str, NULL, true);
+    bool ok = root && config_root_valid(root);
     cJSON_Delete(root);
     return ok;
 }
@@ -268,6 +265,10 @@ bool config_json_valid(const char *json_str) {
 // embedded default. The portal writes uploads to BOTH stores so the winner
 // always carries the latest upload; see wifi_portal.c.
 ConfigResult config_load(void) {
+    // Set cJSON's global allocator once before networking starts. Changing
+    // hooks around each parse races portal/config-store calls on another core.
+    cJSON_Hooks hooks = { .malloc_fn = psram_malloc, .free_fn = free };
+    cJSON_InitHooks(&hooks);
     // Register SPIFFS up front and leave it mounted — the captive portal
     // reads/writes /spiffs/sapdm_config.json at runtime.
     esp_vfs_spiffs_conf_t spiffs_conf = {
@@ -288,44 +289,16 @@ ConfigResult config_load(void) {
         return CONFIG_PARSE_ERROR;
     }
 
-    // --- 1. SD card ---
-    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    // ESP-Hosted C6 owns slot 1 (SDIO Wi-Fi). SD card is on slot 0 per BSP.
-    host.slot = SDMMC_HOST_SLOT_0;
-    sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot.width = 4;
-    slot.clk   = GPIO_SD_CLK;
-    slot.cmd   = GPIO_SD_CMD;
-    slot.d0    = GPIO_SD_D0;
-    slot.d1    = GPIO_SD_D1;
-    slot.d2    = GPIO_SD_D2;
-    slot.d3    = GPIO_SD_D3;
-
-    esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
-        .format_if_mount_failed = false,
-        .max_files = 2,
-        .allocation_unit_size = 16 * 1024,
-    };
-
-    bool sd_present = false;
-    sdmmc_card_t *card = NULL;
-    esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot, &mount_cfg, &card);
-    if (err == ESP_OK) {
-        sd_present = true;
-        int rr = read_json_file("/sdcard/sapdm_config.json", buf);
-        esp_vfs_fat_sdcard_unmount("/sdcard", card);
-        if (rr == 0) {
-            if (parse_and_populate(buf) == CONFIG_OK) {
-                free(buf);
-                ESP_LOGI(TAG, "config source: SD card (/sdcard/sapdm_config.json)");
-                return CONFIG_OK;
-            }
-            ESP_LOGW(TAG, "SD JSON parse failed — trying SPIFFS");
-        } else if (rr == -1) {
-            ESP_LOGI(TAG, "no sapdm_config.json on SD — trying SPIFFS");
-        }
-    } else {
-        ESP_LOGI(TAG, "SD mount failed (%s) — trying SPIFFS", esp_err_to_name(err));
+    // The profile store owns one correctly powered SD mount for the boot.
+    bool from_sd = false;
+    bool sd_present;
+    int active_length = config_store_read_active(buf, JSON_BUF_SIZE, &from_sd);
+    ConfigStorageStats storage; config_store_get_stats(&storage);
+    sd_present = storage.sd_ready;
+    if (active_length >= 0 && parse_and_populate(buf) == CONFIG_OK) {
+        free(buf);
+        ESP_LOGI(TAG, "config source: %s", from_sd ? "SD card" : "SPIFFS");
+        return from_sd ? CONFIG_OK : CONFIG_SPIFFS_OK;
     }
 
     // --- 2. SPIFFS ---

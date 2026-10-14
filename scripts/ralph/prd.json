@@ -1,7 +1,7 @@
 {
   "project": "DM-MQTT-Server",
   "branchName": "ralph/server-stack",
-  "description": "Stand up the complete server-side demo infrastructure: Mosquitto MQTT broker, Cloudflare Tunnel, a live browser dashboard, and a hosted JSON config editor. Node-RED removed. Dashboard at mqttfordm.haegens.be/dashboard. Config editor at mqttfordm.haegens.be/editor.",
+  "description": "Stand up the complete server-side demo infrastructure: Mosquitto MQTT broker, Cloudflare Tunnel, a live browser dashboard, and a hosted JSON config editor. Node-RED removed. Dashboard at mqtt.example.com/dashboard. Config editor at mqtt.example.com/editor.",
   "userStories": [
     {
       "id": "US-001",
@@ -44,7 +44,7 @@
       "acceptanceCriteria": [
         "dashboard/html/editor.html moved to dashboard/html/editor/index.html",
         "Requesting GET /editor/ on port 80 returns HTTP 200 with the editor HTML",
-        "cloudflared/config.yml.example ingress section updated to three rules in order: (1) hostname mqttfordm.haegens.be path /editor.* → http://dashboard:80; (2) hostname mqttfordm.haegens.be path /dashboard.* → http://dashboard:80; (3) hostname mqttfordm.haegens.be (catch-all, no path) → ws://mosquitto:9001",
+        "cloudflared/config.yml.example ingress section updated to three rules in order: (1) hostname mqtt.example.com path /editor.* → http://dashboard:80; (2) hostname mqtt.example.com path /dashboard.* → http://dashboard:80; (3) hostname mqtt.example.com (catch-all, no path) → ws://mosquitto:9001",
         "A comment in config.yml.example explains rule ordering: HTTP path rules must come before the WS catch-all or all traffic goes to Mosquitto",
         "Fallback rule (http_status:404) remains as the final entry for unmatched hostnames",
         "docker compose config validates without errors",

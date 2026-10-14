@@ -53,7 +53,7 @@ Payload format:
 ```json
 {
   "uid": "A3:F7:C2:91",
-  "name": "Michiel Haegens",
+  "name": "Demo Operator",
   "role": "Shift Lead",
   "plant": "Plant BE01",
   "ts": 12345678
@@ -109,7 +109,7 @@ These IDs are config-driven. A different `sapdm_config.json` can use different I
 SAP Digital Manufacturing IoT ingests data via MQTT subscribe. Connect to:
 
 ```
-wss://mqttfordm.haegens.be
+wss://mqtt.example.com
 ```
 
 Subscribe to `factory/#` to receive all telemetry. The broker uses no authentication (`allow_anonymous true` in `mosquitto.conf`). This is intentional for demo simplicity. For a production deployment, add `password_file` authentication to `mosquitto.conf` and update the firmware `MQTT_BROKER_URI` with credentials.
@@ -133,7 +133,7 @@ Or from outside the server using the public endpoint (requires WebSocket support
 
 ```bash
 mosquitto_sub \
-  -h mqttfordm.haegens.be \
+  -h mqtt.example.com \
   -p 443 \
   --capath /etc/ssl/certs \
   --protocol-version mqttv311 \

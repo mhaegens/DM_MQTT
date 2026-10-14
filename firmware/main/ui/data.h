@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -100,9 +101,9 @@ extern int     g_tank_count;
 extern int     g_badge_count;
 extern int     g_active_badge;
 extern int     g_log_sec;
-extern bool    g_mqtt_connected;
-extern int     g_mqtt_msg_count;
-extern bool    g_wifi_connected;
+extern _Atomic bool    g_mqtt_connected;
+extern _Atomic int     g_mqtt_msg_count;
+extern _Atomic bool    g_wifi_connected;
 extern char    g_wifi_ssid[33];   // currently connected SSID, "" when disconnected
 extern int     g_wifi_rssi;
 extern char    g_device_ip[16];
@@ -116,9 +117,9 @@ extern int     g_ui_indicator_scale;
 // Metric currently open in the detail view (edit hold). While set, sim_tick
 // skips this metric so the simulator cannot overwrite a user edit mid-view.
 // -1 = none. Written by ui_detail (open) and ui_main (navigation away).
-extern int     g_edit_machine;   // machine index, or -1
-extern int     g_edit_tank;      // tank index, or -1
-extern int     g_edit_metric;    // metric index within the entity, or -1
+extern _Atomic int     g_edit_machine;   // machine index, or -1
+extern _Atomic int     g_edit_tank;      // tank index, or -1
+extern _Atomic int     g_edit_metric;    // metric index within the entity, or -1
 
 void metric_push(Metric *m, float value);
 void data_init_psram(void);

@@ -78,6 +78,7 @@ input[type="text"]{width:100%;padding:12px;font-family:var(--font);font-size:var
   border:1px solid var(--bd);border-radius:var(--rsm);background:var(--base);color:var(--tx)}
 .section-controls{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
 </style>
+<style>.sap-logo{object-fit:contain;display:block;background:transparent}.sap-badge,.bc-logo-sq{background:transparent!important;border:0!important;border-radius:0!important;width:auto!important}.sap-badge .sap-logo{width:68px;height:34px}</style>
 </head>
 <body>
 
@@ -86,7 +87,7 @@ input[type="text"]{width:100%;padding:12px;font-family:var(--font);font-size:var
 <div class="container">
   <div class="shell">
     <div class="shell-left">
-      <div class="sap-badge">SAP</div>
+      <img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
       <div class="shell-title">
         <div class="shell-h">Config Editor</div>
         <div class="shell-sub">DM_MQTT Plant Configuration</div>
@@ -233,7 +234,7 @@ input[type="text"]{width:100%;padding:12px;font-family:var(--font);font-size:var
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Michiel Haegens</div>
+            <div class="card-title">Demo Operator</div>
             <div class="card-info">Shift Lead</div>
           </div>
         </div>
@@ -323,7 +324,7 @@ const SAMPLE_CONFIG = {
       ]}
   ],
   people: [
-    {id:"EMP-0042",name:"Michiel Haegens",role:"Shift Lead",role_key:"lead",dept:"Production",plant:"Plant BE01",uid:"A3:F7:C2:91",avatar_color:"0x0050BE",certs:["ISO 9001","Lean","PLC Certified"]},
+    {id:"EMP-0042",name:"Demo Operator",role:"Shift Lead",role_key:"lead",dept:"Production",plant:"Plant BE01",uid:"A3:F7:C2:91",avatar_color:"0x0050BE",certs:["ISO 9001","Lean","PLC Certified"]},
     {id:"EMP-0017",name:"Sophie Claes",role:"CNC Operator",role_key:"operator",dept:"Machining",plant:"Plant BE01",uid:"B7:2D:E1:04",avatar_color:"0x107E3E",certs:["CNC Level 2"]}
   ]
 };

@@ -13,6 +13,7 @@
 // optional "ui.indicator_scale" percent in the config file.
 
 #include "ui_machines.h"
+#include "src/misc/cache/instance/lv_image_cache.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "ui_detail.h"
@@ -127,6 +128,7 @@ static void apply_card_visibility(void);
 #if UI_SCROLL_GHOSTS
 static lv_obj_t      *s_ghost_imgs[MAX_MACHINES] = {NULL};
 static lv_draw_buf_t *s_ghost_bufs[MAX_MACHINES] = {NULL};
+static bool           s_ghost_dirty[MAX_MACHINES];
 static bool           s_ghost_mode   = false;
 static bool           s_ghosts_active = false;  // grid taller than viewport?
 
@@ -156,10 +158,10 @@ static lv_draw_buf_t *ghost_composite(const lv_draw_buf_t *src) {
 
 // Re-render card idx into its ghost image. Runs on the LVGL task, never
 // mid-gesture (callers are refresh/tap paths, all off-scroll).
-static void ghost_retake(int idx) {
-    if (!s_ghosts_active || s_ghost_mode) return;
-    if (!s_cards[idx] || !s_ghost_imgs[idx]) return;
-    if (lv_obj_get_width(s_cards[idx]) <= 0) return;   // layout not resolved yet
+static bool ghost_retake_now(int idx) {
+    if (!s_ghosts_active || s_ghost_mode) return false;
+    if (!s_cards[idx] || !s_ghost_imgs[idx]) return false;
+    if (lv_obj_get_width(s_cards[idx]) <= 0) return false;   // layout not resolved yet
 
     // Snapshot renders regardless of viewport position, but not while HIDDEN
     // (scroll culling) — lift the flag for the render, restore it after.
@@ -167,11 +169,11 @@ static void ghost_retake(int idx) {
     if (was_hidden) lv_obj_clear_flag(s_cards[idx], LV_OBJ_FLAG_HIDDEN);
     lv_draw_buf_t *argb = lv_snapshot_take(s_cards[idx], LV_COLOR_FORMAT_ARGB8888);
     if (was_hidden) lv_obj_add_flag(s_cards[idx], LV_OBJ_FLAG_HIDDEN);
-    if (!argb) return;
+    if (!argb) return false;
 
     lv_draw_buf_t *rgb = ghost_composite(argb);
     lv_draw_buf_destroy(argb);
-    if (!rgb) return;
+    if (!rgb) return false;
 
     // Snapshot includes any ext-draw margin — recenter the image on the card
     // slot so a size mismatch cannot shift the ghost.
@@ -185,6 +187,25 @@ static void ghost_retake(int idx) {
     if (old) {
         lv_image_cache_drop(old);   // the decoder may hold the old pointer
         lv_draw_buf_destroy(old);
+    }
+    return true;
+}
+
+static void ghost_retake(int idx) {
+    if (s_ghosts_active && idx >= 0 && idx < g_machine_count) s_ghost_dirty[idx] = true;
+}
+
+static void ghost_cache_timer_cb(lv_timer_t *timer) {
+    (void)timer;
+    if (g_current_view != VIEW_MACHINES || s_ghost_mode || lv_obj_is_scrolling(s_screen)) return;
+    for (lv_indev_t *in = lv_indev_get_next(NULL); in; in = lv_indev_get_next(in))
+        if (lv_indev_get_state(in) == LV_INDEV_STATE_PRESSED) return;
+    // At most one expensive snapshot per idle pass; navigation and taps never
+    // build ten cards' snapshots synchronously. Dirty/missing ghosts stay live.
+    for (int i = 0; i < g_machine_count; i++) {
+        if (!s_ghost_dirty[i]) continue;
+        s_ghost_dirty[i] = !ghost_retake_now(i);
+        break;
     }
 }
 
@@ -806,7 +827,7 @@ static void apply_card_visibility(void) {
 #if UI_SCROLL_GHOSTS
         // During a scroll the image proxy stands in for the live card; a card
         // whose snapshot failed keeps its widgets on screen instead.
-        bool use_ghost = s_ghost_mode && s_ghost_imgs[i] && s_ghost_bufs[i];
+        bool use_ghost = s_ghost_mode && s_ghost_imgs[i] && s_ghost_bufs[i] && !s_ghost_dirty[i];
         lv_obj_t *shown  = use_ghost ? s_ghost_imgs[i] : s_cards[i];
         lv_obj_t *other  = use_ghost ? s_cards[i]      : s_ghost_imgs[i];
         if (other) lv_obj_add_flag(other, LV_OBJ_FLAG_HIDDEN);
@@ -920,6 +941,7 @@ void ui_machines_create(lv_obj_t *parent) {
     // Ghosts only earn their PSRAM when the grid can actually scroll
     s_ghosts_active = (GRID_PAD + grid_h + GRID_PAD) > CONTENT_H;
     if (s_ghosts_active) {
+        lv_timer_create(ghost_cache_timer_cb, 40, NULL);
         lv_obj_add_event_cb(s_screen, machines_scroll_begin_cb, LV_EVENT_SCROLL_BEGIN, NULL);
         lv_obj_add_event_cb(s_screen, machines_scroll_end_cb,   LV_EVENT_SCROLL_END,   NULL);
     }

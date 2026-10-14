@@ -135,6 +135,7 @@ body{font-family:var(--font);color:var(--tx);background:var(--bg);display:flex;f
 .op-badges{display:flex;gap:6px;margin-top:6px;align-items:center}
 .op-time{font-family:var(--mono);font-size:10px;color:var(--tx3);margin-top:2px}
 </style>
+<style>.sap-logo{object-fit:contain;display:block;background:transparent}.sap-badge,.bc-logo-sq{background:transparent!important;border:0!important;border-radius:0!important;width:auto!important}.sap-badge .sap-logo{width:68px;height:34px}</style>
 </head>
 <body>
 
@@ -144,9 +145,7 @@ body{font-family:var(--font);color:var(--tx);background:var(--bg);display:flex;f
 <div class="shell">
   <div class="shell-l">
     <div class="sap-badge">
-      <svg viewBox="0 0 64 44" fill="none">
-        <text x="0" y="38" font-family="'IBM Plex Sans',sans-serif" font-weight="600" font-size="38" fill="white" letter-spacing="2">SAP</text>
-      </svg>
+      <img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
     </div>
     <div>
       <div class="shell-title">Shop Floor Monitor</div>
@@ -235,7 +234,7 @@ const MOCK_TANKS = [
 ];
 
 const MOCK_OPERATOR = {
-  name:'Michiel Haegens', role:'Shift Lead', id:'EMP-0042', dept:'Production', plant:'Plant BE01', loginTime:'08:14:33'
+  name:'Demo Operator', role:'Shift Lead', id:'EMP-0042', dept:'Production', plant:'Plant BE01', loginTime:'08:14:33'
 };
 
 /* ── RENDER MACHINES ── */

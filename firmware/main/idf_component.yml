@@ -3,29 +3,32 @@
 ## This pulls all display, touch, and LVGL components from the Espressif component registry.
 
 dependencies:
-  idf: ">=5.3"
+  idf: ">=5.4,<5.5"
 
   ## LVGL 9 with IDF port
   espressif/esp_lvgl_port:
-    version: "^2"
+    version: "2.7.2"
 
   ## GT911 capacitive touch driver (I2C, GPIO7/8)
   espressif/esp_lcd_touch_gt911:
-    version: "^1"
+    version: "1.2.0~2"
 
   ## MQTT client (built into IDF, listed for clarity)
   ## esp_mqtt is part of IDF — no separate component needed
 
   ## ST7703 MIPI-DSI panel driver
   waveshare/esp_lcd_st7703:
-    version: "*"
+    version: "1.0.5"
 
   ## Official Waveshare BSP (same version used by the working lvgl_demo_v9)
   waveshare/esp32_p4_wifi6_touch_lcd_4b:
-    version: "*"
+    version: "1.0.1"
 
   ## ESP32-P4 WiFi via ESP32-C6 companion chip (SDIO bridge)
   espressif/esp_wifi_remote:
-    version: "*"
+    version: "1.5.1"
   espressif/esp_hosted:
-    version: "*"
+    version: "2.12.7"
+
+  lvgl/lvgl:
+    version: "9.5.0"

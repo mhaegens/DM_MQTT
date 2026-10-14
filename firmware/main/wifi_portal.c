@@ -5,6 +5,7 @@
 #include "config.h"
 #include "config_loader.h"
 #include "config_store.h"
+#include "cJSON.h"
 #include "esp_http_server.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -195,7 +196,7 @@ static const char HTML_HEAD[] =
     "<button class='tab' onclick=\"showTab('cfg',this)\">Config</button>"
     "</div>"
     "<div id='wifi' style='display:block'>"
-    "<p>Select your network and enter the password.</p>"
+    "<p>Select a network. Saved networks connect without entering the password again.</p>"
     "<form method='post' action='/connect'>"
     "<label>Network<select name='ssid'>";
 
@@ -204,7 +205,7 @@ static const char HTML_TAIL[] =
     "<label>Password"
     "<div style='position:relative'>"
     "<input type='password' name='password' id='pwd' "
-    "placeholder='Leave empty for open networks'>"
+    "placeholder='Leave empty for saved or open networks'>"
     "<button type='button' onclick=\"var f=document.getElementById('pwd');"
     "f.type=f.type==='password'?'text':'password';"
     "this.textContent=f.type==='password'?'Show':'Hide'\" "
@@ -221,7 +222,7 @@ static const char HTML_TAIL[] =
     "<div id='cfgList'><em style='color:#8090A8'>Loading...</em></div>"
     "<div id='cfgStatus' style='margin-top:8px;font-size:13px'></div>"
     "<hr style='border:none;border-top:1px solid #DDE1EA;margin:16px 0'>"
-    "<p>Upload a new config (stored in the list above, activated, then reboots):</p>"
+    "<p>Add a profile to your permanent library. Choose whether to use it now:</p>"
     "<div id='dropzone' onclick='document.getElementById(\"fInput\").click()'>"
     "Tap to select JSON file"
     "</div>"
@@ -229,7 +230,8 @@ static const char HTML_TAIL[] =
     "<input type='file' id='fInput' accept='.json,application/json' "
     "style='display:none' onchange='filePicked(this)'>"
     "<button class='main ok' id='upBtn' onclick='doUpload()' "
-    "style='display:none'>Upload &amp; Reboot</button>"
+    "style='display:none'>Save profile</button>"
+    "<label><input type='checkbox' id='activateUpload' checked style='width:auto'> Use this profile now and restart</label>"
     "<div id='upload-status'></div>"
     "</div>"
     "<script>"
@@ -255,14 +257,13 @@ static const char HTML_TAIL[] =
     "if(xhr.status===200){"
     "var files=JSON.parse(xhr.responseText);"
     "if(!files.length){el.innerHTML='<em>No config files found.</em>';return;}"
-    "var html='';"
-    "for(var i=0;i<files.length;i++){"
-    "var f=files[i];"
-    "var cls=f.active?'main ok':'main';"
-    "var lbl=f.name+(f.src==='sd'?' [SD]':'')+(f.active?' (active)':'');"
-    "html+='<button class=\"'+cls+'\" style=\"margin-top:8px\" "
-    "onclick=\"setCfg(\\''+f.name+'\\',\\''+f.src+'\\')\">'+lbl+'</button>';}"
-    "el.innerHTML=html;}"
+    "el.textContent='';"
+    "files.forEach(function(f){"
+    "var b=document.createElement('button');"
+    "b.className=f.active?'main ok':'main';b.style.marginTop='8px';"
+    "b.textContent=f.name+(f.src==='sd'?' [SD]':' [Flash]')+(f.active?' (active)':'')+(f.valid===false?' - Needs attention':'');"
+    "b.disabled=f.valid===false;b.onclick=function(){setCfg(f.name,f.src);};"
+    "el.appendChild(b);});}"
     "else{el.innerHTML='<em style=\"color:#BB0000\">Storage not available.</em>';}};"
     "xhr.send();}"
     "function setCfg(name,src){"
@@ -287,7 +288,7 @@ static const char HTML_TAIL[] =
     "dz.style.background='#E3F5EC';"
     "dz.style.color='#107E3E';"
     "dz.textContent=_file.name+' ('+Math.round(_file.size/1024)+'KB)';"
-    "document.getElementById('upBtn').style.display='block';"
+    "document.getElementById('upBtn').style.display='block';document.getElementById('upBtn').disabled=false;document.getElementById('upBtn').textContent='Save profile';"
     "document.getElementById('upload-status').style.display='none';}"
     "function doUpload(){"
     "if(!_file)return;"
@@ -296,13 +297,13 @@ static const char HTML_TAIL[] =
     "var st=document.getElementById('upload-status');"
     "st.style.display='none';"
     "var xhr=new XMLHttpRequest();"
-    "xhr.open('POST','/upload-config?name='+encodeURIComponent(_file.name),true);"
+    "xhr.open('POST','/upload-config?name='+encodeURIComponent(_file.name)+'&activate='+(document.getElementById('activateUpload').checked?'1':'0'),true);"
     "xhr.setRequestHeader('Content-Type','application/json');"
     "xhr.onreadystatechange=function(){"
     "if(xhr.readyState!==4)return;"
     "if(xhr.status===200){"
     "st.style.display='block';st.style.background='#E3F5EC';"
-    "st.style.color='#107E3E';st.textContent='Saved! Rebooting...';}"
+    "st.style.color='#107E3E';var result=JSON.parse(xhr.responseText);st.textContent='Saved as '+result.name+' on '+result.storage+(result.activated?'. Restarting...':'. Kept in your profile library.');loadCfgList();}"
     "else{"
     "st.style.display='block';st.style.background='#FFE8E8';"
     "st.style.color='#BB0000';st.textContent='Failed: '+xhr.responseText;"
@@ -381,30 +382,39 @@ static void url_decode(char *dst, const char *src, int max)
 
 // ─── URI handlers ─────────────────────────────────────────────────────────────
 
+static void send_network_option(httpd_req_t *req, const char *ssid, bool saved, int rssi)
+{
+    char escaped[33 * 6], option[480];
+    html_escape(escaped, ssid, sizeof(escaped));
+    int length = snprintf(option, sizeof(option),
+                          "<option value='%s'>%s%s (%d dBm)</option>",
+                          escaped, escaped, saved ? " - Saved" : "", rssi);
+    httpd_resp_send_chunk(req, option, length < (int)sizeof(option) ? length : sizeof(option) - 1);
+}
+
 static esp_err_t get_root_handler(httpd_req_t *req)
 {
+    wifi_saved_entry_t saved[WIFI_KNOWN_MAX] = {0};
+    int saved_count = wifi_manager_saved_networks(saved, WIFI_KNOWN_MAX);
     if (s_cached_ap_count == 0) {
-        // Self-healing: if the initial scan failed or returned nothing, every
-        // load of this auto-refreshing page retries until results land.
         portal_kick_scan();
-        httpd_resp_set_type(req, "text/html");
-        httpd_resp_sendstr(req, HTML_SCANNING);
-        return ESP_OK;
+        if (!saved_count) {
+            httpd_resp_set_type(req, "text/html");
+            httpd_resp_sendstr(req, HTML_SCANNING);
+            return ESP_OK;
+        }
     }
-
-    char opts[1600] = {0};
-    int  pos = 0;
-    for (int i = 0; i < s_cached_ap_count && pos < (int)sizeof(opts) - 260; i++) {
-        char esc[33 * 6];   // worst case: every char escaped
-        html_escape(esc, s_cached_aps[i].ssid, sizeof(esc));
-        pos += snprintf(opts + pos, sizeof(opts) - pos,
-                        "<option value='%s'>%s (%d dBm)</option>",
-                        esc, esc, s_cached_aps[i].rssi);
-    }
-
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send_chunk(req, HTML_HEAD, HTTPD_RESP_USE_STRLEN);
-    httpd_resp_send_chunk(req, opts, pos);
+    for (int i = 0; i < s_cached_ap_count; ++i)
+        send_network_option(req, s_cached_aps[i].ssid,
+                            wifi_manager_is_saved(s_cached_aps[i].ssid), s_cached_aps[i].rssi);
+    for (int i = 0; i < saved_count; ++i) {
+        bool visible = false;
+        for (int j = 0; j < s_cached_ap_count; ++j)
+            if (!strcmp(saved[i].ssid, s_cached_aps[j].ssid)) visible = true;
+        if (!visible) send_network_option(req, saved[i].ssid, true, -99);
+    }
     httpd_resp_send_chunk(req, HTML_TAIL, HTTPD_RESP_USE_STRLEN);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -452,7 +462,8 @@ static esp_err_t post_connect_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "text/html");
     httpd_resp_sendstr(req, HTML_OK);
 
-    wifi_manager_connect(raw_ssid, raw_pass, NULL);
+    if (raw_pass[0] || !wifi_manager_connect_saved(raw_ssid, NULL))
+        wifi_manager_connect(raw_ssid, raw_pass, NULL);
     return ESP_OK;
 }
 
@@ -505,59 +516,60 @@ static esp_err_t post_upload_config_handler(httpd_req_t *req)
     char tpl_name[CFG_TPL_NAME_MAX];
     config_store_sanitize_tpl_name(raw_name, tpl_name, sizeof(tpl_name));
 
-    const char *save_err = config_store_save_template(tpl_name, body, received, NULL);
+    bool saved_to_sd = false, activate = true;
+    char activation[8], stored_name[CFG_TPL_NAME_MAX];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "activate", activation, sizeof(activation)) == ESP_OK &&
+        !strcmp(activation, "0")) activate = false;
+    const char *save_err = config_store_import(tpl_name, body, received, &saved_to_sd,
+                                              stored_name, sizeof(stored_name));
 
     // ...and make it the active config for the reboot below.
-    if (!save_err) save_err = config_store_save_active(body, received);
+    if (!save_err && activate) save_err = config_store_save_active(body, received);
     free(body);
     if (save_err) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, save_err);
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "config uploaded as %s (%d bytes) — rebooting", tpl_name, received);
-    ui_wifi_setup_set_ap_status("Config saved — rebooting...");
+    ESP_LOGI(TAG, "profile imported as %s (%d bytes), SD=%d activate=%d", stored_name, received, saved_to_sd, activate);
+    ui_wifi_setup_set_ap_status(activate ? "Profile saved - rebooting..." : "Profile saved in your library");
+    char response[180];
+    snprintf(response, sizeof(response), "{\"ok\":true,\"name\":\"%s\",\"storage\":\"%s\",\"activated\":%s}",
+             stored_name, saved_to_sd ? "sd" : "flash", activate ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"ok\":true}");
-    vTaskDelay(pdMS_TO_TICKS(600));
-    esp_restart();
+    httpd_resp_sendstr(req, response);
+    if (activate) { vTaskDelay(pdMS_TO_TICKS(600)); esp_restart(); }
+    else { int count; ConfigTemplate *all = config_store_list_all(&count); free(all); }
+
     return ESP_OK;
 }
 
 // ─── GET /list-configs ────────────────────────────────────────────────────────
 
-#define LIST_BUF_CAP 2048
-
 static esp_err_t get_list_configs_handler(httpd_req_t *req)
 {
-    // Heap-allocate buffers — stack is too precious (only ~17 KB internal SRAM free)
-    char           *buf  = malloc(LIST_BUF_CAP);
-    ConfigTemplate *tpls = malloc(sizeof(ConfigTemplate) * CFG_TPL_MAX);
-    if (!buf || !tpls) {
-        free(buf);
-        free(tpls);
-        httpd_resp_send_500(req);
-        return ESP_OK;
-    }
-
-    int count = config_store_list(tpls, CFG_TPL_MAX);
-    int pos   = 0;
-    buf[pos++] = '[';
-    for (int i = 0; i < count && pos < LIST_BUF_CAP - 160; i++) {
-        if (i > 0) buf[pos++] = ',';
-        pos += snprintf(buf + pos, LIST_BUF_CAP - pos,
-                        "{\"name\":\"%s\",\"src\":\"%s\",\"active\":%s}",
-                        tpls[i].name, tpls[i].from_sd ? "sd" : "flash",
-                        tpls[i].active ? "true" : "false");
-    }
-    buf[pos++] = ']';
-    buf[pos]   = '\0';
-
+    int count = 0;
+    ConfigTemplate *profiles = config_store_list_all(&count);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, buf);
-    ESP_LOGI(TAG, "GET /list-configs: %d templates", count);
-    free(buf);
-    free(tpls);
+    httpd_resp_send_chunk(req, "[", 1);
+    for (int i = 0; i < count; ++i) {
+        cJSON *item = cJSON_CreateObject();
+        if (!item) break;
+        cJSON_AddStringToObject(item, "name", profiles[i].name);
+        cJSON_AddStringToObject(item, "src", profiles[i].from_sd ? "sd" : "flash");
+        cJSON_AddBoolToObject(item, "active", profiles[i].active);
+        cJSON_AddBoolToObject(item, "valid", profiles[i].valid);
+        char *json = cJSON_PrintUnformatted(item);
+        cJSON_Delete(item);
+        if (!json) break;
+        if (i) httpd_resp_send_chunk(req, ",", 1);
+        httpd_resp_send_chunk(req, json, strlen(json));
+        free(json);
+    }
+    httpd_resp_send_chunk(req, "]", 1);
+    httpd_resp_send_chunk(req, NULL, 0);
+    free(profiles);
     return ESP_OK;
 }
 

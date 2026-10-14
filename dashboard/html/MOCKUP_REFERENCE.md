@@ -502,7 +502,7 @@ Each machine has a 32-value history array per metric for sparkline rendering.
 
 ### Badges (NFC Virtual)
 5 employees in `BADGES`:
-- Michiel Haegens — Shift Lead — EMP-0042 — UID A3:F7:C2:91
+- Demo Operator — Shift Lead — EMP-0042 — UID A3:F7:C2:91
 - 4 others across Operator, Engineer, Supervisor, Quality roles
 
 ### Metric Definitions

@@ -1,0 +1,15 @@
+{
+  "name": "dm-mqtt-qa",
+  "private": true,
+  "scripts": {
+    "test": "node --test *.test.cjs",
+    "preview": "node preview-server.mjs",
+    "browser": "node browser-qa.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2",
+    "mqtt": "5.10.4",
+    "aedes": "0.51.3",
+    "ws": "8.18.0"
+  }
+}

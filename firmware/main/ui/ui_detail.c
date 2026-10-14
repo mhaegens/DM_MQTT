@@ -1,5 +1,6 @@
 // ui_detail.c — Detail overlay: header + viz card + step/slider + sim panel.
 #include "ui_detail.h"
+#include "../mqtt_task.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "data.h"
@@ -496,6 +497,13 @@ static void detail_refresh_labels(void)
         g_machines[s_ctx_machine].metrics[s_ctx_metric].value = s_value;
     DATA_UNLOCK();
 
+    // Send edits immediately; the worker coalesces rapid slider changes.
+    if (s_ctx_tank >= 0 && s_ctx_metric >= 0)
+        mqtt_pub_tank_metric(g_tanks[s_ctx_tank].id,
+                             g_tanks[s_ctx_tank].metrics[s_ctx_metric].key, s_value);
+    else if (s_ctx_machine >= 0 && s_ctx_metric >= 0)
+        mqtt_pub_machine_metric(g_machines[s_ctx_machine].id,
+                                g_machines[s_ctx_machine].metrics[s_ctx_metric].key, s_value);
     update_viz();
 }
 

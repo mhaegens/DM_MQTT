@@ -383,6 +383,7 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
 .ebtn{background:#FFF;border:1px solid #C8CCDA;color:#556B8A;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:6px;cursor:pointer;transition:all .15s}
 .ebtn.a{background:var(--hi);border-color:var(--hi-dk);color:#fff}
 </style>
+<style>.sap-logo{object-fit:contain;display:block;background:transparent}.sap-badge,.bc-logo-sq{background:transparent!important;border:0!important;border-radius:0!important;width:auto!important}.sap-badge .sap-logo{width:68px;height:34px}</style>
 </head>
 <body>
 
@@ -405,9 +406,7 @@ body{background:#D0D4E4;font-family:var(--font);color:var(--tx);
   <div class="shell">
     <div class="shell-l">
       <div class="sap-badge">
-        <svg viewBox="0 0 64 44" fill="none">
-          <text x="0" y="38" font-family="'IBM Plex Sans',sans-serif" font-weight="600" font-size="38" fill="white" letter-spacing="2">SAP</text>
-        </svg>
+        <img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
       </div>
       <div>
         <div class="shell-title" id="stitle">Shop Floor Simulator</div>
@@ -1214,7 +1213,7 @@ function addLog(){
 
 /* ══════════════ BADGE DATA ══════════════ */
 const BADGES = [
-  { id:'EMP-0042', name:'Michiel Haegens',  role:'Shift Lead',           roleKey:'lead',       dept:'Production', plant:'Plant BE01', uid:'A3:F7:C2:91', certs:['ISO 9001','Lean','PLC Certified'],  avatarColor:'#0050BE' },
+  { id:'EMP-0042', name:'Demo Operator',  role:'Shift Lead',           roleKey:'lead',       dept:'Production', plant:'Plant BE01', uid:'A3:F7:C2:91', certs:['ISO 9001','Lean','PLC Certified'],  avatarColor:'#0050BE' },
   { id:'EMP-0117', name:'Jana Kovacevic',   role:'CNC Operator',         roleKey:'operator',   dept:'Machining',  plant:'Plant BE01', uid:'B1:2E:9A:04', certs:['CNC Level 3','Safety'],            avatarColor:'#0F6CBD' },
   { id:'EMP-0089', name:'Lars Vermeulen',   role:'Process Engineer',     roleKey:'engineer',   dept:'Engineering',plant:'Plant BE01', uid:'C4:88:F1:3D', certs:['Six Sigma GB','HAZOP','ISO 14001'],avatarColor:'#8B4000' },
   { id:'EMP-0201', name:'Amira El-Sayed',   role:'Quality Inspector',    roleKey:'quality',    dept:'Quality',    plant:'Plant BE01', uid:'D7:A3:55:E9', certs:['ISO 9001 Lead','FMEA','8D'],       avatarColor:'#6B0000' },
@@ -1253,7 +1252,7 @@ function bcBuildCard(badge) {
     <div class="bc-top">
       <div class="bc-logo">
         <div class="bc-logo-sq">
-          <svg viewBox="0 0 44 30" fill="none"><text x="0" y="26" font-family="'IBM Plex Sans',sans-serif" font-weight="700" font-size="26" fill="white" letter-spacing="1">SAP</text></svg>
+          <img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
         </div>
         <div><div class="bc-plant-name">Digital Manufacturing</div><div class="bc-plant-sub">${badge.plant}</div></div>
       </div>

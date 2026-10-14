@@ -179,7 +179,7 @@ const char DEFAULT_CONFIG_JSON[] =
 "],"
 "\"people\":["
   "{"
-    "\"id\":\"EMP-0042\",\"name\":\"Michiel Haegens\","
+    "\"id\":\"EMP-0042\",\"name\":\"Demo Operator\","
     "\"role\":\"Shift Lead\",\"role_key\":\"lead\","
     "\"dept\":\"Production\",\"plant\":\"Plant BE01\","
     "\"uid\":\"A3:F7:C2:91\","

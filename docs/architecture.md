@@ -1,5 +1,7 @@
 # Architecture: SAP DM MQTT Shop Floor Simulator
 
+> Deployment hostnames, addresses and tunnel names below are examples. Supply your own values locally; private site configuration is not versioned.
+
 This document explains how the system fits together and why each major architectural choice was made. It is the entry point for anyone making changes to any layer of the project.
 
 ---
@@ -13,7 +15,7 @@ This document explains how the system fits together and why each major architect
 │  Runs firmware: UI + simulator + MQTT client               │
 └──────────────────────────┬─────────────────────────────────┘
                            │ MQTT over WSS (port 443)
-                           │ wss://mqttfordm.haegens.be
+                           │ wss://mqtt.example.com
 ┌──────────────────────────▼─────────────────────────────────┐
 │  Cloudflare Tunnel                                         │
 │  Zero Trust ingress, no open firewall ports required       │
@@ -33,7 +35,7 @@ This document explains how the system fits together and why each major architect
 └─────────────────────┘
 ```
 
-All server components run on the homelab Proxmox node (`pve-homelab`, `192.168.0.200`). Mosquitto and Nginx run as Docker containers in a Debian 13 LXC (`192.168.0.60`). `cloudflared` runs as a host service on `pve-homelab` — the existing `homelab` tunnel is reused, with three new ingress rules added for this demo.
+All server components run on the demo-tunnel Proxmox node (`virtualization-host`, `192.0.2.2`). Mosquitto and Nginx run as Docker containers in a Debian 13 LXC (`192.0.2.10`). `cloudflared` runs as a host service on `virtualization-host` — the existing `demo-tunnel` tunnel is reused, with three new ingress rules added for this demo.
 
 ---
 
@@ -59,21 +61,21 @@ The entire demo scenario (machines, tanks, operators, simulation profiles) is in
 
 ## Cloudflare Tunnel Ingress Rules
 
-The `homelab` tunnel on `pve-homelab` (`/etc/cloudflared/config.yml`) needs three rules for the demo. The order is critical — Cloudflared stops at the first match.
+The `demo-tunnel` tunnel on `virtualization-host` (`/etc/cloudflared/config.yml`) needs three rules for the demo. The order is critical — Cloudflared stops at the first match.
 
 ```yaml
 ingress:
-  # ... existing homelab rules ...
+  # ... existing demo-tunnel rules ...
 
   # SAP DM MQTT demo stack
-  - hostname: mqttfordm.haegens.be
+  - hostname: mqtt.example.com
     path: /editor.*
-    service: http://192.168.0.60:80
-  - hostname: mqttfordm.haegens.be
+    service: http://192.0.2.10:80
+  - hostname: mqtt.example.com
     path: /dashboard.*
-    service: http://192.168.0.60:80
-  - hostname: mqttfordm.haegens.be
-    service: ws://192.168.0.60:9001
+    service: http://192.0.2.10:80
+  - hostname: mqtt.example.com
+    service: ws://192.0.2.10:9001
 
   - service: http_status:404
 ```

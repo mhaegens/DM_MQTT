@@ -1,5 +1,7 @@
 # SAP DM MQTT Demo Stack: Installation Guide
 
+> Deployment hostnames, addresses and tunnel names below are examples. Supply your own values locally; private site configuration is not versioned.
+
 This guide walks you through setting up the complete demo server stack from scratch. You do not need prior Linux, Docker, or networking experience. Every command is shown exactly as you should type it. Follow each numbered step in order.
 
 ---
@@ -13,7 +15,7 @@ Two programs run together on a small virtual server (called an LXC container) in
 | **Mosquitto** | Receives and delivers MQTT messages | Port 1883 (local TCP) and port 9001 (WebSocket) |
 | **Dashboard** (nginx) | Shows a live MQTT monitor and a config editor in your browser | `/dashboard` and `/editor` |
 
-Internet access is provided by **your existing Cloudflare Tunnel** already running on the Proxmox host (the same one that serves `jellyfin.haegens.be` and other services). You will add three new ingress rules to it, pointing at this LXC's LAN IP. No second cloudflared instance is needed.
+Internet access is provided by **your existing Cloudflare Tunnel** already running on the Proxmox host (the same one that serves `jellyfin.example.com` and other services). You will add three new ingress rules to it, pointing at this LXC's LAN IP. No second cloudflared instance is needed.
 
 ---
 
@@ -23,7 +25,7 @@ An **LXC** is a lightweight virtual machine. Proxmox is the hypervisor (the soft
 
 ### Step 1.1: Open the Proxmox web interface
 
-Open a browser and go to your Proxmox web UI: `https://192.168.0.200:8006`. Log in as `root`.
+Open a browser and go to your Proxmox web UI: `https://192.0.2.2:8006`. Log in as `root`.
 
 ### Step 1.2: Open the Proxmox Shell
 
@@ -45,8 +47,8 @@ The script will ask you a few questions. The default values (shown in square bra
 |---|---|---|
 | LXC container ID | `200` | If you already have an LXC with ID 200 |
 | Container hostname | `sapdm-demo` | If you want a different name |
-| IP address | `192.168.0.60/24` | If that IP is already taken on your network |
-| Gateway | `192.168.0.1` | If your router has a different IP |
+| IP address | `192.0.2.10/24` | If that IP is already taken on your network |
+| Gateway | `192.0.2.1` | If your router has a different IP |
 | Network bridge | `vmbr0` | Almost never |
 | Storage target | `local-lvm` | If your Proxmox uses a different storage name |
 | Root password | *(required)* | Type any password, it will not be shown on screen |
@@ -70,7 +72,7 @@ This takes about 2 to 5 minutes depending on your internet speed.
 At the end of the script output, you will see a line like:
 
 ```
-Dashboard : http://192.168.0.60
+Dashboard : http://192.0.2.10
 ```
 
 Note this IP address. You will need it throughout this guide. Replace `<lxc-ip>` with your actual IP in every step below.
@@ -106,7 +108,7 @@ ssh root@<lxc-ip>
 Replace `<lxc-ip>` with the IP address from Step 1.4. For example:
 
 ```bash
-ssh root@192.168.0.60
+ssh root@192.0.2.10
 ```
 
 When prompted, type the root password you chose in Step 1.3 and press Enter. (The password will not be shown on screen.)
@@ -153,7 +155,7 @@ sapdm-mosquitto      running
 
 ## Part 3: Add ingress rules to your existing Cloudflare Tunnel
 
-You already have a Cloudflare Tunnel running on the Proxmox host that serves other services like `jellyfin.haegens.be`. You do not need to create a new tunnel or run cloudflared again inside this LXC. Instead, you add three ingress rules to the existing tunnel config so traffic for `mqttfordm.haegens.be` is routed to the new LXC.
+You already have a Cloudflare Tunnel running on the Proxmox host that serves other services like `jellyfin.example.com`. You do not need to create a new tunnel or run cloudflared again inside this LXC. Instead, you add three ingress rules to the existing tunnel config so traffic for `mqtt.example.com` is routed to the new LXC.
 
 > **Why three rules, not one?** The MQTT dashboard and editor are served over HTTP by nginx. The MQTT broker itself talks WebSocket. A single catch-all rule cannot handle both, so we need one rule per path for HTTP and one catch-all for WebSocket.
 
@@ -182,16 +184,16 @@ nano /etc/cloudflared/config.yml
 Inside the `ingress:` section, add these three rules. They must go **above** the existing catch-all rule (the one with no `hostname` or the final `service: http_status:404` line).
 
 ```yaml
-  - hostname: mqttfordm.haegens.be
+  - hostname: mqtt.example.com
     path: /editor.*
-    service: http://192.168.0.60:80
+    service: http://192.0.2.10:80
 
-  - hostname: mqttfordm.haegens.be
+  - hostname: mqtt.example.com
     path: /dashboard.*
-    service: http://192.168.0.60:80
+    service: http://192.0.2.10:80
 
-  - hostname: mqttfordm.haegens.be
-    service: ws://192.168.0.60:9001
+  - hostname: mqtt.example.com
+    service: ws://192.0.2.10:9001
 ```
 
 > **Rule ordering matters.** Cloudflare evaluates rules from top to bottom and stops at the first match. The `/editor` and `/dashboard` path rules must come before the WebSocket catch-all (the one with no `path:` field), otherwise all traffic for this hostname goes to the MQTT broker and the dashboard never loads.
@@ -203,10 +205,10 @@ Save the file with `Ctrl + X`, then `Y`, then Enter.
 Run this on the Proxmox host:
 
 ```bash
-cloudflared tunnel route dns homelab mqttfordm.haegens.be
+cloudflared tunnel route dns demo-tunnel mqtt.example.com
 ```
 
-This creates the CNAME record in Cloudflare automatically. You should see `Added CNAME mqttfordm.haegens.be` in the output.
+This creates the CNAME record in Cloudflare automatically. You should see `Added CNAME mqtt.example.com` in the output.
 
 ### Step 3.4: Reload the tunnel
 
@@ -225,7 +227,7 @@ systemctl restart cloudflared
 From any device, open:
 
 ```
-https://mqttfordm.haegens.be/dashboard/
+https://mqtt.example.com/dashboard/
 ```
 
 ✅ **You should see** the MQTT monitor dashboard loading over HTTPS.
@@ -269,7 +271,7 @@ mosquitto_pub -h <lxc-ip> -p 1883 -t test/hello -m "world"
 Open a browser on any device (including a phone with mobile data, not connected to your LAN):
 
 ```
-https://mqttfordm.haegens.be/dashboard/
+https://mqtt.example.com/dashboard/
 ```
 
 ✅ **You should see** the same MQTT monitor dashboard, now served through the Cloudflare Tunnel over HTTPS.
@@ -314,9 +316,9 @@ The device needs to know which WiFi network to join before it can reach the MQTT
 
 ### Step 5.2: Wait for MQTT to connect
 
-After the device connects to WiFi, it automatically connects to `mqttfordm.haegens.be` via WebSocket (port 9001) through the Cloudflare Tunnel.
+After the device connects to WiFi, it automatically connects to `mqtt.example.com` via WebSocket (port 9001) through the Cloudflare Tunnel.
 
-✅ **Within about 10 seconds**, messages from the device appear in the dashboard at `https://mqttfordm.haegens.be/dashboard/`.
+✅ **Within about 10 seconds**, messages from the device appear in the dashboard at `https://mqtt.example.com/dashboard/`.
 
 > **Note:** The device uses WebSocket (not plain TCP) to connect to MQTT. This is what allows the connection to go through the Cloudflare Tunnel. Plain MQTT on port 1883 is for local tools only.
 

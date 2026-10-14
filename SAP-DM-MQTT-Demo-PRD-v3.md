@@ -6,7 +6,7 @@
 
 | Field        | Value                                                    |
 |--------------|----------------------------------------------------------|
-| Author       | Michiel Haegens                                          |
+| Author       | Demo Operator                                          |
 | Domain       | SAP Digital Manufacturing — Presales & Solution Advisory |
 | Status       | Draft                                                    |
 | Last Updated | April 2026                                               |
@@ -49,7 +49,7 @@
 
 This document describes the complete architecture, components, and implementation plan for a physical SAP Digital Manufacturing (SAP DM) MQTT demo rig. The system demonstrates shop floor data flowing from physical edge hardware through a self-hosted MQTT broker directly into SAP DM cloud in real time, with no middleware layer required.
 
-The demo is designed for presales and enablement contexts, illustrating how machine signals, rich telemetry, and operator identification are captured at the edge and surfaced in SAP DM. It runs entirely on homelab infrastructure with no dependency on corporate VPN or customer network.
+The demo is designed for presales and enablement contexts, illustrating how machine signals, rich telemetry, and operator identification are captured at the edge and surfaced in SAP DM. It runs entirely on demo-tunnel infrastructure with no dependency on corporate VPN or customer network.
 
 ### 1.1 Objectives
 
@@ -112,9 +112,9 @@ SAP DM's native IoT/MQTT connectivity can subscribe directly to a broker over MQ
 ### 2.4 Connectivity Model
 
 - ESP32-P4 connects to any WiFi or phone hotspot with internet access (WiFi 6 via onboard ESP32-C6 co-processor)
-- Connects to Mosquitto WebSocket via `wss://mqttfordm.haegens.be` — the same Cloudflare Tunnel endpoint used by SAP DM
+- Connects to Mosquitto WebSocket via `wss://mqtt.example.com` — the same Cloudflare Tunnel endpoint used by SAP DM
 - No VPN or port forwarding required; the device needs only outbound internet access
-- Cloudflare Tunnel runs as a container and establishes an outbound connection to the Cloudflare edge — no inbound ports required on the homelab router
+- Cloudflare Tunnel runs as a container and establishes an outbound connection to the Cloudflare edge — no inbound ports required on the demo-tunnel router
 - SAP DM connects to the public Cloudflare hostname over WSS (port 443)
 - Browser dashboard connects to Mosquitto WebSocket directly on the local LAN (port 9001)
 
@@ -272,7 +272,7 @@ docker compose pull && docker compose up -d   # update all images
 
 ### 5.1 Purpose
 
-Cloudflare Tunnel (`cloudflared`) creates an outbound-only encrypted connection from the homelab to Cloudflare's edge network. It exposes Mosquitto's WebSocket listener on a public hostname (e.g., `mqtt.yourdomain.com`) without any inbound firewall rules or port forwarding. SAP DM connects to this public hostname over WSS. Cloudflare handles TLS termination; Mosquitto itself requires no certificate.
+Cloudflare Tunnel (`cloudflared`) creates an outbound-only encrypted connection from the demo-tunnel to Cloudflare's edge network. It exposes Mosquitto's WebSocket listener on a public hostname (e.g., `mqtt.yourdomain.com`) without any inbound firewall rules or port forwarding. SAP DM connects to this public hostname over WSS. Cloudflare handles TLS termination; Mosquitto itself requires no certificate.
 
 A Cloudflare account managing the target domain is required. The free tier is sufficient.
 
@@ -357,11 +357,11 @@ The PN532 connects to the ESP32-P4 expansion header via I2C with no conflict wit
 | NFC lib       | Elechouse PN532 Arduino library                    |
 | MQTT lib      | PubSubClient by Nick O'Leary                       |
 | WiFi          | ESP32 WiFi stack via ESP32-C6 SDIO bridge          |
-| Broker target | Mosquitto WebSocket via `wss://mqttfordm.haegens.be` (Cloudflare Tunnel) |
+| Broker target | Mosquitto WebSocket via `wss://mqtt.example.com` (Cloudflare Tunnel) |
 
 ### 6.4 Network Connectivity
 
-The ESP32-P4 connects to any WiFi or phone hotspot with internet access. It reaches the MQTT broker via the Cloudflare Tunnel at `wss://mqttfordm.haegens.be` — no VPN or dedicated network configuration required on the device side.
+The ESP32-P4 connects to any WiFi or phone hotspot with internet access. It reaches the MQTT broker via the Cloudflare Tunnel at `wss://mqtt.example.com` — no VPN or dedicated network configuration required on the device side.
 
 ### 6.5 Complete Hardware BOM
 
@@ -632,7 +632,7 @@ To provision manually instead, create a Ubuntu 24.04 LXC with 2 GB RAM, 16 GB di
 
 ### 12.3 ESP32-P4 Connectivity
 
-No VPN required. The ESP32-P4 connects directly to `wss://mqttfordm.haegens.be` over any internet connection using MQTT over WebSocket. The Cloudflare Tunnel handles TLS; the device needs only outbound internet access.
+No VPN required. The ESP32-P4 connects directly to `wss://mqtt.example.com` over any internet connection using MQTT over WebSocket. The Cloudflare Tunnel handles TLS; the device needs only outbound internet access.
 
 Ensure the Cloudflare Tunnel is active (section 12.2) and the ESP32-P4 firmware uses an MQTT client library with WebSocket transport support.
 
@@ -695,7 +695,7 @@ Topics follow the pattern `factory/{asset-type}/{asset-id}/{signal}`.
 |----------|-------------------|------------------------|--------------------------------------|
 | 1883     | MQTT TCP          | LAN only (internal)    | Node-RED, local CLI tools            |
 | 9001     | MQTT WebSocket    | LAN + Cloudflare Tunnel| Browser dashboard, ESP32-P4, SAP DM  |
-| 443 (WSS)| MQTT WebSocket TLS| Internet               | ESP32-P4 + SAP DM via `mqttfordm.haegens.be` |
+| 443 (WSS)| MQTT WebSocket TLS| Internet               | ESP32-P4 + SAP DM via `mqtt.example.com` |
 
 ### 13.2 Machine Topics
 
@@ -806,7 +806,7 @@ SAP DM connects directly to Mosquitto via the Cloudflare Tunnel public hostname 
 | NFC card reads fail                      | Card type unsupported or antenna blocked  | Verify MIFARE Classic card; remove metal objects from behind the module              |
 | ESP32-P4 WiFi never connects             | SDIO bridge firmware issue                | Ensure firmware uses the WiFi-via-C6 SDIO stack, not native P4 WiFi calls           |
 | MQTT shows disconnected on device        | Cloudflare Tunnel down or hostname wrong  | Check `docker logs sapdm-cloudflared`; verify tunnel is Active in Cloudflare dashboard |
-| MQTT rc=-2 on device                     | WSS URL or port unreachable               | Test with `wscat -c wss://mqttfordm.haegens.be` from a laptop on the same network  |
+| MQTT rc=-2 on device                     | WSS URL or port unreachable               | Test with `wscat -c wss://mqtt.example.com` from a laptop on the same network  |
 | LVGL rendering slow or tearing           | Double buffering not configured           | Enable double buffering in LVGL config; use DMA for RGB transfer via BSP             |
 
 ### 15.3 Useful Diagnostic Commands
@@ -837,7 +837,7 @@ curl -i -N -H "Upgrade: websocket" -H "Connection: Upgrade" http://192.168.1.60:
 wscat -c wss://mqtt.yourdomain.com
 
 # Test public WSS endpoint from outside (requires wscat: npm install -g wscat)
-wscat -c wss://mqttfordm.haegens.be
+wscat -c wss://mqtt.example.com
 ```
 
 ---
@@ -897,7 +897,7 @@ wscat -c wss://mqttfordm.haegens.be
 | MIFARE              | NXP contactless smart card standard widely used for access control and industrial badges                     |
 | LVGL                | Light and Versatile Graphics Library: open-source embedded GUI library; version 9 used on ESP32-P4           |
 | BSP                 | Board Support Package: Waveshare-provided driver layer for display, touch, and peripheral initialisation     |
-| Cloudflare Tunnel   | Outbound-only encrypted tunnel from the homelab to Cloudflare's edge, exposing Mosquitto WebSocket publicly  |
+| Cloudflare Tunnel   | Outbound-only encrypted tunnel from the demo-tunnel to Cloudflare's edge, exposing Mosquitto WebSocket publicly  |
 | Proxmox VE          | Open-source virtualization platform running LXC containers and KVM VMs                                       |
 | LXC                 | Linux Container: lightweight OS-level virtualization used in Proxmox                                         |
 | Docker Compose      | Tool for defining and running multi-container Docker applications from a single YAML file                    |

@@ -8,6 +8,7 @@
 // parent and register themselves in g_screens[VIEW_*].
 
 #include "ui_main.h"
+#include "ui_dispatch.h"
 #include "ui_theme.h"
 #include "config.h"
 #include "data.h"
@@ -165,7 +166,7 @@ static void build_shell_bar(void)
     lv_obj_set_style_pad_column(left_group, 10, LV_PART_MAIN);
     lv_obj_set_flex_grow(left_group, 1);   // expands to push status pills right
 
-    // SAP geometric logo image (68×44px RGB565)
+    // Official SAP SVG compiled to RGB565 (68×44); no runtime SVG renderer.
     extern const lv_image_dsc_t sap_logo;
     lv_obj_t *logo = lv_image_create(left_group);
     lv_image_set_src(logo, &sap_logo);
@@ -426,6 +427,7 @@ void ui_main_init(void)
     lv_obj_set_style_bg_color(lv_scr_act(), COL_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, LV_PART_MAIN);
 
+    ui_dispatch_init();
     build_shell_bar();
     build_crumb_bar();
 
@@ -652,13 +654,7 @@ void ui_notify_mqtt_status(bool connected)
 void ui_notify_wifi_status(bool connected, int rssi, const char *ip)
 {
     set_pill_state(s_wifi_dot, s_wifi_lbl, connected, "WiFi", "No WiFi");
-    g_wifi_connected = connected;
-    g_wifi_rssi = rssi;
-    if (connected && ip) {
-        strncpy(g_device_ip, ip, sizeof(g_device_ip) - 1);
-    } else if (!connected) {
-        strncpy(g_device_ip, "0.0.0.0", sizeof(g_device_ip) - 1);
-    }
+    (void)rssi; (void)ip;
 }
 
 // ─── Hardware button callbacks ────────────────────────────────────────────────

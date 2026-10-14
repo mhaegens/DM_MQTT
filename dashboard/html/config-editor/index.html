@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -47,9 +47,6 @@ input[type=range]{ accent-color:var(--hi-deep); padding:0; border:none; backgrou
 header{ display:flex; align-items:center; gap:14px; padding:10px 16px;
   background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
 .brand{ display:flex; align-items:center; gap:10px; }
-.brand .cube{ width:30px; height:30px; border-radius:7px; background:#0F2647; position:relative; overflow:hidden; flex:none;}
-.brand .cube::after{ content:''; position:absolute; inset:6px 6px 10px 6px; border-radius:2px;
-  background:linear-gradient(135deg,#5BB2FF 0%,#0070F2 60%,#0F2647 100%); }
 .brand .eyebrow{ font-size:10px; letter-spacing:.22em; color:var(--ink3); text-transform:uppercase; }
 .brand h1{ font-size:16px; margin:0; font-weight:600; letter-spacing:-.01em; white-space:nowrap; }
 .spacer{ flex:1; }
@@ -186,15 +183,13 @@ main{ flex:1; display:flex; min-height:0; }
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 
 /* ═══ Device replica — firmware tokens, always light ═══ */
-.device{ width:720px; background:#F2F4FA; border-radius:16px; overflow:hidden; flex:none;
+.device{ width:736px; background:#F2F4FA; border-radius:16px; overflow:hidden; flex:none;
   border:8px solid #10151f; box-shadow:0 18px 50px rgba(0,0,0,.45); color:#1D2D3E;
   font-family:"Montserrat",-apple-system,"Segoe UI",Roboto,sans-serif; }
 .device *{ box-sizing:border-box; }
 .dv-shell{ height:64px; background:#fff; border-bottom:2px solid #0070F2; display:flex;
   align-items:center; gap:12px; padding:0 16px; }
 .dv-logo{ width:40px; height:40px; background:#0F2647; border-radius:6px; position:relative; overflow:hidden; flex:none;}
-.dv-logo::after{ content:''; position:absolute; inset:8px 8px 14px 8px; border-radius:2px;
-  background:linear-gradient(135deg,#5BB2FF 0%,#0070F2 60%,#0F2647 100%); }
 .dv-t1{ font-size:19px; font-weight:600; line-height:1.15; }
 .dv-t2{ font-size:12.5px; color:#4A6080; }
 .dv-pills{ margin-left:auto; display:flex; gap:8px; }
@@ -299,10 +294,14 @@ main{ flex:1; display:flex; min-height:0; }
   font-family:ui-monospace,Menlo,monospace; }
 </style>
 
+<link rel="stylesheet" href="/assets/sap-workbench.css">
+<script src="/assets/site-config.js"></script>
+<script src="/assets/mqtt-connection.js"></script>
+<script src="/assets/config-validation.js"></script>
 </head>
 <body>
 <header>
-  <div class="brand"><div class="cube"></div>
+  <div class="brand"><img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="52" height="26">
     <div><div class="eyebrow">SAP DM &middot; MQTT Demo</div><h1>Shop Floor Config Studio</h1></div>
   </div>
   <div class="spacer"></div>
@@ -432,7 +431,7 @@ TPL.default = {"plant_name":"Plant BE01","ui":{"indicator_scale":100},"machines"
   {"key":"ph","label":"pH","unit":"pH","viz":"ph","input":"step","init_val":5.2,"min_val":0,"max_val":14,"step":0.1,"sim":{"profile":"random_walk","rand_min":4.0,"rand_max":7.0}},
   {"key":"flowOut","label":"Flow Out","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":1.1,"min_val":0,"max_val":20,"step":0.5,"sim":{"profile":"random_walk","rand_min":0.5,"rand_max":5}}]}],
 "people":[
- {"id":"EMP-0042","name":"Michiel Haegens","role":"Shift Lead","role_key":"lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91","avatar_color":"0x0050BE","certs":["ISO 9001","Lean","PLC Certified"]},
+ {"id":"EMP-0042","name":"Demo Operator","role":"Shift Lead","role_key":"lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91","avatar_color":"0x0050BE","certs":["ISO 9001","Lean","PLC Certified"]},
  {"id":"EMP-0117","name":"Jana Kovacevic","role":"CNC Operator","role_key":"operator","dept":"Machining","plant":"Plant BE01","uid":"B1:2E:9A:04","avatar_color":"0x0070F2","certs":["CNC Level 3","Safety"]},
  {"id":"EMP-0089","name":"Lars Vermeulen","role":"Process Engineer","role_key":"engineer","dept":"Engineering","plant":"Plant BE01","uid":"C4:88:F1:3D","avatar_color":"0xB84D00","certs":["Six Sigma GB","HAZOP","ISO 14001"]},
  {"id":"EMP-0201","name":"Amira El-Sayed","role":"Quality Inspector","role_key":"quality","dept":"Quality","plant":"Plant BE01","uid":"D7:A3:55:E9","avatar_color":"0x8A0000","certs":["ISO 9001 Lead","FMEA","8D"]},
@@ -536,12 +535,12 @@ function toJSON(){
 
 /* ── validation (mirrors config_loader.c limits & firmware assumptions) ── */
 function validate(){
-  const out = [];
+  const out = dmConfigValidation.errors(JSON.parse(toJSON())).map(msg=>({lvl:'error',msg}));
   const err=(m)=>out.push({lvl:'error',msg:m}), warn=(m)=>out.push({lvl:'warn',msg:m});
   const L=(v,max,what)=>{ if((v||'').length>max) err(`${what} "${v.slice(0,18)}…" exceeds ${max} chars (firmware truncates)`); };
   L(cfg.plant_name, LIM.len.plant_name, 'plant_name');
   if (!cfg.machines.length && !cfg.tanks.length && !cfg.people.length)
-    err('Config needs at least one of machines / tanks / people — the firmware upload validator rejects it otherwise');
+    warn('Empty demo: add machines, tanks or operators to populate the device screens');
   if (cfg.machines.length > LIM.machines) err(`More than ${LIM.machines} machines`);
   if (cfg.tanks.length > LIM.tanks) err(`More than ${LIM.tanks} tanks — extras are ignored by the firmware`);
   if (cfg.people.length > LIM.people) err(`More than ${LIM.people} people`);
@@ -815,7 +814,7 @@ const TABSVG = {
 function renderPreview(){
   const view = ui.tab==='machines' ? renderMachines() : ui.tab==='tanks' ? renderTanks() : renderPeople();
   $('#device').innerHTML = `
-    <div class="dv-shell"><div class="dv-logo"></div>
+    <div class="dv-shell"><img class="dv-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
       <div><div class="dv-t1">Shop Floor Simulator</div>
       <div class="dv-t2">SAP Digital Manufacturing - ${esc(cfg.plant_name)}</div></div>
       <div class="dv-pills"><span class="dv-pill"><i></i>MQTT</span><span class="dv-pill"><i></i>WiFi</span></div></div>
@@ -826,18 +825,20 @@ function renderPreview(){
       <button class="dv-tab ${ui.tab==='tanks'?'act':''}" data-tab="tanks">${TABSVG.tanks}Tanks</button>
       <button class="dv-tab" disabled>${TABSVG.debug}Debug</button>
       <button class="dv-tab ${ui.tab==='people'?'act':''}" data-tab="people">${TABSVG.people}People</button></div>`;
-  const notes = { machines:'Machines tab — pixel-accurate replica of the firmware card layout (720×720). Click a card or a metric cell to edit it.',
-    tanks:'Tanks tab — representative preview (the device adds the animated wave & drag-to-set). Click a tank to edit it.',
-    people:'People tab — representative badge cards (the device shows a swipe carousel). Click a badge to edit it.' };
+  const notes = { machines:'720×720 device preview. Click a machine or a metric to edit its configuration.',
+    tanks:'Tank preview. Click a vessel to edit its level and metric configuration.',
+    people:'Operator badge preview. Click a badge to edit its details.' };
   $('#devnote').textContent = notes[ui.tab];
   applyZoom();
 }
 function applyZoom(){
   const wrap = $('#devscale'), vp = $('#viewport');
-  let z = ui.zoom==='fit' ? Math.min(1, (vp.clientWidth-44)/736) : parseFloat(ui.zoom);
-  z = Math.max(z, 0.35);
-  wrap.style.transform = `scale(${z})`;
+  let z = ui.zoom==='fit' ? Math.min(1, (vp.clientWidth-44)/736, (vp.clientHeight-44)/736) : parseFloat(ui.zoom);
+  z = Math.max(z, 0.25);
+  wrap.style.transform = 'none';
   wrap.style.height = (736*z)+'px'; wrap.style.width = (736*z)+'px';
+  $('#device').style.transform = `scale(${z})`;
+  $('#device').style.transformOrigin = 'top left';
 }
 
 /* ════════ Editor panel ════════ */
@@ -1121,15 +1122,16 @@ document.addEventListener('click', e => {
     toast('Loaded template'); return; }
   if (a==='upload'){ $('#filein').click(); return; }
   if (a==='download'){ const blob = new Blob([toJSON()],{type:'application/json'});
+    try { dmConfigValidation.assert(JSON.parse(toJSON())); } catch (err) { toast(err.message); return; }
     const u = URL.createObjectURL(blob); const link = document.createElement('a');
     link.href=u; link.download='sapdm_config.json'; link.click(); URL.revokeObjectURL(u);
     toast('Downloaded sapdm_config.json'); return; }
-  if (a==='copy'){ navigator.clipboard?.writeText(toJSON()).then(()=>toast('JSON copied'),
+  if (a==='copy'){ try { dmConfigValidation.assert(JSON.parse(toJSON())); } catch (err) { toast(err.message); return; } navigator.clipboard?.writeText(toJSON()).then(()=>toast('JSON copied'),
       ()=>toast('Clipboard unavailable')); return; }
   if (a==='json'){ $('#jsontext').value = toJSON(); $('#jsonerr').textContent='';
     $('#jsonmodal').classList.add('open'); return; }
   if (a==='jsonclose'){ $('#jsonmodal').classList.remove('open'); return; }
-  if (a==='jsonapply'){ try{ const parsed = JSON.parse($('#jsontext').value);
+  if (a==='jsonapply'){ try{ const parsed = dmConfigValidation.assert(JSON.parse($('#jsontext').value));
       cfg = normalize(parsed); ui.sel=null; $('#jsonmodal').classList.remove('open'); fullRender();
       toast('JSON applied'); }catch(ex){ $('#jsonerr').textContent = 'Parse error: '+ex.message; } return; }
   if (a==='theme'){ const r=document.documentElement;
@@ -1194,7 +1196,7 @@ $('#filein').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
   const rd = new FileReader();
   rd.onload = () => { try {
-      const parsed = JSON.parse(rd.result);
+      const parsed = dmConfigValidation.assert(JSON.parse(rd.result));
       if (!Array.isArray(parsed.machines) && !Array.isArray(parsed.tanks) && !Array.isArray(parsed.people))
         throw new Error('no machines/tanks/people arrays — not a sapdm config');
       cfg = normalize(parsed); ui.sel = null; fullRender(); toast('Loaded '+f.name);
@@ -1213,5 +1215,6 @@ window.addEventListener('resize', ()=>{ if (ui.zoom==='fit') applyZoom(); });
   fullRender();
 })();
 </script>
+<script src="/assets/workbench.js"></script>
 </body>
 </html>

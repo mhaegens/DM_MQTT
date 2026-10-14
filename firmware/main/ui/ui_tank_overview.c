@@ -1,5 +1,6 @@
 // ui_tank_overview.c — Single-tank detail view: large fill bar + metric tile list.
 #include "ui_tank_overview.h"
+#include "ui_tank_shape.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "ui_detail.h"
@@ -19,7 +20,6 @@ static const char *TAG = "tank_ovw";
 static lv_obj_t *s_screen          = NULL;
 static lv_obj_t *s_name_lbl        = NULL;
 static lv_obj_t *s_badge_lbl       = NULL;
-static lv_obj_t *s_fill_bar        = NULL;
 static lv_obj_t *s_fill_outer      = NULL;
 static lv_obj_t *s_fill_pct_lbl    = NULL;
 static lv_obj_t *s_tile_rows[MAX_TANK_METRICS]  = {NULL};
@@ -59,38 +59,42 @@ static void tile_tap_cb(lv_event_t *e) {
     ui_detail_open_tank_metric(s_tank_idx, k);
 }
 
-static void ovw_refresh_fill(void) {
-    if (!s_fill_bar || !s_fill_outer || !s_fill_pct_lbl) return;
-    Tank *t = &g_tanks[s_tank_idx];
-    float pct = tank_level(t);
-    if (pct < 0.0f) pct = 0.0f;
-    if (pct > 100.0f) pct = 100.0f;
+static void overview_tank_draw(lv_event_t *event)
+{
+    lv_area_t area;
+    lv_obj_get_coords(lv_event_get_target(event), &area);
+    DATA_LOCK();
+    float level = tank_level(&g_tanks[s_tank_idx]);
+    DATA_UNLOCK();
+    ui_tank_shape_draw(lv_event_get_layer(event), &area, level,
+                       lv_color_hex(tank_fill_color(level)));
+}
 
-    int fill_h = (int)((OVW_FILL_H - 2) * pct / 100.0f);
-    if (fill_h < 0) fill_h = 0;
-    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
-    lv_obj_set_height(s_fill_bar, fill_h);
-    lv_obj_set_pos(s_fill_bar, 1, OVW_FILL_H - 2 - fill_h + 1);
-    lv_obj_set_style_bg_color(s_fill_bar, fc, 0);
-
-    lv_obj_t *shine = lv_obj_get_child(s_fill_bar, 0);
-    if (shine) {
-        int shine_h = fill_h > 12 ? fill_h - 6 : fill_h;
-        lv_obj_set_size(shine, (OVW_FILL_W - 2) / 3, shine_h);
-    }
-
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d%%", (int)pct);
-    lv_label_set_text(s_fill_pct_lbl, buf);
-
+static void ovw_refresh_fill(void)
+{
+    if (!s_fill_outer || !s_fill_pct_lbl) return;
+    DATA_LOCK();
+    float pct = tank_level(&g_tanks[s_tank_idx]);
+    DATA_UNLOCK();
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    lv_obj_invalidate(s_fill_outer);
+    lv_label_set_text_fmt(s_fill_pct_lbl, "%d%%", (int)pct);
+    int y = ui_tank_shape_join_y(OVW_FILL_H) / 2;
+    lv_obj_set_pos(s_fill_pct_lbl, (OVW_FILL_W - lv_obj_get_width(s_fill_pct_lbl)) / 2, y);
+    lv_obj_set_style_text_color(s_fill_pct_lbl,
+        y >= ui_tank_shape_level_y(OVW_FILL_H, pct) ? lv_color_white() : COL_TX2, 0);
     lv_label_set_text(s_badge_lbl, ovw_status_text(pct));
     lv_obj_set_style_text_color(s_badge_lbl, ovw_status_color(pct), 0);
 }
 
 static void ovw_show_target_line(float target_pct) {
     if (!s_target_line) return;
-    int ty = (int)((OVW_FILL_H - 2) * (100.0f - target_pct) / 100.0f);
-    lv_obj_set_pos(s_target_line, 0, ty);
+    int ty = ui_tank_shape_level_y(OVW_FILL_H, target_pct);
+    int right = ui_tank_shape_right_at(OVW_FILL_W, OVW_FILL_H, target_pct);
+    int left = OVW_FILL_W - right;
+    lv_obj_set_width(s_target_line, right - left - 6);
+    lv_obj_set_pos(s_target_line, left + 3, ty);
     lv_obj_clear_flag(s_target_line, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -228,54 +232,13 @@ void ui_tank_overview_create(lv_obj_t *parent) {
 
     s_fill_outer = lv_obj_create(body_row);
     lv_obj_set_size(s_fill_outer, OVW_FILL_W, OVW_FILL_H);
-    lv_obj_set_style_bg_color(s_fill_outer, COL_BASE2, 0);
-    lv_obj_set_style_border_color(s_fill_outer, COL_BD_STR, 0);
-    lv_obj_set_style_border_width(s_fill_outer, 1, 0);
-    lv_obj_set_style_radius(s_fill_outer, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_clip_corner(s_fill_outer, true, 0);
+    lv_obj_set_style_bg_opa(s_fill_outer, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_fill_outer, 0, 0);
     lv_obj_set_style_pad_all(s_fill_outer, 0, 0);
     lv_obj_clear_flag(s_fill_outer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_fill_outer, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_fill_outer, fill_tap_cb, LV_EVENT_SHORT_CLICKED, NULL);
-
-    // Fill bar (initially 0 height — activate() sets it)
-    s_fill_bar = lv_obj_create(s_fill_outer);
-    lv_obj_set_size(s_fill_bar, OVW_FILL_W - 2, 0);
-    lv_obj_set_pos(s_fill_bar, 1, OVW_FILL_H - 1);
-    lv_obj_set_style_bg_color(s_fill_bar, COL_HI, 0);
-    lv_obj_set_style_bg_opa(s_fill_bar, LV_OPA_80, 0);
-    lv_obj_set_style_border_width(s_fill_bar, 0, 0);
-    lv_obj_set_style_radius(s_fill_bar, 0, 0);
-    lv_obj_set_style_pad_all(s_fill_bar, 0, 0);
-    lv_obj_set_style_outline_width(s_fill_bar, 0, 0);
-    lv_obj_set_style_shadow_width(s_fill_bar, 0, 0);
-    lv_obj_clear_flag(s_fill_bar, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // Shine strip
-    lv_obj_t *shine = lv_obj_create(s_fill_bar);
-    lv_obj_set_size(shine, (OVW_FILL_W - 2) / 3, 0);
-    lv_obj_set_pos(shine, 3, 0);
-    lv_obj_set_style_bg_color(shine, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_bg_opa(shine, LV_OPA_20, 0);
-    lv_obj_set_style_border_width(shine, 0, 0);
-    lv_obj_set_style_radius(shine, SZ_RADIUS_SM, 0);
-    lv_obj_set_style_pad_all(shine, 0, 0);
-    lv_obj_set_style_outline_width(shine, 0, 0);
-    lv_obj_set_style_shadow_width(shine, 0, 0);
-    lv_obj_clear_flag(shine, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-
-    // Tick marks at 25%, 50%, 75%
-    for (int p = 25; p <= 75; p += 25) {
-        int ty = (int)((OVW_FILL_H - 2) * (100 - p) / 100);
-        lv_obj_t *tick = lv_obj_create(s_fill_outer);
-        lv_obj_set_size(tick, OVW_FILL_W / 4, 1);
-        lv_obj_set_pos(tick, OVW_FILL_W - OVW_FILL_W / 4 - 2, ty);
-        lv_obj_set_style_bg_color(tick, lv_color_hex(0xC0C8D8), 0);
-        lv_obj_set_style_border_width(tick, 0, 0);
-        lv_obj_set_style_radius(tick, 0, 0);
-        lv_obj_set_style_pad_all(tick, 0, 0);
-        lv_obj_clear_flag(tick, LV_OBJ_FLAG_CLICKABLE);
-    }
+    lv_obj_add_event_cb(s_fill_outer, overview_tank_draw, LV_EVENT_DRAW_MAIN, NULL);
 
     // Target level indicator line (hidden by default)
     s_target_line = lv_obj_create(s_fill_outer);

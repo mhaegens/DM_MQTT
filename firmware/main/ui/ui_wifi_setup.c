@@ -1,6 +1,7 @@
 // ui_wifi_setup.c - WiFi setup overlay: Scan & Join mode + Setup via Phone mode.
 #include "ui_wifi_setup.h"
 #include "ui_main.h"
+#include "ui_dispatch.h"
 #include "ui_theme.h"
 #include "data.h"
 #include "config.h"
@@ -28,6 +29,10 @@ static lv_obj_t *s_conn_sub_lbl  = NULL;
 // Scan & Join: scan list and scan button (static so callbacks can reference them)
 static lv_obj_t *s_scan_list = NULL;
 static lv_obj_t *s_scan_btn  = NULL;
+static lv_obj_t *s_saved_list = NULL;
+static wifi_saved_entry_t s_saved_cache[WIFI_KNOWN_MAX];
+static int s_saved_count = -1;
+static void refresh_saved_networks(void);
 
 // Setup via Phone: hotspot state + button label ref
 static bool      s_ap_active       = false;
@@ -72,6 +77,7 @@ static void connect_result_cb(bool success, const char *ip)
 {
     (void)ip;
     if (success) {
+        refresh_saved_networks();
         if (s_conn_ssid_lbl) lv_label_set_text(s_conn_ssid_lbl, g_wifi_ssid);
         if (s_conn_sub_lbl) {
             char sub[48];
@@ -82,7 +88,8 @@ static void connect_result_cb(bool success, const char *ip)
         if (s_conn_card) lv_obj_clear_flag(s_conn_card, LV_OBJ_FLAG_HIDDEN);
         if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "");
     } else {
-        if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Connection failed");
+        if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl,
+            "Connection failed. Use Password to update a saved network.");
     }
 }
 
@@ -91,7 +98,9 @@ static void row_tap_cb(lv_event_t *e)
     lv_obj_t *row = lv_event_get_target(e);
     row_data_t *rd = (row_data_t *)lv_obj_get_user_data(row);
     if (!rd) return;
-    if (rd->open) {
+    if (wifi_manager_connect_saved(rd->ssid, connect_result_cb)) {
+        if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Connecting to saved network...");
+    } else if (rd->open) {
         wifi_manager_connect(rd->ssid, "", connect_result_cb);
     } else {
         ui_push_wifi_password(rd->ssid);
@@ -150,6 +159,13 @@ static void scan_done_cb(const wifi_scan_entry_t *results, int count)
             lv_label_set_long_mode(ssid_lbl, LV_LABEL_LONG_DOT);
             lv_obj_set_width(ssid_lbl, LV_PCT(55));
 
+            if (results[i].saved) {
+                lv_obj_t *saved = lv_label_create(row);
+                lv_label_set_text(saved, "Saved");
+                lv_obj_set_style_text_font(saved, FONT_MONO_XXS, 0);
+                lv_obj_set_style_text_color(saved, COL_OK, 0);
+            }
+
             // Signal strength — battery symbols repurposed as signal bars (4/3/2/1)
             int8_t rssi = results[i].rssi;
             int bars = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
@@ -193,6 +209,102 @@ static void forget_btn_cb(lv_event_t *e)
     if (s_conn_card) lv_obj_add_flag(s_conn_card, LV_OBJ_FLAG_HIDDEN);
     if (s_scan_list) lv_obj_clean(s_scan_list);
     if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "");
+}
+
+static void saved_connect_cb(lv_event_t *e)
+{
+    row_data_t *rd = lv_event_get_user_data(e);
+    if (wifi_manager_connect_saved(rd->ssid, connect_result_cb) && s_scan_status_lbl)
+        lv_label_set_text(s_scan_status_lbl, "Connecting to saved network...");
+}
+
+static void saved_password_cb(lv_event_t *e)
+{
+    row_data_t *rd = lv_event_get_user_data(e);
+    ui_push_wifi_password(rd->ssid);
+}
+
+static void saved_forget_cb(lv_event_t *e)
+{
+    row_data_t *rd = lv_event_get_user_data(e);
+    wifi_manager_forget_network(rd->ssid);
+    if (s_scan_status_lbl) lv_label_set_text(s_scan_status_lbl, "Forgetting network...");
+}
+
+static void refresh_saved_networks(void)
+{
+    if (!s_saved_list) return;
+    wifi_saved_entry_t networks[WIFI_KNOWN_MAX] = {0};
+    int count = wifi_manager_saved_networks(networks, WIFI_KNOWN_MAX);
+    if (count == s_saved_count && !memcmp(networks, s_saved_cache, sizeof(networks))) return;
+    memcpy(s_saved_cache, networks, sizeof(networks));
+    s_saved_count = count;
+    lv_obj_clean(s_saved_list);
+    if (!count) {
+        lv_obj_t *label = lv_label_create(s_saved_list);
+        lv_label_set_text(label, "Networks are saved after a successful connection.");
+        lv_obj_set_style_text_font(label, FONT_SANS_XXS, 0);
+        lv_obj_set_style_text_color(label, COL_TX3, 0);
+        return;
+    }
+    for (int i = 0; i < count; ++i) {
+        row_data_t *rd = calloc(1, sizeof(*rd));
+        if (!rd) continue;
+        memcpy(rd->ssid, networks[i].ssid, sizeof(rd->ssid));
+        rd->open = networks[i].open;
+        lv_obj_t *row = lv_obj_create(s_saved_list);
+        lv_obj_remove_style_all(row);
+        lv_obj_set_size(row, LV_PCT(100), 48);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(row, 8, 0);
+        lv_obj_set_user_data(row, rd);
+        lv_obj_add_event_cb(row, row_data_free_cb, LV_EVENT_DELETE, NULL);
+
+        lv_obj_t *name = lv_btn_create(row);
+        lv_obj_set_height(name, 44);
+        lv_obj_set_flex_grow(name, 1);
+        lv_obj_set_style_bg_color(name, COL_HI_LT, 0);
+        lv_obj_set_style_radius(name, SZ_RADIUS_SM, 0);
+        lv_obj_set_style_shadow_width(name, 0, 0);
+        lv_obj_add_event_cb(name, saved_connect_cb, LV_EVENT_CLICKED, rd);
+        lv_obj_t *label = lv_label_create(name);
+        lv_label_set_text(label, networks[i].ssid);
+        lv_obj_set_width(label, LV_PCT(100));
+        lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_font(label, FONT_SANS_XXS, 0);
+        lv_obj_set_style_text_color(label, COL_HI, 0);
+        lv_obj_center(label);
+
+        const char *names[] = { "Password", "Forget" };
+        lv_event_cb_t callbacks[] = { saved_password_cb, saved_forget_cb };
+        for (int j = 0; j < 2; ++j) {
+            lv_obj_t *button = lv_btn_create(row);
+            lv_obj_set_size(button, j == 0 ? 96 : 76, 44);
+            lv_obj_set_style_bg_color(button, COL_BASE2, 0);
+            lv_obj_set_style_radius(button, SZ_RADIUS_SM, 0);
+            lv_obj_set_style_shadow_width(button, 0, 0);
+            lv_obj_add_event_cb(button, callbacks[j], LV_EVENT_CLICKED, rd);
+            label = lv_label_create(button);
+            lv_label_set_text(label, names[j]);
+            lv_obj_set_style_text_font(label, FONT_MONO_XXS, 0);
+            lv_obj_set_style_text_color(label, j ? COL_ERR : COL_TX2, 0);
+            lv_obj_center(label);
+        }
+    }
+}
+
+static void wifi_setup_refresh(lv_timer_t *timer)
+{
+    (void)timer;
+    if (g_current_view != VIEW_WIFI_SETUP) return;
+    refresh_saved_networks();
+    if (g_wifi_connected) {
+        lv_label_set_text(s_conn_ssid_lbl, g_wifi_ssid);
+        lv_label_set_text_fmt(s_conn_sub_lbl, "%d dBm  |  %s", g_wifi_rssi, g_device_ip);
+        lv_obj_clear_flag(s_conn_card, LV_OBJ_FLAG_HIDDEN);
+    } else lv_obj_add_flag(s_conn_card, LV_OBJ_FLAG_HIDDEN);
 }
 
 // ─── Setup via Phone callback ─────────────────────────────────────────────────
@@ -405,6 +517,21 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(flbl, COL_ERR, 0);
     lv_obj_center(flbl);
 
+    lv_obj_t *saved_title = lv_label_create(s_scan_panel);
+    lv_label_set_text(saved_title, "Saved networks - tap to connect");
+    lv_obj_set_style_text_font(saved_title, FONT_SANS_XXS, 0);
+    lv_obj_set_style_text_color(saved_title, COL_TX2, 0);
+    s_saved_list = lv_obj_create(s_scan_panel);
+    lv_obj_set_size(s_saved_list, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(s_saved_list, COL_BASE, 0);
+    lv_obj_set_style_border_color(s_saved_list, COL_BD, 0);
+    lv_obj_set_style_border_width(s_saved_list, 1, 0);
+    lv_obj_set_style_radius(s_saved_list, SZ_RADIUS_SM, 0);
+    lv_obj_set_style_pad_all(s_saved_list, SZ_CARD_PAD, 0);
+    lv_obj_set_style_pad_row(s_saved_list, 6, 0);
+    lv_obj_clear_flag(s_saved_list, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_saved_list, LV_FLEX_FLOW_COLUMN);
+
     // ── Scan button ───────────────────────────────────────────────────────────
     s_scan_btn = make_action_btn(s_scan_panel, "Scan Networks", scan_btn_cb);
 
@@ -530,6 +657,7 @@ void ui_wifi_setup_create(lv_obj_t *parent)
     make_step(info_card, "3.  Enter your WiFi network name\n    and password, then tap Submit");
 
     set_mode(0);
+    lv_timer_create(wifi_setup_refresh, 500, NULL);
 }
 
 // ─── Activate (called by ui_push_wifi_setup) ──────────────────────────────────
@@ -550,11 +678,12 @@ void ui_wifi_setup_set_ap_status(const char *msg)
     if (!a) return;
     strncpy(a->msg, msg, sizeof(a->msg) - 1);
     a->msg[sizeof(a->msg) - 1] = '\0';
-    if (lv_async_call(ap_status_dispatch, a) != LV_RESULT_OK) free(a);
+    if (ui_dispatch_call(ap_status_dispatch, a) != LV_RESULT_OK) free(a);
 }
 
 void ui_wifi_setup_activate(void)
 {
+    refresh_saved_networks();
     if (g_wifi_connected) {
         if (s_conn_ssid_lbl) lv_label_set_text(s_conn_ssid_lbl, g_wifi_ssid);
         if (s_conn_sub_lbl) {

@@ -4,6 +4,12 @@
 // and lets the operator activate another one (persist to both stores, reboot).
 #include "ui_config_select.h"
 #include "ui_main.h"
+#include "ui_dispatch.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_heap_caps.h"
+#include <stdatomic.h>
+#include <stdlib.h>
 #include "ui_theme.h"
 #include "data.h"
 #include "../config_store.h"
@@ -25,6 +31,20 @@ static ConfigTemplate s_templates[CFG_TPL_MAX];
 static int            s_tpl_count = 0;
 static lv_obj_t      *s_rows[CFG_TPL_MAX] = {NULL};
 static int            s_sel = -1;
+static int s_page, s_total;
+static lv_obj_t *s_previous_btn, *s_next_btn, *s_page_label;
+
+typedef struct {
+    bool apply;
+    ConfigTemplate selected;
+    ConfigTemplate templates[CFG_TPL_MAX];
+    int count;
+    int page, total;
+    ConfigStorageStats storage;
+    char error[160];
+} ConfigWork;
+static atomic_bool s_busy;
+static void config_work_task(void *arg);
 
 // ─── Selection / apply ────────────────────────────────────────────────────────
 
@@ -52,6 +72,11 @@ static void row_tap_cb(lv_event_t *e)
     s_sel = idx;
 
     ConfigTemplate *t = &s_templates[idx];
+    if (!t->valid) {
+        set_status("This file is saved, but needs a valid device configuration before it can run.", COL_ERR);
+        lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
     if (t->active) {
         set_status("This template is already active.", COL_TX3);
         if (s_apply_btn) lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_HIDDEN);
@@ -80,22 +105,17 @@ static void apply_cb(lv_event_t *e)
     if (s_sel < 0 || s_sel >= s_tpl_count) return;
     ConfigTemplate *t = &s_templates[s_sel];
 
-    const char *err = config_store_activate(t->name, t->from_sd);
-    if (err) {
-        ESP_LOGW(TAG, "activate %s failed: %s", t->name, err);
-        set_status(err, COL_ERR);
-        return;
-    }
-
-    ESP_LOGI(TAG, "template %s activated — rebooting", t->name);
-    set_status("Saved - rebooting...", COL_OK);
+    if (atomic_exchange(&s_busy, true)) return;
+    ConfigWork *work = heap_caps_calloc(1, sizeof(*work), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!work) { atomic_store(&s_busy, false); set_status("Not enough memory", COL_ERR); return; }
+    work->apply = true; work->selected = *t;
+    set_status("Saving configuration...", COL_TX3);
     lv_obj_clear_flag(s_apply_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(s_apply_btn, COL_BASE3, 0);
-    lv_obj_set_style_text_color(s_apply_lbl, COL_TX3, 0);
-
-    // Give the frame a moment to reach the panel before restarting
-    lv_timer_t *timer = lv_timer_create(reboot_timer_cb, 900, NULL);
-    lv_timer_set_repeat_count(timer, 1);
+    if (xTaskCreate(config_work_task, "cfg_save", 6144, work, 3, NULL) != pdPASS) {
+        free(work); atomic_store(&s_busy, false);
+        lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_CLICKABLE);
+        set_status("Cannot start configuration worker", COL_ERR);
+    }
 }
 
 // ─── Row builder ──────────────────────────────────────────────────────────────
@@ -150,11 +170,11 @@ static void build_row(int idx)
 
     char sub[96];
     snprintf(sub, sizeof(sub), "%s  ·  %d machines  ·  %d tanks%s",
-             t->name, t->machines, t->tanks, t->from_sd ? "  ·  SD" : "");
+             t->name, t->machines, t->tanks, !t->valid ? "  ·  Needs attention" : t->from_sd ? "  ·  SD" : "  ·  Flash");
     lv_obj_t *subtitle = lv_label_create(col);
     lv_label_set_text(subtitle, sub);
     lv_obj_set_style_text_font(subtitle, FONT_MONO_XXS, 0);
-    lv_obj_set_style_text_color(subtitle, COL_TX3, 0);
+    lv_obj_set_style_text_color(subtitle, t->valid ? COL_TX3 : COL_ERR, 0);
     lv_obj_set_width(subtitle, LV_PCT(100));
     lv_label_set_long_mode(subtitle, LV_LABEL_LONG_DOT);
 
@@ -178,6 +198,9 @@ static void build_row(int idx)
         lv_obj_center(pl);
     }
 }
+
+static void previous_page(lv_event_t *event) { (void)event; if (s_page > 0) { --s_page; ui_config_select_activate(); } }
+static void next_page(lv_event_t *event) { (void)event; if ((s_page + 1) * CFG_TPL_MAX < s_total) { ++s_page; ui_config_select_activate(); } }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -242,6 +265,34 @@ void ui_config_select_create(lv_obj_t *parent)
     lv_obj_set_width(s_status_lbl, CONTENT_W - SZ_GAP * 2);
     lv_label_set_long_mode(s_status_lbl, LV_LABEL_LONG_WRAP);
 
+    lv_obj_t *pagination = lv_obj_create(s_screen);
+    lv_obj_remove_style_all(pagination);
+    lv_obj_set_size(pagination, CONTENT_W - SZ_GAP * 2, 38);
+    lv_obj_set_flex_flow(pagination, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(pagination, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(pagination, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t **buttons[] = {&s_previous_btn, &s_next_btn};
+    const char *names[] = {"Previous", "Next"};
+    lv_event_cb_t callbacks[] = {previous_page, next_page};
+    for (int i = 0; i < 2; ++i) {
+        *buttons[i] = lv_btn_create(pagination);
+        lv_obj_set_size(*buttons[i], 106, 38);
+        lv_obj_set_style_bg_color(*buttons[i], COL_HI_LT, 0);
+        lv_obj_set_style_shadow_width(*buttons[i], 0, 0);
+        lv_obj_add_event_cb(*buttons[i], callbacks[i], LV_EVENT_CLICKED, NULL);
+        lv_obj_t *label = lv_label_create(*buttons[i]);
+        lv_label_set_text(label, names[i]);
+        lv_obj_set_style_text_color(label, COL_HI, 0);
+        lv_obj_set_style_text_font(label, FONT_SANS_XXS, 0);
+        lv_obj_center(label);
+        if (i == 0) {
+            s_page_label = lv_label_create(pagination);
+            lv_label_set_text(s_page_label, "");
+            lv_obj_set_style_text_font(s_page_label, FONT_MONO_XXS, 0);
+            lv_obj_set_style_text_color(s_page_label, COL_TX2, 0);
+        }
+    }
+
     // Apply button (hidden until a non-active template is selected)
     s_apply_btn = lv_obj_create(s_screen);
     lv_obj_set_size(s_apply_btn, CONTENT_W - SZ_GAP * 2, 56);
@@ -266,43 +317,75 @@ void ui_config_select_create(lv_obj_t *parent)
 
 // ─── Activate: rescan templates and rebuild the list ─────────────────────────
 
+static void config_work_done(void *payload)
+{
+    ConfigWork *work = payload;
+    atomic_store(&s_busy, false);
+    if (work->apply) {
+        if (work->error[0]) {
+            set_status(work->error, COL_ERR);
+            lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_CLICKABLE);
+        } else {
+            set_status("Saved - rebooting...", COL_OK);
+            lv_obj_set_style_bg_color(s_apply_btn, COL_BASE3, 0);
+            lv_timer_t *timer = lv_timer_create(reboot_timer_cb, 900, NULL);
+            lv_timer_set_repeat_count(timer, 1);
+        }
+    } else {
+        s_page = work->page; s_total = work->total;
+        s_tpl_count = work->count;
+        memcpy(s_templates, work->templates, sizeof(s_templates));
+        memset(s_rows, 0, sizeof(s_rows));
+        lv_obj_clean(s_list);
+        set_status(s_tpl_count ? "Select a configuration" : "No templates found. Upload JSON or add an SD card.", COL_TX3);
+        for (int i = 0; i < s_tpl_count; i++) build_row(i);
+        lv_label_set_text_fmt(s_page_label, "%d-%d of %d", s_total ? s_page * CFG_TPL_MAX + 1 : 0,
+                              s_page * CFG_TPL_MAX + s_tpl_count, s_total);
+        if (s_page) lv_obj_clear_state(s_previous_btn, LV_STATE_DISABLED);
+        else lv_obj_add_state(s_previous_btn, LV_STATE_DISABLED);
+        if ((s_page + 1) * CFG_TPL_MAX < s_total) lv_obj_clear_state(s_next_btn, LV_STATE_DISABLED);
+        else lv_obj_add_state(s_next_btn, LV_STATE_DISABLED);
+        lv_label_set_text_fmt(s_hint_lbl, "%d saved profiles. %s\nUploads are kept by filename; switching profiles keeps the library.",
+                             s_total, work->storage.sd_ready ? "SD card ready." : "SD unavailable - showing flash copies.");
+    }
+    free(work);
+}
+
+static void config_work_task(void *arg)
+{
+    ConfigWork *work = arg;
+    if (work->apply) {
+        const char *err = config_store_activate(work->selected.name, work->selected.from_sd);
+        if (err) snprintf(work->error, sizeof(work->error), "%s", err);
+    } else {
+        ConfigTemplate *all = config_store_list_all(&work->total);
+        work->page = work->total ? (work->page * CFG_TPL_MAX < work->total ? work->page : (work->total - 1) / CFG_TPL_MAX) : 0;
+        int offset = work->page * CFG_TPL_MAX;
+        work->count = work->total - offset < CFG_TPL_MAX ? work->total - offset : CFG_TPL_MAX;
+        if (work->count) memcpy(work->templates, all + offset, work->count * sizeof(*all));
+        free(all);
+        config_store_get_stats(&work->storage);
+    }
+    // This result owns persisted user work: wait in the worker until the UI
+    // queue has space rather than dropping the completion/reboot callback.
+    while (ui_dispatch_call(config_work_done, work) != LV_RESULT_OK)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelete(NULL);
+}
+
 void ui_config_select_activate(void)
 {
-    if (!s_screen || !s_list) return;
-
+    if (atomic_exchange(&s_busy, true)) return;
+    s_sel = -1;
     lv_obj_clean(s_list);
     memset(s_rows, 0, sizeof(s_rows));
-    s_sel = -1;
-    if (s_apply_btn) {
-        lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(s_apply_btn, COL_HI, 0);
-        lv_obj_set_style_text_color(s_apply_lbl, COL_BASE, 0);
+    lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_apply_btn, LV_OBJ_FLAG_CLICKABLE);
+    set_status("Loading configurations...", COL_TX3);
+    ConfigWork *work = heap_caps_calloc(1, sizeof(*work), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (work) work->page = s_page;
+    if (!work || xTaskCreate(config_work_task, "cfg_list", 6144, work, 3, NULL) != pdPASS) {
+        free(work); atomic_store(&s_busy, false);
+        set_status("Cannot start configuration worker", COL_ERR);
     }
-    set_status("", COL_TX3);
-
-    if (s_hint_lbl)
-        lv_label_set_text_fmt(s_hint_lbl,
-            "Active config: %s. Profiles live on the SD card (flash when "
-            "no card is inserted) - applying one reboots the device.",
-            g_plant_name[0] ? g_plant_name : "unknown");
-
-    // Blocking file IO (SPIFFS + optional SD mount) — acceptable one-shot cost
-    // on screen entry; the list is small and read once per visit.
-    s_tpl_count = config_store_list(s_templates, CFG_TPL_MAX);
-
-    if (s_tpl_count == 0) {
-        lv_obj_t *placeholder = lv_label_create(s_list);
-        lv_label_set_text(placeholder,
-            "No config templates found.\n"
-            "Add *.json files via the captive portal\n"
-            "or on an SD card.");
-        lv_obj_set_style_text_font(placeholder, FONT_MONO_XXS, 0);
-        lv_obj_set_style_text_color(placeholder, COL_TX3, 0);
-        lv_obj_set_style_text_align(placeholder, LV_TEXT_ALIGN_CENTER, 0);
-        return;
-    }
-
-    for (int i = 0; i < s_tpl_count; i++)
-        build_row(i);
 }

@@ -5,7 +5,7 @@
 #   bash <(curl -fsSL https://raw.githubusercontent.com/mhaegens/DM_MQTT/main/proxmox/create-lxc.sh)
 #
 # What it does:
-#   1. Prompts for LXC settings (all have sensible defaults)
+#   1. Prompts for LXC settings (LAN address and gateway are required)
 #   2. Downloads the Debian 13 (Trixie) CT template if not already cached
 #   3. Creates the LXC with nesting enabled (required for Docker)
 #   4. Starts it and runs install.sh inside to bring up the full demo stack
@@ -52,9 +52,11 @@ prompt_required() {
 # ── Collect settings ─────────────────────────────────────────────────────────
 prompt     LXC_ID    "LXC container ID"          "200"
 prompt     HOSTNAME  "Container hostname"         "sapdm-demo"
-prompt     IP_CIDR   "IP address (with prefix)"  "192.168.0.60/24"
-prompt     GW        "Gateway"                   "192.168.0.1"
-prompt     DNS       "DNS server"                "192.168.0.10"
+prompt     IP_CIDR   "IP address (with prefix; required)" ""
+[[ -n "$IP_CIDR" ]] || die "Supply an address from your own LAN."
+prompt     GW        "Gateway (required)"        ""
+[[ -n "$GW" ]] || die "Supply your LAN gateway."
+prompt     DNS       "DNS server"                "1.1.1.1"
 prompt     BRIDGE    "Network bridge"            "vmbr0"
 prompt     STORAGE   "Storage target"            "local-lvm"
 prompt_required ROOT_PASS "Root password for the LXC (hidden)"

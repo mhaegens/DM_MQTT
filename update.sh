@@ -16,5 +16,10 @@ docker compose pull
 echo "Restarting stack..."
 docker compose up -d --remove-orphans
 
+# Bind-mounted config changes do not recreate an existing Nginx container.
+# Validate and reload so /assets/, /config-editor/ and /mqtt take effect.
+docker compose exec -T dashboard nginx -t
+docker compose exec -T dashboard nginx -s reload
+
 echo ""
 docker compose ps

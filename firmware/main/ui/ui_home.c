@@ -5,6 +5,7 @@
 #include "config.h"
 #include "esp_timer.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 static void wifi_kpi_cb(lv_event_t *e)   { (void)e; ui_push_wifi_setup(); }
@@ -284,6 +285,15 @@ void ui_home_create(lv_obj_t *parent)
 }
 
 // ─── ui_home_refresh ─────────────────────────────────────────────────────────
+static void label_cached(lv_obj_t *label, const char *text) {
+    if (label && strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+}
+static void label_cached_fmt(lv_obj_t *label, const char *format, ...) {
+    char text[160]; va_list args; va_start(args, format);
+    vsnprintf(text, sizeof(text), format, args); va_end(args);
+    label_cached(label, text);
+}
+
 void ui_home_refresh(void)
 {
     if (!s_screen) return;
@@ -301,41 +311,43 @@ void ui_home_refresh(void)
     DATA_UNLOCK();
 
     // KPI 0: Running / Total machines
-    lv_label_set_text_fmt(s_kpi_val[0], "%d / %d", running, machine_count);
+    label_cached_fmt(s_kpi_val[0], "%d / %d", running, machine_count);
     if (stopped_name[0])
-        lv_label_set_text_fmt(s_kpi_meta[0], "%s stopped", stopped_name);
+        label_cached_fmt(s_kpi_meta[0], "%s stopped", stopped_name);
     else
-        lv_label_set_text(s_kpi_meta[0], "All running");
+        label_cached(s_kpi_meta[0], "All running");
 
     // KPI 1 (config template) is static per boot — set once in create.
 
     // KPI 2: MQTT message count; meta = uptime HH:MM:SS
-    lv_label_set_text_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
+    label_cached_fmt(s_kpi_val[2], "%d", g_mqtt_msg_count);
     if (s_uptime_lbl) {
         int64_t secs = esp_timer_get_time() / 1000000LL;
         int h = (int)(secs / 3600);
         int m = (int)((secs % 3600) / 60);
         int s = (int)(secs % 60);
-        lv_label_set_text_fmt(s_uptime_lbl, "up %02d:%02d:%02d", h, m, s);
+        label_cached_fmt(s_uptime_lbl, "up %02d:%02d:%02d", h, m, s);
     }
 
     // KPI 3: WiFi RSSI (g_wifi_rssi is maintained by the wifi_manager event handler)
     if (g_wifi_connected)
-        lv_label_set_text_fmt(s_kpi_val[3], "%d", g_wifi_rssi);
+        label_cached_fmt(s_kpi_val[3], "%d", g_wifi_rssi);
     else
-        lv_label_set_text(s_kpi_val[3], "--");
+        label_cached(s_kpi_val[3], "--");
 
     // MQTT Broker row: update connected/disconnected badge
-    if (s_mqtt_badge && s_mqtt_badge_lbl) {
+    static int mqtt_state = -1;
+    if (s_mqtt_badge && s_mqtt_badge_lbl && mqtt_state != (int)g_mqtt_connected) {
+        mqtt_state = g_mqtt_connected;
         if (g_mqtt_connected) {
             lv_obj_set_style_bg_color(s_mqtt_badge, COL_OK_LT, LV_PART_MAIN);
             lv_obj_set_style_border_color(s_mqtt_badge, lv_color_hex(0x9ADDB8), LV_PART_MAIN);
-            lv_label_set_text(s_mqtt_badge_lbl, "CONNECTED");
+            label_cached(s_mqtt_badge_lbl, "CONNECTED");
             lv_obj_set_style_text_color(s_mqtt_badge_lbl, COL_OK, LV_PART_MAIN);
         } else {
             lv_obj_set_style_bg_color(s_mqtt_badge, lv_color_hex(0xFFF0F0), LV_PART_MAIN);
             lv_obj_set_style_border_color(s_mqtt_badge, lv_color_hex(0xFFB3B3), LV_PART_MAIN);
-            lv_label_set_text(s_mqtt_badge_lbl, "OFFLINE");
+            label_cached(s_mqtt_badge_lbl, "OFFLINE");
             lv_obj_set_style_text_color(s_mqtt_badge_lbl, COL_ERR, LV_PART_MAIN);
         }
     }
@@ -345,9 +357,9 @@ void ui_home_refresh(void)
         if (g_wifi_connected && g_wifi_ssid[0]) {
             char wifi_val[64];
             snprintf(wifi_val, sizeof(wifi_val), "%s  \xc2\xb7  %s", g_wifi_ssid, g_device_ip);
-            lv_label_set_text(s_ip_label, wifi_val);
+            label_cached(s_ip_label, wifi_val);
         } else {
-            lv_label_set_text(s_ip_label, "Not connected");
+            label_cached(s_ip_label, "Not connected");
         }
     }
 
@@ -358,9 +370,9 @@ void ui_home_refresh(void)
             snprintf(op_val, sizeof(op_val), "%s  -  %s",
                      g_badges[g_active_badge].name,
                      g_badges[g_active_badge].role);
-            lv_label_set_text(s_operator_label, op_val);
+            label_cached(s_operator_label, op_val);
         } else {
-            lv_label_set_text(s_operator_label, "No operator scanned");
+            label_cached(s_operator_label, "No operator scanned");
         }
     }
 }

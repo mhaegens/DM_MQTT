@@ -2,16 +2,21 @@ idf_component_register(
     SRCS
         "main.c"
         "config_loader.c"
+        "config_validation.c"
         "config_store.c"
         "default_config.c"
         "wifi_manager.c"
+        "wifi_known_networks.c"
         "wifi_portal.c"
         "mqtt_task.c"
+        "mqtt_tx_buffer.c"
         "sim_task.c"
         "ui/ui_main.c"
+        "ui/ui_dispatch.c"
         "ui/ui_home.c"
         "ui/ui_machines.c"
         "ui/ui_tanks.c"
+        "ui/ui_tank_shape.c"
         "ui/ui_debug.c"
         "ui/ui_nfc.c"
         "ui/ui_detail.c"
@@ -40,6 +45,7 @@ idf_component_register(
         esp_netif
         esp_event
         esp_http_server
+        esp_driver_uart
         fatfs
         sdmmc
         json
@@ -61,3 +67,9 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 # Package spiffs_image/ directory into a SPIFFS image for the 'spiffs' partition.
 # FLASH_IN_PROJECT means 'idf.py flash' flashes both firmware and SPIFFS image.
 spiffs_create_partition_image(spiffs spiffs_image FLASH_IN_PROJECT)
+
+# The public VFS configuration does not expose a buffer allocator. Scope this
+# allocation override to SPIFFS without modifying the installed SDK sources.
+idf_component_get_property(dm_spiffs_target spiffs COMPONENT_LIB)
+target_compile_options(${dm_spiffs_target} PRIVATE
+    -include "${CMAKE_CURRENT_SOURCE_DIR}/../patches/spiffs_internal_alloc.h")

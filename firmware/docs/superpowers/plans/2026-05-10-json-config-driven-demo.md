@@ -143,7 +143,7 @@ void metric_push(Metric *m, float value);
 - [ ] **Build to confirm** the header compiles:
 
 ```bash
-cd /Users/I584748/DM_MQTT/firmware && idf.py build 2>&1 | grep -E "error:|warning:" | head -30
+cd /path/to/DM_MQTT/firmware && idf.py build 2>&1 | grep -E "error:|warning:" | head -30
 ```
 
 Expected: errors in `data.c` and UI files (we haven't updated them yet) — that's fine. No errors inside `data.h` itself.
@@ -425,7 +425,7 @@ const char DEFAULT_CONFIG_JSON[] =
 "],"
 "\"operators\":["
   "{"
-    "\"id\":\"EMP-0042\",\"name\":\"Michiel Haegens\","
+    "\"id\":\"EMP-0042\",\"name\":\"Demo Operator\","
     "\"role\":\"Shift Lead\",\"role_key\":\"lead\","
     "\"dept\":\"Production\",\"uid\":\"A3:F7:C2:91\","
     "\"avatar_color\":\"0x0050BE\","
@@ -1169,7 +1169,7 @@ static bool        s_dragging[MAX_TANKS];
 - [ ] **Change all loops** that iterate over `TANK_COUNT` to use `g_tank_count`. Search for every `i < TANK_COUNT` in the file and change to `i < g_tank_count`. Typical locations: column creation loop, refresh timer callback, drag callbacks.
 
 ```bash
-grep -n "TANK_COUNT" /Users/I584748/DM_MQTT/firmware/main/ui/ui_tanks.c
+grep -n "TANK_COUNT" /path/to/DM_MQTT/firmware/main/ui/ui_tanks.c
 ```
 
 Change each occurrence to `g_tank_count` (except array size declarations — those were already handled).
@@ -1177,7 +1177,7 @@ Change each occurrence to `g_tank_count` (except array size declarations — tho
 - [ ] **Find any call to `mqtt_pub_tank_level()`** in ui_tanks.c (used during drag-to-adjust) and replace with `mqtt_pub_tank_metric()`:
 
 ```bash
-grep -n "mqtt_pub_tank_level" /Users/I584748/DM_MQTT/firmware/main/ui/ui_tanks.c
+grep -n "mqtt_pub_tank_level" /path/to/DM_MQTT/firmware/main/ui/ui_tanks.c
 ```
 
 Replace each occurrence, e.g.:
@@ -1301,7 +1301,7 @@ target_compile_definitions(${COMPONENT_LIB} PUBLIC LV_LVGL_H_INCLUDE_SIMPLE)
 - [ ] **Fix any remaining `MACHINE_COUNT` / `TANK_COUNT` / `BADGE_COUNT` references** in other UI files (ui_nfc.c, ui_home.c, ui_detail.c etc.) by searching and replacing:
 
 ```bash
-grep -rn "MACHINE_COUNT\|TANK_COUNT\|BADGE_COUNT" /Users/I584748/DM_MQTT/firmware/main/ui/ --include="*.c" --include="*.h"
+grep -rn "MACHINE_COUNT\|TANK_COUNT\|BADGE_COUNT" /path/to/DM_MQTT/firmware/main/ui/ --include="*.c" --include="*.h"
 ```
 
 For each occurrence: replace `MACHINE_COUNT` → `g_machine_count`, `TANK_COUNT` → `g_tank_count`, `BADGE_COUNT` → `g_badge_count`. (These are runtime values now, not compile-time constants.)
@@ -1338,7 +1338,7 @@ Expected log output:
 I (xxx) cfg: SD mount failed (ESP_ERR_INVALID_STATE) — using default config
 I (xxx) cfg: loaded: 4 machines, 3 tanks, 5 operators
 I (xxx) sim: started — 4 machines, 3 tanks
-I (xxx) mqtt: MQTT client started → wss://mqttfordm.haegens.be
+I (xxx) mqtt: MQTT client started → wss://mqtt.example.com
 ```
 
 - [ ] **Visual check — no SD card:** Navigate to Machines tab. Verify 4 machine cards appear (2×2). Navigate to Tanks tab. Verify 3 tanks appear. Navigate to NFC tab. Verify 5 operator badges. MQTT and WiFi status pills in the shell bar should show connecting/connected state.
@@ -1349,7 +1349,7 @@ I (xxx) mqtt: MQTT client started → wss://mqttfordm.haegens.be
 python3 tools/screenshot.py
 ```
 
-- [ ] **Verify MQTT messages** using MQTT Explorer or Node-RED connected to `wss://mqttfordm.haegens.be`. Subscribe to `factory/#`. Expected: messages arriving every 1.5 s on topics like `factory/machines/cnc01/rpm`, `factory/tanks/raw/level`, etc.
+- [ ] **Verify MQTT messages** using MQTT Explorer or Node-RED connected to `wss://mqtt.example.com`. Subscribe to `factory/#`. Expected: messages arriving every 1.5 s on topics like `factory/machines/cnc01/rpm`, `factory/tanks/raw/level`, etc.
 
 - [ ] **Create a minimal test JSON** on your machine:
 

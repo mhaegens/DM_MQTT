@@ -1,5 +1,17 @@
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
+
+typedef struct {
+    int rtt_ms;
+    uint32_t pending, coalesced, rejected, failed, suppressed;
+    uint32_t queue_last_ms, queue_max_ms;
+    char last_topic[128];
+    char broker_uri[192];
+    bool using_lan;
+} MqttStats;
+void mqtt_get_stats(MqttStats *stats);
+unsigned mqtt_connection_generation(void);
 
 void mqtt_task_start(void);
 void mqtt_task_stop(void);

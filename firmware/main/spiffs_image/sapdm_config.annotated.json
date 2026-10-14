@@ -129,7 +129,7 @@
     {
       "_comment": "Each person is one badge card in the Virtual carousel on the People tab",
       "id":           "EMP-0042",    "_c_id":           "Shown on the badge card",
-      "name":         "Michiel Haegens",
+      "name":         "Demo Operator",
       "role":         "Shift Lead",  "_c_role":         "Display role on the badge",
       "role_key":     "lead",        "_c_role_key":     "lead | operator | engineer | quality | supervisor",
       "dept":         "Production",

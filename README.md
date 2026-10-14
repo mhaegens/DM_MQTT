@@ -23,7 +23,7 @@ ESP32-P4 device
   └── firmware/          ESP-IDF firmware (this repo)
         ├── JSON config   SD card or embedded default
         ├── WiFi          STA + soft-AP provisioning
-        ├── MQTT          WSS → mqttfordm.haegens.be
+        ├── MQTT          WSS → mqtt.example.com
         └── UI            LVGL 9 on 720×720 DSI panel
 
 Cloudflare Tunnel
@@ -107,3 +107,7 @@ All demo data (machines, tanks, operators, topics) is driven by a JSON config fi
 | [firmware/docs/firmware-architecture.md](firmware/docs/firmware-architecture.md) | Firmware boot sequence, tasks, data layer, UI architecture |
 | [firmware/docs/sdkconfig-reference.md](firmware/docs/sdkconfig-reference.md) | Rationale for every non-obvious sdkconfig.defaults entry |
 | [dashboard/README.md](dashboard/README.md) | Dashboard and editor web apps |
+
+## Deployment privacy
+
+Repository examples use documentation hostnames and addresses. Configure the firmware broker in menuconfig or ignored `firmware/sdkconfig.local.defaults`. The web tools derive public WSS from their page hostname; LAN deployments can set the public broker in ignored `dashboard/html/assets/site-config.local.js`. WiFi credentials are provisioned on-device. Private measurements, screenshots, local site configuration and board backups are excluded from Git.

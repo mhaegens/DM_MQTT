@@ -26,3 +26,20 @@ scripts/split_pdfs.py
 
 # Git worktrees
 .worktrees/
+
+# Optional local browser test dependencies
+tests/node_modules/
+
+# Private deployment settings, measurements and device captures
+firmware/sdkconfig.local.defaults
+dashboard/html/assets/site-config.local.js
+docs/audit-evidence/
+docs/audit-preview/
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519

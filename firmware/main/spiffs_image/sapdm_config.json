@@ -97,7 +97,7 @@
     }
   ],
   "people": [
-    {"id":"EMP-0042","name":"Michiel Haegens","role":"Shift Lead","role_key":"lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91","avatar_color":"0x0050BE","certs":["ISO 9001","Lean","PLC Certified"]},
+    {"id":"EMP-0042","name":"Demo Operator","role":"Shift Lead","role_key":"lead","dept":"Production","plant":"Plant BE01","uid":"A3:F7:C2:91","avatar_color":"0x0050BE","certs":["ISO 9001","Lean","PLC Certified"]},
     {"id":"EMP-0117","name":"Jana Kovacevic","role":"CNC Operator","role_key":"operator","dept":"Machining","plant":"Plant BE01","uid":"B1:2E:9A:04","avatar_color":"0x0070F2","certs":["CNC Level 3","Safety"]},
     {"id":"EMP-0089","name":"Lars Vermeulen","role":"Process Engineer","role_key":"engineer","dept":"Engineering","plant":"Plant BE01","uid":"C4:88:F1:3D","avatar_color":"0xB84D00","certs":["Six Sigma GB","HAZOP","ISO 14001"]},
     {"id":"EMP-0201","name":"Amira El-Sayed","role":"Quality Inspector","role_key":"quality","dept":"Quality","plant":"Plant BE01","uid":"D7:A3:55:E9","avatar_color":"0x8A0000","certs":["ISO 9001 Lead","FMEA","8D"]},

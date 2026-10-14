@@ -1,3 +1,6 @@
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -13,6 +16,7 @@
 #include "config_loader.h"
 #include "config_store.h"
 #include "wifi_manager.h"
+#include "wifi_portal.h"
 #include "mqtt_task.h"
 #include "sim_task.h"
 #include "nvs_flash.h"
@@ -57,17 +61,38 @@ static void btn_task(void *arg) {
 
 static void console_task(void *arg) {
     (void)arg;
+    setvbuf(stdin, NULL, _IONBF, 0);
     while (1) {
         int ch = getchar();
-        if (ch == 'S' || ch == 's') {
-            ui_screenshot_take();
+        if (ch == EOF) clearerr(stdin);
+        if (ch == 'S' || ch == 's') ui_screenshot_take();
+        else if (ch == 'D' || ch == 'T' || ch == 'C') {
+            bsp_display_lock(0);
+            if (ch == 'D') ui_switch_tab(VIEW_DEBUG);
+            else if (ch == 'T') ui_switch_tab(VIEW_TANKS);
+            else ui_push_config_select();
+            bsp_display_unlock();
+        } else if (ch == 'R') mqtt_task_reconnect();
+        else if (ch == 'P') {
+            // Local USB diagnostic convenience: the same provisioning portal
+            // as the on-screen Setup via Phone action. Never remotely exposed.
+            wifi_manager_start_ap(); wifi_portal_start();
+        } else if (ch == 'L') {
+            int count = 0; ConfigTemplate *all = config_store_list_all(&count);
+            printf("PROFILES %d\n", count);
+            for (int i = 0; i < count; ++i)
+                printf("PROFILE %s source=%s valid=%d\n", all[i].name, all[i].from_sd ? "SD" : "Flash", all[i].valid);
+            free(all);
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
 static void on_wifi_ip(void) {
-    if (mqtt_is_connected()) return;
+    static char previous_ip[16], previous_ssid[33];
+    if (mqtt_is_connected() && !strcmp(previous_ip, g_device_ip) && !strcmp(previous_ssid, g_wifi_ssid)) return;
+    snprintf(previous_ip, sizeof(previous_ip), "%s", g_device_ip);
+    snprintf(previous_ssid, sizeof(previous_ssid), "%s", g_wifi_ssid);
     // MQTT client not yet started on first IP; start it; on subsequent reconnects call reconnect
     static bool s_mqtt_started = false;
     if (!s_mqtt_started) {
@@ -95,9 +120,9 @@ void app_main(void) {
     data_init_psram();
 
     // Load config from SD (or fall back to embedded defaults)
+    config_store_init();   // shared storage owns the SD mount for this boot
     ConfigResult cr = config_load();
     ESP_LOGI(TAG, "Config: %s", config_result_str(cr));
-    config_store_init();   // template store lock (portal + Configuration screen)
     // The SD card is the home of the profile library — copy any bundled
     // config missing from the card onto it (card copies are never touched).
     config_store_seed_sd();
@@ -129,18 +154,22 @@ void app_main(void) {
     bsp_display_unlock();
 
     bsp_display_lock(0);
+    for (lv_indev_t *in = lv_indev_get_next(NULL); in; in = lv_indev_get_next(in)) {
+        lv_timer_t *timer = lv_indev_get_read_timer(in);
+        if (timer) lv_timer_set_period(timer, 10);
+    }
     ui_main_init();
     bsp_display_unlock();
 
     // Start networking — mqtt starts only after WiFi gets an IP; reconnects on IP renewal
-    wifi_manager_init();
     wifi_manager_set_on_ip(on_wifi_ip);
+    wifi_manager_init();
     sim_task_start();
 
     // 4 KB: btn_task runs full UI transitions (ui_switch_tab -> screen refresh,
     // deep flex relayout) under bsp_display_lock — 2 KB was borderline overflow.
     xTaskCreatePinnedToCore(btn_task, "btn", 4096, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(console_task, "con", 2048, NULL, 3, NULL, 0);
+    xTaskCreatePinnedToCore(console_task, "con", 4096, NULL, 3, NULL, 0);
 
     // Memory diagnostics — log SPIRAM and internal SRAM state after all init
     heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);

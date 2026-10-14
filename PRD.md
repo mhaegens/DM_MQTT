@@ -432,7 +432,7 @@ Enable operator identification and authentication via physical or virtual NFC ba
    - **NFC Icon:** Small NFC icon in top-right
 
 **Operator Badge Definitions**
-1. **Michiel Haegens** (Shift Lead)
+1. **Demo Operator** (Shift Lead)
    - ID: EMP-0042
    - Role: Shift Lead (green)
    - Department: Production
@@ -751,7 +751,7 @@ Provide deep-dive editing interface for individual metrics with metric-specific 
 ```
 {
   id: 'EMP-0042',
-  name: 'Michiel Haegens',
+  name: 'Demo Operator',
   role: 'Shift Lead',
   roleKey: 'lead',
   department: 'Production',

@@ -4,17 +4,24 @@ CONFIG_IDF_TARGET="esp32p4"
 # software renderer (the hottest code on the device) runs unoptimised.
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 
-# CPU — 400 MHz (IDF defaults the P4 to 360). The LVGL software rasteriser is
-# CPU-bound during scrolls; this is a free ~11% on every render path.
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_400=y
+# Waveshare 4B is documented at 360 MHz. Do not assume later 400 MHz silicon.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
 
 # PSRAM — heap only (XIP removed: it triggers linker non-contiguous-regions issue)
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_200M=y
 CONFIG_SPIRAM_USE_MALLOC=y
-CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=512
+# Prefer PSRAM for ordinary objects/buffers above 64 bytes. The previous
+# 512-byte cutoff crowded internal RAM with UI allocations and prevented
+# the phone portal's internal-stack task from starting alongside WSS.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=64
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=81920
+
+# Large TLS buffers follow the PSRAM-aware malloc policy. Keeping every TLS
+# allocation internal starved SD DMA during a handshake with the full UI and
+# phone portal active. Task stacks and explicit DMA allocations stay internal.
+CONFIG_MBEDTLS_DEFAULT_MEM_ALLOC=y
 
 # L2 cache — required for DPI DMA to stream from PSRAM framebuffer fast enough
 CONFIG_CACHE_L2_CACHE_256KB=y
@@ -54,7 +61,8 @@ CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
 # Touch sampling — LVGL's default indev read period is 30 ms, so a scroll
 # gesture only produces new positions at 33 Hz even when frames render at 60.
 # 10 ms sampling makes the scroll position track the finger.
-CONFIG_LV_INDEV_DEF_READ_PERIOD=10
+# Sampling configured through lv_indev_get_read_timer() in main.c; LVGL 9.5
+# has no LV_INDEV_DEF_READ_PERIOD Kconfig symbol.
 
 # Software shadow cache — the NFC badge cards (shadow 20 + radius 16) and the
 # detail-view cards re-blur their box shadows on every repaint without this.
@@ -96,7 +104,9 @@ CONFIG_ESP_HOSTED_DFLT_TASK_FROM_SPIRAM=y
 
 # MQTT — pin internal task to CPU0 so it cannot starve LVGL on CPU1
 CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y
-CONFIG_MQTT_TASK_CORE_SELECTION=0
+CONFIG_MQTT_USE_CORE_0=y
+CONFIG_MQTT_USE_CUSTOM_CONFIG=y
+CONFIG_MQTT_POLL_READ_TIMEOUT_MS=25
 
 # Display — double framebuffer + avoid-tearing eliminates partial-render cyan flashes.
 # DIRECT mode (was FULL_REFRESH): LVGL renders only dirty regions straight into the

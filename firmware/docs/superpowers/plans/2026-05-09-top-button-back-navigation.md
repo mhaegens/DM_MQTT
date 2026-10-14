@@ -56,7 +56,7 @@ typedef enum {
 - [ ] **Step 3: Verify the file compiles**
 
 ```bash
-cd /Users/I584748/DM_MQTT/firmware && idf.py build 2>&1 | tail -5
+cd /path/to/DM_MQTT/firmware && idf.py build 2>&1 | tail -5
 ```
 Expected: `Build successful` with no errors or warnings referencing `ui_main.h`.
 
@@ -99,7 +99,7 @@ void ui_btn_short_press(void)
 - [ ] **Step 3: Build to confirm no compile errors**
 
 ```bash
-cd /Users/I584748/DM_MQTT/firmware && idf.py build 2>&1 | tail -10
+cd /path/to/DM_MQTT/firmware && idf.py build 2>&1 | tail -10
 ```
 Expected: `Build successful`.
 
@@ -110,7 +110,7 @@ Expected: `Build successful`.
 - [ ] **Step 1: Flash the firmware**
 
 ```bash
-cd /Users/I584748/DM_MQTT/firmware && idf.py flash monitor
+cd /path/to/DM_MQTT/firmware && idf.py flash monitor
 ```
 Expected: Flash succeeds, device boots, LVGL UI comes up. Press Ctrl+] to exit monitor.
 

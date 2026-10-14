@@ -1,5 +1,7 @@
 # Demo Runbook
 
+> Deployment hostnames, addresses and tunnel names below are examples. Supply your own values locally; private site configuration is not versioned.
+
 Operational guide for running the SAP DM MQTT demo rig at a customer event or internal demo. This covers setup, scenario changes, and common issues you might encounter during a session.
 
 ---
@@ -12,7 +14,7 @@ Run through this before the session starts:
 - [ ] Home tab shows MQTT badge as "Connected" (green). If gray, see [MQTT status is gray](#mqtt-status-is-gray).
 - [ ] At least one machine card on the Machines tab shows "Running" and live metric values are changing.
 - [ ] WiFi RSSI on the Debug tab is above -75 dBm. Below that, WSS reconnects become frequent.
-- [ ] Server dashboard is accessible at `https://mqttfordm.haegens.be/dashboard/` (or your hostname). Confirm values are updating in real time.
+- [ ] Server dashboard is accessible at `https://mqtt.example.com/dashboard/` (or your hostname). Confirm values are updating in real time.
 - [ ] Config JSON matches the customer scenario. Check the machine names and types on the Machines tab.
 
 ---
@@ -60,7 +62,7 @@ The entire demo content (machine names, metrics, operators) is driven by `sapdm_
 
 ### Via the web editor (no SD card needed)
 
-1. Open `https://mqttfordm.haegens.be/editor/` in a browser.
+1. Open `https://mqtt.example.com/editor/` in a browser.
 2. Edit the JSON directly in the editor, or paste a new config.
 3. Download the file.
 4. Copy it to an SD card as `sapdm_config.json` (root of the card, no subdirectory).
@@ -110,7 +112,7 @@ The device is connected to WiFi but MQTT is not connected.
 Likely cause: the Cloudflare Tunnel is down, or the server stack is not running.
 
 Check:
-1. Open `https://mqttfordm.haegens.be/dashboard/` in a browser. If it does not load, the tunnel is down.
+1. Open `https://mqtt.example.com/dashboard/` in a browser. If it does not load, the tunnel is down.
 2. SSH to the LXC and run `docker compose ps`. If any service is not `Up`, restart it with `docker compose restart`.
 3. If the tunnel is running but MQTT is still gray, check `docker compose logs mosquitto` for errors.
 

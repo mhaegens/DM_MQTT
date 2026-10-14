@@ -1,0 +1,12 @@
+menu "SAP DM connection"
+    config DM_MQTT_BROKER_URI
+        string "MQTT broker URI (mqtt://, mqtts://, ws:// or wss://)"
+        default "wss://mqtt.example.com"
+        help
+            Use mqtt://<broker-LAN-or-WireGuard-IP>:1883 for the shortest path
+            over a trusted network. Keep WSS for remote demos without routing.
+    config DM_MQTT_BROKER_PORT
+        int "Port override (0 uses URI/scheme default)"
+        range 0 65535
+        default 0
+endmenu

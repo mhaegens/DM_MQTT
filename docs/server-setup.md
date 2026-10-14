@@ -1,8 +1,10 @@
 # Server Stack Setup
 
-The server stack runs two Docker containers on a single Debian 13 (Trixie) LXC: Mosquitto (MQTT broker) and Nginx (web dashboard and editor). Public internet access is provided by the existing `homelab` Cloudflare Tunnel running on `pve-homelab` — no cloudflared container is needed in the LXC. A single command installs and starts everything.
+> Deployment hostnames, addresses and tunnel names below are examples. Supply your own values locally; private site configuration is not versioned.
 
-This setup matches the homelab architecture: `cloudflared` runs as a host service on `pve-homelab` (`192.168.0.200`), and the demo stack adds its ingress rules to `/etc/cloudflared/config.yml` on that host.
+The server stack runs two Docker containers on a single Debian 13 (Trixie) LXC: Mosquitto (MQTT broker) and Nginx (web dashboard and editor). Public internet access is provided by the existing `demo-tunnel` Cloudflare Tunnel running on `virtualization-host` — no cloudflared container is needed in the LXC. A single command installs and starts everything.
+
+This setup matches the demo-tunnel architecture: `cloudflared` runs as a host service on `virtualization-host` (`192.0.2.2`), and the demo stack adds its ingress rules to `/etc/cloudflared/config.yml` on that host.
 
 ---
 
@@ -36,48 +38,44 @@ What `install.sh` does, in order:
 6. **Docker images + start:** runs `docker compose pull` then `docker compose up -d`.
 7. **Status output:** prints `docker compose ps` and the LAN access URLs.
 
-After the install, the dashboard and editor are accessible on LAN at `http://<LXC-IP>/dashboard/` and `http://<LXC-IP>/editor/`.
+After the install, the full workbench is accessible on LAN; the dashboard and editor are at `http://<LXC-IP>/dashboard/` and `http://<LXC-IP>/editor/`.
 
 ---
 
 ## Cloudflare Tunnel Setup
 
-The demo stack reuses the existing `homelab` tunnel running on `pve-homelab`. Add the ingress rules to `/etc/cloudflared/config.yml` on the Proxmox host.
+The demo stack reuses the existing `demo-tunnel` tunnel running on `virtualization-host`. Add the ingress rules to `/etc/cloudflared/config.yml` on the Proxmox host.
 
-### Step 1: Edit the tunnel config on pve-homelab
+### Step 1: Edit the tunnel config on virtualization-host
 
 ```bash
-# On pve-homelab
+# On virtualization-host
 nano /etc/cloudflared/config.yml
 ```
 
-Add these rules above the final `http_status:404` catch-all. Replace `192.168.0.60` with the LXC IP if you used a different one.
+Add these rules above the final `http_status:404` catch-all. Replace `192.0.2.10` with the LXC IP if you used a different one.
 
 ```yaml
 ingress:
   # ... existing rules ...
 
   # SAP DM MQTT demo stack
-  - hostname: mqttfordm.haegens.be
-    path: /editor.*
-    service: http://192.168.0.60:80
+  - hostname: mqtt.example.com
+    path: ^/(dashboard|editor|shopfloor|config-editor|previews|assets|mqtt)(/.*)?$
+    service: http://192.0.2.10:80
 
-  - hostname: mqttfordm.haegens.be
-    path: /dashboard.*
-    service: http://192.168.0.60:80
-
-  - hostname: mqttfordm.haegens.be
-    service: ws://192.168.0.60:9001
+  - hostname: mqtt.example.com
+    service: ws://192.0.2.10:9001
 
   - service: http_status:404
 ```
 
-**Rule ordering is critical.** The `/editor.*` and `/dashboard.*` path rules must come before the pathless WebSocket catch-all. If the catch-all is listed first, it matches every request for the hostname and forwards everything to Mosquitto — the dashboard and editor become unreachable with no error.
+**Rule ordering is critical.** The workbench HTTP path rule must come before the pathless WebSocket catch-all. If the catch-all is listed first, it matches every request for the hostname and forwards everything to Mosquitto — the dashboard and editor become unreachable with no error.
 
 ### Step 2: Create the DNS record
 
 ```bash
-cloudflared tunnel route dns homelab mqttfordm.haegens.be
+cloudflared tunnel route dns demo-tunnel mqtt.example.com
 ```
 
 ### Step 3: Reload the tunnel
@@ -152,7 +150,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost/dashboard/
 **Public tunnel responding:**
 
 ```bash
-curl -I https://mqttfordm.haegens.be/dashboard/
+curl -I https://mqtt.example.com/dashboard/
 # expected: HTTP/2 200
 ```
 
@@ -160,7 +158,7 @@ curl -I https://mqttfordm.haegens.be/dashboard/
 
 ```bash
 mosquitto_sub \
-  -h mqttfordm.haegens.be -p 443 \
+  -h mqtt.example.com -p 443 \
   --capath /etc/ssl/certs \
   --protocol-version mqttv311 \
   --ws \
@@ -177,9 +175,9 @@ Run from anywhere on the LXC:
 bash /opt/sapdm-demo/update.sh
 ```
 
-What it does: `git pull origin main`, `docker compose pull`, `docker compose up -d --remove-orphans`.
+What it does: pull source, pull Docker images, apply Compose, then validate and reload Nginx.
 
-Mosquitto data and logs are in named volumes and survive restarts.
+Mosquitto data and logs use host bind mounts. The current broker has `persistence false`; mounts alone do not persist broker sessions or message history.
 
 ---
 
@@ -192,8 +190,8 @@ docker compose -f /opt/sapdm-demo/docker-compose.yml logs -f mosquitto
 # Nginx access log
 docker compose -f /opt/sapdm-demo/docker-compose.yml logs -f dashboard
 
-# Cloudflared log (runs on pve-homelab host, not in the LXC)
-# On pve-homelab:
+# Cloudflared log (runs on virtualization-host host, not in the LXC)
+# On virtualization-host:
 journalctl -u cloudflared -f
 ```
 
@@ -201,6 +199,10 @@ Common error patterns:
 
 | Message | Cause | Fix |
 |---------|-------|-----|
-| `cloudflared: no ingress rule matched` | Ingress rule ordering issue in `/etc/cloudflared/config.yml` on pve-homelab | Confirm path rules precede WebSocket catch-all |
+| `cloudflared: no ingress rule matched` | Ingress rule ordering issue in `/etc/cloudflared/config.yml` on virtualization-host | Confirm path rules precede WebSocket catch-all |
 | `mosquitto: client disconnected` with no prior connect | TLS handshake failure (client trying TLS on a non-TLS port) | Confirm client is connecting to port 9001 via WSS tunnel, not directly |
 | `mosquitto: error: bind: Address already in use` | Port 1883 or 9001 already occupied on the host | Check `ss -tlnp | grep 188` for conflicting processes |
+
+For the configuration studio, local runtime assets, same-origin MQTT proxy, latency measurements, and firmware rollout, see [the performance audit](performance-audit-2026-10-14.md) and [Dashboard README](../dashboard/README.md).
+
+For LAN browser access, create ignored `dashboard/html/assets/site-config.local.js` containing only your public connection setting: `window.DM_MQTT_PUBLIC_BROKER = "wss://mqtt.example.com";`. HTTPS deployments otherwise derive WSS from their own hostname. Set `TUNNEL_URL=https://mqtt.example.com/dashboard/` when running the smoke check to include the public route.

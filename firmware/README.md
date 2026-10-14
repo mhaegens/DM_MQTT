@@ -2,7 +2,7 @@
 
 ESP-IDF firmware for the Waveshare ESP32-P4-WIFI6-Touch-LCD-4B (Smart 86 Box).
 Displays a full shop-floor simulator UI on the 720×720 MIPI-DSI touch screen
-and publishes MQTT telemetry to `wss://mqttfordm.haegens.be` via Cloudflare Tunnel.
+and publishes MQTT telemetry over WSS to a deployment-configured broker.
 
 ---
 
@@ -71,11 +71,20 @@ config or activate any profile from the list. Uploads are validated
 (parseable JSON with `machines`/`tanks`/`people`), stored **permanently as a
 named profile under their original filename** (SD card preferred, flash
 fallback) so they stay in the list across profile switches and reboots, and
-then activated. Activating a profile writes it to `sapdm_config.json` on
+optionally activated. Different uploads with the same name receive a numbered
+filename; identical re-uploads reuse the existing profile. The on-device list
+is paginated rather than capped at twelve files. Invalid saved files remain
+visible with a warning. Older unnamed active configurations are archived when
+they are not already represented in the library.
+
+Activating a profile writes it to `sapdm_config.json` on
 **both** SPIFFS and the SD card, so the two stores stay in sync; if a card
 that was present stops responding during a save, the portal reports an error
 instead of letting the stale card copy win at the next boot. The profile
 list shows each file once — the SD copy wins when it exists on both stores.
+Writes use a staged file, byte verification and recoverable backup before
+replacement. SD power is enabled through the board's VO4 rail and GPIO45;
+the card stays mounted on slot 0 throughout the boot.
 
 Schema reference: [`main/spiffs_image/sapdm_config.annotated.json`](main/spiffs_image/sapdm_config.annotated.json)
 
@@ -95,7 +104,18 @@ compete for space.
 
 ### WiFi
 
-On first boot (or after SD config change) the device connects to the configured WiFi network.
+The device remembers up to ten networks in NVS, with the most recently successful
+connection preferred. New credentials are saved only after getting an IP address;
+failed joins/password changes never replace a working saved password. The one
+network stored by older firmware is migrated automatically. When the preferred
+network is unavailable, the controller tries the other saved networks and backs
+off between cycles. At capacity, the least recently used entry is replaced.
+
+The WiFi screen lists saved networks even when they are not nearby. Tap a network
+name to reconnect without typing its password. Use **Password** to update it or
+**Forget** to remove that network only. Nearby scan results mark remembered networks
+as **Saved**. The phone portal also accepts an empty password for a saved network.
+The known-network API returns names only; passwords stay inside the manager.
 A soft-AP hotspot can be toggled from the WiFi tab for provisioning. After connecting a phone
 to the hotspot, a captive portal (with a DNS hijack responder on UDP/53) serves the credential
 entry page. WiFi scanning uses a blocking scan in a worker task and reconnects the previous
@@ -108,13 +128,16 @@ network automatically when the scan finishes.
 | Task | Stack | CPU | Wake |
 |------|-------|-----|------|
 | LVGL render (BSP) | 20 KB | 1 | 16ms period (direct mode — dirty regions only) |
-| sim | 8 KB | 0 | 3000ms (`SIM_TICK_MS`) |
+| sim | 8 KB | 0 | 100ms observation; 3000ms simulation |
+| mqtt_tx | 6 KB | 0 | event-driven |
+| wifi_ctrl | 6 KB | 0 | commands and connection timeouts |
 | btn | 4 KB | 0 | 20ms poll |
 | con (console) | 2 KB | 0 | 50ms poll |
 | MQTT internal (esp_mqtt) | esp_mqtt default | 0 | event-driven |
 
-LVGL is on CPU 1. All other application tasks are on CPU 0. All MQTT publishes
-go through `esp_mqtt_client_enqueue`, so no task ever blocks on the WSS socket.
+LVGL is on CPU 1. All other application tasks are on CPU 0. MQTT producers copy into bounded application storage; the dedicated transmitter
+worker performs socket writes. WiFi connection/scan commands and successful-network
+persistence run in a separate controller worker, so touch callbacks never wait for them.
 
 ## Project structure
 
@@ -126,7 +149,7 @@ main/
   default_config.json    Embedded default demo scenario
   data.c/h               All machine/tank/operator state in PSRAM
   mqtt_task.c/h          esp_mqtt client — WSS to Cloudflare tunnel
-  sim_task.c/h           1.5 s random-walk simulation for all metrics
+  sim_task.c/h           3 s simulation, 100 ms change observation
   wifi_manager.c/h       STA connect, scan, NVS credential storage, soft-AP
   ui/
     ui_theme.h            Design tokens — SAP Fiori Horizon colors + fonts
@@ -137,7 +160,7 @@ main/
     ui_nfc.c/h            People: badge carousel + physical NFC ring
     ui_detail.c/h         Detail: 6 viz types, step input, slider
     ui_wifi_setup.c/h     WiFi: scan list, join dialog, AP toggle, QR
-    ui_debug.c/h          Debug: stat cards + rolling MQTT log
+    ui_debug.c/h          Debug: live latency, queue, memory, WiFi and SD status
     ui_screenshot.c/h     UART screenshot tool ('S' key)
 ```
 
@@ -172,5 +195,37 @@ For root causes and fixes: [../docs/troubleshooting.md](../docs/troubleshooting.
 
 | Region   | Free      | Notes                                      |
 |----------|-----------|--------------------------------------------|
-| PSRAM    | ~7 MB     | Framebuffers + data arrays + hosted tasks  |
-| Int SRAM | ~114 KB   | Reserve 80 KB for DMA (esp_hosted SDIO)    |
+| PSRAM    | ~29 MB    | Measured on the connected 32 MB board; profile dependent |
+| Int SRAM | ~137 KB after init | Brewery profile; Debug shows current/minimum runtime memory |
+
+
+## October 2026 latency audit
+
+See [the audit](../docs/performance-audit-2026-10-14.md) for findings, validation, hardware limits and rollout. Telemetry now publishes only changes at its two-decimal wire precision, with a complete snapshot after reconnect. A dedicated transmitter protects LVGL from transport waits and bounds the backlog; discrete events use QoS 1. Diagnostics report device/broker loopback RTT and queue/counter information.
+
+The pinned build targets ESP-IDF 5.4.1 and the Waveshare ESP32-P4-WIFI6-Touch-LCD-4B. The default broker remains WSS; `SAP DM connection` in menuconfig can select a direct LAN/WireGuard MQTT URI. New defaults use 360 MHz, 25 ms MQTT read polling and a 15 s keepalive. Configure from the new defaults rather than carrying an old generated sdkconfig forward.
+
+For a checkout path containing spaces, activate ESP-IDF and run `bash tools/build_check.sh`. The helper builds a copy in a temporary path and never flashes a device. On an existing device, use an application-only flash to preserve SPIFFS profiles.
+
+The tank grid and tank overview share an allocation-free conical-vessel renderer with rounded shoulders, support legs, and a discharge outlet. Levels keep their original height-percentage meaning, and drag/target controls remain available. The device retains its original bitmap SAP logo.
+
+Debug shows actual broker round trip, application queue wait/depth, message rate,
+failed/rejected/suppressed counters, WiFi signal/IP, internal/PSRAM headroom,
+SD capacity and profile count. Connection, Reconnect, Profiles and Check storage
+perform their named actions. Its timer runs only while the page is visible.
+
+For local USB diagnostics, `D` opens Debug, `T` opens Tanks, `C` opens Profiles,
+`L` prints the profile catalog, `R` reconnects MQTT, `P` starts the phone portal,
+and `S` captures the screen. Screen capture uses a temporary 20 KB worker instead
+of rendering on the small console stack. The screenshot helper waits through
+USB-triggered startup and supports `--screen tanks|debug|profiles`. Pixel bytes use raw buffered UART writes, and a CRC32 check rejects corrupted
+transfers. The buffered console driver is initialized on first capture.
+
+The malloc cutoff is 64 bytes, and large TLS buffers follow the PSRAM-aware
+allocator. SPIFFS work/cache buffers are kept in internal RAM through a scoped
+compile header, preserving the SDK and filesystem format. This avoids flash
+read stalls and leaves DMA headroom when the portal and full UI run together.
+
+## Private deployment settings
+
+WiFi defaults are empty. Provision networks on the device; successful credentials stay in NVS. Set your MQTT URI through menuconfig, or create ignored `sdkconfig.local.defaults` with `CONFIG_DM_MQTT_BROKER_URI="wss://mqtt.example.com"` and `CONFIG_DM_MQTT_BROKER_PORT=0`. Replace the example hostname locally. The build helper layers this private file over the checked-in defaults. Never commit network passwords, generated sdkconfig, board backups or private deployment files.

@@ -40,7 +40,7 @@ With:
 - [ ] **Step 2: Verify the build still compiles cleanly**
 
 ```bash
-cd /Users/I584748/DM_MQTT/firmware && idf.py build 2>&1 | tail -20
+cd /path/to/DM_MQTT/firmware && idf.py build 2>&1 | tail -20
 ```
 Expected: `Project build complete.` — no errors, possibly warnings about unused `OVW_FILL_H` value (fine at this stage).
 

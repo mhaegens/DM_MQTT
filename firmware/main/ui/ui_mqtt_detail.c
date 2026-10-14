@@ -6,6 +6,7 @@
 #include "data.h"
 #include "../mqtt_task.h"
 #include <stdio.h>
+#include <string.h>
 
 static lv_obj_t *s_screen          = NULL;
 static lv_obj_t *s_status_dot      = NULL;
@@ -15,6 +16,8 @@ static lv_obj_t *s_ip_lbl          = NULL;
 static lv_obj_t *s_rssi_lbl        = NULL;
 static lv_obj_t *s_wifi_lbl        = NULL;
 static lv_obj_t *s_last_topic_lbl  = NULL;
+static lv_obj_t *s_queue_lbl;
+static lv_obj_t *s_broker_uri_lbl, *s_protocol_lbl, *s_tls_lbl;
 static lv_obj_t *s_reconnect_btn   = NULL;
 
 // ─── Helper: bordered card container ─────────────────────────────────────────
@@ -80,6 +83,16 @@ static void reconnect_cb(lv_event_t *e)
     mqtt_task_reconnect();
 }
 
+static void refresh_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    if (g_current_view == VIEW_MQTT_DETAIL) ui_mqtt_detail_refresh();
+}
+static void label_cached(lv_obj_t *label, const char *text)
+{
+    if (label && strcmp(lv_label_get_text(label), text)) lv_label_set_text(label, text);
+}
+
 // ─── Create ───────────────────────────────────────────────────────────────────
 void ui_mqtt_detail_create(lv_obj_t *parent)
 {
@@ -134,12 +147,20 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     make_section_label(s_screen, "BROKER CONNECTION");
 
     lv_obj_t *broker_card = make_card(s_screen);
-    make_info_row(broker_card, "Broker",    MQTT_BROKER_URI);
-    make_info_row(broker_card, "Port",      "443");
-    make_info_row(broker_card, "Protocol",  "WebSocket Secure (WSS)");
-    make_info_row(broker_card, "TLS",       "Enabled (Cloudflare)");
+    s_broker_uri_lbl = make_info_row(broker_card, "Broker", MQTT_BROKER_URI);
+    char port[24];
+    if (MQTT_BROKER_PORT) snprintf(port, sizeof(port), "%d", MQTT_BROKER_PORT);
+    else snprintf(port, sizeof(port), "From URI");
+    make_info_row(broker_card, "Port", port);
+    bool wss = !strncmp(MQTT_BROKER_URI, "wss://", 6);
+    bool ws = !strncmp(MQTT_BROKER_URI, "ws://", 5);
+    bool tls = wss || !strncmp(MQTT_BROKER_URI, "mqtts://", 8);
+    s_protocol_lbl = make_info_row(broker_card, "Protocol", wss ? "MQTT / WSS" : ws ? "MQTT / WebSocket" : "MQTT / TCP");
+    s_tls_lbl = make_info_row(broker_card, "TLS", tls ? "Enabled (CA verified)" : "Off");
+
     make_info_row(broker_card, "Client ID", MQTT_CLIENT_ID);
-    make_info_row(broker_card, "Keepalive", "60 s");
+    char keepalive[24]; snprintf(keepalive, sizeof(keepalive), "%d s", MQTT_KEEPALIVE_S);
+    make_info_row(broker_card, "Keepalive", keepalive);
 
     // ── Runtime Status ────────────────────────────────────────────────────────
     make_section_label(s_screen, "RUNTIME STATUS");
@@ -150,14 +171,15 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     s_rssi_lbl        = make_info_row(runtime_card, "RSSI",       "-");
     s_wifi_lbl        = make_info_row(runtime_card, "WiFi",       "-");
     s_last_topic_lbl  = make_info_row(runtime_card, "Last topic", "-");
+    s_queue_lbl = make_info_row(runtime_card, "TX queue", "-");
 
     // ── Topics ────────────────────────────────────────────────────────────────
     make_section_label(s_screen, "TOPICS");
 
     lv_obj_t *topics_card = make_card(s_screen);
     make_info_row(topics_card, "Prefix",   TOPIC_PREFIX "/");
-    make_info_row(topics_card, "Machines", TOPIC_PREFIX "/machines/{id}/telemetry");
-    make_info_row(topics_card, "Tanks",    TOPIC_PREFIX "/tanks/{id}/telemetry");
+    make_info_row(topics_card, "Machines", TOPIC_PREFIX "/machines/{id}/{key}");
+    make_info_row(topics_card, "Tanks",    TOPIC_PREFIX "/tanks/{id}/{key}");
     make_info_row(topics_card, "NFC",      TOPIC_PREFIX "/operators/login");
 
     // ── Reconnect button ──────────────────────────────────────────────────────
@@ -179,42 +201,59 @@ void ui_mqtt_detail_create(lv_obj_t *parent)
     lv_obj_set_style_text_color(btn_lbl, COL_HI, 0);
     lv_obj_set_style_text_color(btn_lbl, COL_TX3, LV_STATE_DISABLED);
     lv_obj_center(btn_lbl);
+    lv_timer_create(refresh_timer_cb, UI_REFRESH_MS, NULL);
 }
 
 // ─── Refresh ──────────────────────────────────────────────────────────────────
 void ui_mqtt_detail_refresh(void)
 {
+    MqttStats route; mqtt_get_stats(&route);
+    bool wss = !strncmp(route.broker_uri, "wss://", 6), ws = !strncmp(route.broker_uri, "ws://", 5);
+    bool tls = wss || !strncmp(route.broker_uri, "mqtts://", 8);
+    label_cached(s_broker_uri_lbl, route.broker_uri);
+    label_cached(s_protocol_lbl, wss ? "MQTT / WSS" : ws ? "MQTT / WebSocket" : "MQTT / TCP");
+    label_cached(s_tls_lbl, tls ? "Enabled (CA verified)" : "Trusted LAN");
     if (!s_screen) return;
 
     lv_color_t col = g_mqtt_connected ? COL_OK : COL_ERR;
 
-    if (s_status_dot)
-        lv_obj_set_style_bg_color(s_status_dot, col, 0);
-    if (s_status_lbl) {
-        lv_label_set_text(s_status_lbl, g_mqtt_connected ? "CONNECTED" : "DISCONNECTED");
-        lv_obj_set_style_text_color(s_status_lbl, col, 0);
+    static int previous_state = -1;
+    if (previous_state != (int)g_mqtt_connected) {
+        previous_state = g_mqtt_connected;
+        if (s_status_dot) lv_obj_set_style_bg_color(s_status_dot, col, 0);
+        if (s_status_lbl) {
+            label_cached(s_status_lbl, g_mqtt_connected ? "CONNECTED" : "DISCONNECTED");
+            lv_obj_set_style_text_color(s_status_lbl, col, 0);
+        }
     }
 
     char buf[128];
 
     if (s_msg_lbl) {
         snprintf(buf, sizeof(buf), "%d", g_mqtt_msg_count);
-        lv_label_set_text(s_msg_lbl, buf);
+        label_cached(s_msg_lbl, buf);
     }
     if (s_ip_lbl)
-        lv_label_set_text(s_ip_lbl, g_device_ip[0] ? g_device_ip : "-");
+        label_cached(s_ip_lbl, g_device_ip[0] ? g_device_ip : "-");
     if (s_rssi_lbl) {
         if (g_wifi_rssi != 0)
             snprintf(buf, sizeof(buf), "%d dBm", g_wifi_rssi);
         else
             snprintf(buf, sizeof(buf), "-");
-        lv_label_set_text(s_rssi_lbl, buf);
+        label_cached(s_rssi_lbl, buf);
     }
     if (s_wifi_lbl)
-        lv_label_set_text(s_wifi_lbl, g_device_ip[0] ? "Connected" : "Disconnected");
+        label_cached(s_wifi_lbl, g_wifi_connected ? "Connected" : "Disconnected");
 
-    if (s_last_topic_lbl)
-        lv_label_set_text(s_last_topic_lbl, g_last_pub_topic[0] ? g_last_pub_topic : "-");
+    MqttStats stats;
+    mqtt_get_stats(&stats);
+    if (s_last_topic_lbl) label_cached(s_last_topic_lbl, stats.last_topic[0] ? stats.last_topic : "-");
+    if (s_queue_lbl) {
+        snprintf(buf, sizeof(buf), "%lu pending / %lu ms wait / %lu rejected / %lu failed",
+                 (unsigned long)stats.pending, (unsigned long)stats.queue_last_ms,
+                 (unsigned long)stats.rejected, (unsigned long)stats.failed);
+        label_cached(s_queue_lbl, buf);
+    }
 
     if (s_reconnect_btn) {
         if (g_mqtt_connected)

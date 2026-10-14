@@ -1,6 +1,6 @@
-// ui_tanks.c — Dynamic hopper-shaped tanks (1–3): cylindrical top + tapered bottom.
-// Rendered via LV_EVENT_DRAW_MAIN with lv_draw_rect and lv_draw_triangle.
+// ui_tanks.c — Conical vessels (1–3), with live level and drag controls.
 #include "ui_tanks.h"
+#include "ui_tank_shape.h"
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "ui_detail.h"
@@ -18,10 +18,6 @@ static const char *TAG = "tanks";
 #define COL_GAP          8
 #define ROW_PAD         12
 #define TANK_TOTAL_H   460    // total tank widget height (px)
-#define TANK_UPPER_RATIO 70   // % of TANK_TOTAL_H = cylindrical section
-#define TANK_TIP_W      28    // flat base width at bottom of taper (px)
-#define TANK_RADIUS     36    // top-corner border radius
-#define TANK_TIP_RADIUS  8    // rounded corner radius at taper tip
 #define TANK_MAX_W     300    // width cap so 1–2 tanks stay tank-shaped
 #define LABEL_BTN_H     56    // tank name / status button height (2 rows)
 #define LABEL_BTN_GAP    6    // gap between tank widget and label button
@@ -49,7 +45,7 @@ static bool    s_dragging[MAX_TANKS];
 static uint32_t s_last_pub_ms[MAX_TANKS];  // lv_tick_get() at last throttled publish
 static float   s_last_render_pct[MAX_TANKS] = {-1.0f, -1.0f, -1.0f};  // skip refresh when unchanged
 
-#define DRAG_PUB_INTERVAL_MS 400
+#define DRAG_PUB_INTERVAL_MS 50
 
 // ─── Status helpers ────────────────────────────────────────────────────────────
 static const char *status_text(float pct) {
@@ -76,190 +72,19 @@ static uint32_t status_bd(float pct) {
     return COL_OK_BD;
 }
 
-// ─── Hopper shape helpers ──────────────────────────────────────────────────────
-
-// Width of the hopper at fill_px pixels from the bottom.
-// At fill_px=0: TANK_TIP_W; at fill_px=taper_h: full column width.
-static lv_coord_t hopper_width_at_fill(lv_coord_t col_w, lv_coord_t taper_h,
-                                        lv_coord_t fill_px) {
-    if (fill_px <= 0)          return TANK_TIP_W;
-    if (fill_px >= taper_h)    return col_w;
-    return TANK_TIP_W + (col_w - TANK_TIP_W) * fill_px / taper_h;
-}
-
-// Draw a filled rectangle with no border.
-static void draw_filled_rect(lv_layer_t *layer,
-                              lv_coord_t x1, lv_coord_t y1,
-                              lv_coord_t x2, lv_coord_t y2,
-                              lv_color_t color, lv_opa_t opa, int32_t radius) {
-    lv_draw_rect_dsc_t dsc;
-    lv_draw_rect_dsc_init(&dsc);
-    dsc.bg_color    = color;
-    dsc.bg_opa      = opa;
-    dsc.border_width = 0;
-    dsc.radius      = radius;
-    lv_area_t area = {x1, y1, x2, y2};
-    lv_draw_rect(layer, &dsc, &area);
-}
-
-// Draw a trapezoid as two triangles (top_x1..top_x2 at top_y, narrowing to
-// bot_x1..bot_x2 at bot_y). bot_radius > 0 adds rounded corners at the bottom.
-static void draw_taper(lv_layer_t *layer,
-                        lv_coord_t top_x1, lv_coord_t top_x2,
-                        lv_coord_t bot_x1, lv_coord_t bot_x2,
-                        lv_coord_t top_y,  lv_coord_t bot_y,
-                        lv_color_t color,  lv_opa_t opa,
-                        int32_t bot_radius) {
-    lv_draw_triangle_dsc_t dsc;
-    lv_draw_triangle_dsc_init(&dsc);
-    dsc.color = color;
-    dsc.opa   = opa;
-
-    lv_coord_t tri_bot_y = (bot_radius > 0) ? bot_y - bot_radius : bot_y;
-
-    if (tri_bot_y > top_y) {
-        // Triangle 1: top-left, top-right, bottom-right
-        dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
-        dsc.p[1].x = top_x2; dsc.p[1].y = top_y;
-        dsc.p[2].x = bot_x2; dsc.p[2].y = tri_bot_y;
-        lv_draw_triangle(layer, &dsc);
-
-        // Triangle 2: top-left, bottom-left, bottom-right
-        dsc.p[0].x = top_x1; dsc.p[0].y = top_y;
-        dsc.p[1].x = bot_x1; dsc.p[1].y = tri_bot_y;
-        dsc.p[2].x = bot_x2; dsc.p[2].y = tri_bot_y;
-        lv_draw_triangle(layer, &dsc);
-    }
-
-    if (bot_radius > 0) {
-        draw_filled_rect(layer, bot_x1, tri_bot_y, bot_x2, bot_y,
-                         color, opa, bot_radius);
-    }
-}
-
-// ─── Custom draw callback ──────────────────────────────────────────────────────
-static void tank_draw_cb(lv_event_t *e) {
-    if (lv_event_get_code(e) != LV_EVENT_DRAW_MAIN) return;
-
-    lv_obj_t   *obj   = lv_event_get_target(e);
-    lv_layer_t *layer = lv_event_get_layer(e);
-    tank_col_t *col   = (tank_col_t *)lv_obj_get_user_data(obj);
+// ─── Custom drawing ───────────────────────────────────────────────────────────
+static void tank_draw_cb(lv_event_t *event)
+{
+    lv_obj_t *obj = lv_event_get_target(event);
+    tank_col_t *col = lv_obj_get_user_data(obj);
     if (!col) return;
-
-    Tank  *t   = &g_tanks[col->tank_idx];
-    float  pct = tank_level(t);
-    if (pct < 0.0f)   pct = 0.0f;
-    if (pct > 100.0f) pct = 100.0f;
-    lv_color_t fc = lv_color_hex(tank_fill_color(pct));
-
-    lv_area_t  coords;
-    lv_obj_get_coords(obj, &coords);
-    lv_coord_t ox      = coords.x1;
-    lv_coord_t oy      = coords.y1;
-    lv_coord_t w       = lv_obj_get_width(obj);
-    lv_coord_t h       = TANK_TOTAL_H;
-    lv_coord_t upper_h = h * TANK_UPPER_RATIO / 100;
-    lv_coord_t taper_h = h - upper_h;
-    lv_coord_t tip_x1  = ox + (w - TANK_TIP_W) / 2;
-    lv_coord_t tip_x2  = ox + (w + TANK_TIP_W) / 2;
-    lv_coord_t bot_y   = oy + h;
-    lv_coord_t jct_y   = oy + upper_h;
-
-    /* 1. Background: upper rect with rounded top + 1px border */
-    {
-        lv_draw_rect_dsc_t dsc;
-        lv_draw_rect_dsc_init(&dsc);
-        dsc.bg_color    = COL_BASE2;
-        dsc.bg_opa      = LV_OPA_COVER;
-        dsc.border_color = COL_BD_STR;
-        dsc.border_width = 1;
-        dsc.border_opa  = LV_OPA_COVER;
-        dsc.border_side = LV_BORDER_SIDE_LEFT | LV_BORDER_SIDE_RIGHT | LV_BORDER_SIDE_TOP;
-        dsc.radius      = TANK_RADIUS;
-        lv_area_t area = {ox, oy, ox + w - 1, jct_y};
-        lv_draw_rect(layer, &dsc, &area);
-    }
-
-    /* 2. Background: taper (covers the bottom border of the rect above) */
-    draw_taper(layer, ox, ox + w, tip_x1, tip_x2, jct_y, bot_y,
-               COL_BASE2, LV_OPA_COVER, TANK_TIP_RADIUS);
-
-    /* 3. Fill */
-    lv_coord_t fill_px = (lv_coord_t)(pct * (float)h / 100.0f);
-    if (fill_px > 0) {
-        lv_coord_t waterline = oy + h - fill_px;
-
-        if (waterline >= jct_y) {
-            /* Fill only inside taper */
-            lv_coord_t fw   = hopper_width_at_fill(w, taper_h, fill_px);
-            lv_coord_t ftx1 = ox + (w - fw) / 2;
-            lv_coord_t ftx2 = ox + (w + fw) / 2;
-            draw_taper(layer, ftx1, ftx2, tip_x1, tip_x2,
-                       waterline, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
-        } else {
-            /* Fill spans rect + full taper */
-            lv_coord_t fill_r = (waterline <= oy + TANK_RADIUS) ? TANK_RADIUS : 0;
-            draw_filled_rect(layer, ox, waterline, ox + w - 1, jct_y + fill_r,
-                             fc, LV_OPA_COVER, fill_r);
-            draw_taper(layer, ox, ox + w, tip_x1, tip_x2,
-                       jct_y, bot_y, fc, LV_OPA_COVER, TANK_TIP_RADIUS);
-        }
-
-        /* Shine strip on left side of fill */
-        lv_coord_t shine_y1 = waterline + 4;
-        lv_coord_t shine_y2 = bot_y - 6;
-        if (shine_y2 > shine_y1) {
-            draw_filled_rect(layer, ox + 3, shine_y1, ox + 9, shine_y2,
-                             lv_color_white(), LV_OPA_20, SZ_RADIUS_SM);
-        }
-
-        /* Waterline highlight — bright edge at the fill surface */
-        if (fill_px > 8) {
-            lv_coord_t hw = (waterline >= jct_y)
-                ? hopper_width_at_fill(w, taper_h, fill_px) : w;
-            draw_filled_rect(layer, ox + (w - hw) / 2 + 2, waterline,
-                             ox + (w + hw) / 2 - 2, waterline + 2,
-                             lv_color_white(), LV_OPA_40, 0);
-        }
-    }
-
-    /* 4. Taper outline: diagonal lines for the slanted edges — drawn after fill */
-    {
-        lv_draw_line_dsc_t line;
-        lv_draw_line_dsc_init(&line);
-        line.color = COL_BD_STR;
-        line.width = 1;
-        line.opa   = LV_OPA_COVER;
-        line.p1.x = ox;       line.p1.y = jct_y;
-        line.p2.x = tip_x1;   line.p2.y = bot_y;
-        lv_draw_line(layer, &line);
-        line.p1.x = ox + w;   line.p1.y = jct_y;
-        line.p2.x = tip_x2;   line.p2.y = bot_y;
-        lv_draw_line(layer, &line);
-    }
-
-    /* 5. Tick lines at 25%, 50%, 75% fill marks */
-    static const int TICK_PCTS[] = {75, 50, 25};
-    for (int i = 0; i < 3; i++) {
-        lv_coord_t tick_y_off = h * (100 - TICK_PCTS[i]) / 100;
-        lv_coord_t tick_y     = oy + tick_y_off;
-        lv_coord_t depth      = tick_y_off - upper_h;
-        lv_coord_t tick_w;
-        if (depth <= 0) {
-            tick_w = w;
-        } else {
-            tick_w = hopper_width_at_fill(w, taper_h, taper_h - depth);
-        }
-        lv_coord_t tx1 = ox + (w - tick_w) / 2;
-        lv_draw_rect_dsc_t tdsc;
-        lv_draw_rect_dsc_init(&tdsc);
-        tdsc.bg_color    = lv_color_hex(0xC0C8D8);
-        tdsc.bg_opa      = LV_OPA_COVER;
-        tdsc.border_width = 0;
-        tdsc.radius      = 0;
-        lv_area_t tick_area = {tx1, tick_y, tx1 + tick_w - 1, tick_y + 1};
-        lv_draw_rect(layer, &tdsc, &tick_area);
-    }
+    lv_area_t area;
+    lv_obj_get_coords(obj, &area);
+    DATA_LOCK();
+    float level = tank_level(&g_tanks[col->tank_idx]);
+    DATA_UNLOCK();
+    ui_tank_shape_draw(lv_event_get_layer(event), &area, level,
+                       lv_color_hex(tank_fill_color(level)));
 }
 
 // ─── Update fill and labels from current level ────────────────────────────────
@@ -285,21 +110,17 @@ static void refresh_tank(int idx) {
     snprintf(buf, sizeof(buf), "%d%%", (int)pct);
     lv_label_set_text(col->pct_label, buf);
 
-    lv_coord_t fill_px  = (lv_coord_t)(pct * TANK_TOTAL_H / 100.0f);
-    lv_coord_t fill_mid = TANK_TOTAL_H - fill_px / 2;
-    lv_coord_t lbl_h    = lv_obj_get_height(col->pct_label);
-    lv_coord_t lbl_w    = lv_obj_get_width(col->pct_label);
-    lv_coord_t col_w    = col->col_w;
-    lv_coord_t label_y  = fill_mid - lbl_h / 2;
-    if (label_y > TANK_TOTAL_H - lbl_h - 2) label_y = TANK_TOTAL_H - lbl_h - 2;
-    if (label_y < 0) label_y = 0;
-    lv_obj_set_pos(col->pct_label, (col_w - lbl_w) / 2, label_y);
-
-    // White only while the label sits on the fill — dark once the level drops
-    // below it, so a near-empty tank stays readable on the light background.
-    lv_coord_t waterline_y = TANK_TOTAL_H - fill_px;
+    lv_obj_update_layout(col->pct_label);
+    lv_coord_t label_h = lv_obj_get_height(col->pct_label);
+    lv_coord_t label_w = lv_obj_get_width(col->pct_label);
+    lv_coord_t waterline = ui_tank_shape_level_y(TANK_TOTAL_H, pct);
+    lv_coord_t label_y = waterline + 16;
+    lv_coord_t max_y = ui_tank_shape_join_y(TANK_TOTAL_H) - label_h - 24;
+    if (label_y > max_y) label_y = max_y;
+    if (label_y < 70) label_y = 70;
+    lv_obj_set_pos(col->pct_label, (col->col_w - label_w) / 2, label_y);
     lv_obj_set_style_text_color(col->pct_label,
-        (label_y >= waterline_y - 2) ? lv_color_white() : COL_TX2, 0);
+        label_y + label_h / 2 >= waterline ? lv_color_white() : COL_TX2, 0);
 
     if (col->badge_label) {
         lv_label_set_text(col->badge_label, status_text(pct));
@@ -378,28 +199,15 @@ static void tank_event_cb(lv_event_t *e) {
 }
 
 // ─── Position tick number labels after layout resolves ────────────────────────
-static void position_tick_labels(int col_idx) {
-    tank_col_t *col    = &s_cols[col_idx];
-    lv_coord_t  w      = col->col_w;
-    lv_coord_t  upper_h = TANK_TOTAL_H * TANK_UPPER_RATIO / 100;
-    lv_coord_t  taper_h = TANK_TOTAL_H - upper_h;
-
-    static const int TICK_PCTS[] = {75, 50, 25};
-    for (int i = 0; i < 3; i++) {
-        lv_coord_t tick_y_off = TANK_TOTAL_H * (100 - TICK_PCTS[i]) / 100;
-        lv_coord_t depth      = tick_y_off - upper_h;
-        lv_coord_t tick_w;
-        if (depth <= 0) {
-            tick_w = w;
-        } else {
-            tick_w = hopper_width_at_fill(w, taper_h, taper_h - depth);
-        }
-        lv_coord_t right_edge = (w + tick_w) / 2;
-        lv_coord_t lbl_w      = lv_obj_get_width(col->tick_labels[i]);
-        lv_coord_t lbl_h      = lv_obj_get_height(col->tick_labels[i]);
-        lv_obj_set_pos(col->tick_labels[i],
-                       right_edge - lbl_w - 3,
-                       tick_y_off - lbl_h / 2);
+static void position_tick_labels(int index)
+{
+    tank_col_t *col = &s_cols[index];
+    static const int levels[] = {75, 50, 25};
+    for (int i = 0; i < 3; ++i) {
+        int right = ui_tank_shape_right_at(col->col_w, TANK_TOTAL_H, levels[i]);
+        int y = ui_tank_shape_level_y(TANK_TOTAL_H, levels[i]);
+        lv_obj_set_pos(col->tick_labels[i], right - lv_obj_get_width(col->tick_labels[i]) - 16,
+                       y - lv_obj_get_height(col->tick_labels[i]) / 2);
     }
 }
 

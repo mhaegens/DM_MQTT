@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  config_store.h — Config template storage shared by the captive portal and
@@ -18,7 +19,7 @@
 //  file in both stores.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#define CFG_TPL_MAX           12
+#define CFG_TPL_MAX           12  // visible page size, not a library capacity
 #define CFG_TPL_NAME_MAX      48
 #define CFG_TPL_PLANT_MAX     40
 // Template name used when an upload carries no usable filename
@@ -31,7 +32,15 @@ typedef struct {
     int  tanks;
     bool from_sd;                   // true: /sdcard, false: /spiffs
     bool active;                    // content-identical to the active config
+    bool valid;
 } ConfigTemplate;
+
+typedef struct {
+    bool sd_ready;
+    uint64_t sd_total_bytes, sd_free_bytes;
+    int profiles, invalid_profiles;
+    char last_error[96];
+} ConfigStorageStats;
 
 // Create the store lock — call once at boot before any other function here.
 void config_store_init(void);
@@ -39,6 +48,13 @@ void config_store_init(void);
 // List template files on SPIFFS + SD (active file itself excluded).
 // Returns the number of entries written to out (≤ max).
 int config_store_list(ConfigTemplate *out, int max);
+// Allocates the complete catalog in PSRAM; caller frees it. No fixed count cap.
+ConfigTemplate *config_store_list_all(int *count);
+void config_store_get_stats(ConfigStorageStats *stats);
+// Shared persistent mount used by boot and the portal/profile workers.
+int config_store_read_active(char *data, int capacity, bool *from_sd);
+const char *config_store_import(const char *name, const char *data, int len,
+                               bool *saved_to_sd, char *stored_name, int name_capacity);
 
 // Copy the named template over the active config in both stores.
 // Validates the file first. Returns NULL on success, else a static/const
@@ -50,7 +66,8 @@ const char *config_store_activate(const char *name, bool from_sd);
 const char *config_store_save_active(const char *data, int len);
 
 // Persist a validated config blob as a named template — SD card preferred,
-// flash fallback. Same-named files are overwritten. saved_to_sd (optional)
+// flash fallback. Different same-named uploads receive a numbered filename;
+// identical re-uploads reuse the existing file. saved_to_sd (optional)
 // reports where it landed. Returns NULL on success, else an error string.
 const char *config_store_save_template(const char *name, const char *data,
                                        int len, bool *saved_to_sd);

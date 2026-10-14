@@ -5,7 +5,6 @@ build/
 
 # Downloaded component dependencies (fetched at build time)
 managed_components/
-dependencies.lock
 
 # Generated config — sdkconfig.defaults is the source of truth
 sdkconfig

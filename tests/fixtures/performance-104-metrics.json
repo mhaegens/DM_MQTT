@@ -1,0 +1,1780 @@
+{
+  "plant_name": "Performance test - 104 metrics",
+  "machines": [
+    {
+      "id": "audit_m01",
+      "name": "Test machine 1",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m02",
+      "name": "Test machine 2",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m03",
+      "name": "Test machine 3",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m04",
+      "name": "Test machine 4",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m05",
+      "name": "Test machine 5",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m06",
+      "name": "Test machine 6",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m07",
+      "name": "Test machine 7",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m08",
+      "name": "Test machine 8",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m09",
+      "name": "Test machine 9",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_m10",
+      "name": "Test machine 10",
+      "type": "Performance check",
+      "running": true,
+      "auto_pulse": true,
+      "metrics": [
+        {
+          "key": "metric1",
+          "label": "Metric 1",
+          "unit": "%",
+          "viz": "spark",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    }
+  ],
+  "tanks": [
+    {
+      "id": "audit_t1",
+      "name": "Test tank 1",
+      "metrics": [
+        {
+          "key": "level",
+          "label": "Fill level",
+          "unit": "%",
+          "viz": "tank",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_t2",
+      "name": "Test tank 2",
+      "metrics": [
+        {
+          "key": "level",
+          "label": "Fill level",
+          "unit": "%",
+          "viz": "tank",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "audit_t3",
+      "name": "Test tank 3",
+      "metrics": [
+        {
+          "key": "level",
+          "label": "Fill level",
+          "unit": "%",
+          "viz": "tank",
+          "input": "slider",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric2",
+          "label": "Metric 2",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric3",
+          "label": "Metric 3",
+          "unit": "%",
+          "viz": "thermo",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric4",
+          "label": "Metric 4",
+          "unit": "%",
+          "viz": "ph",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric5",
+          "label": "Metric 5",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric6",
+          "label": "Metric 6",
+          "unit": "%",
+          "viz": "spark",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric7",
+          "label": "Metric 7",
+          "unit": "%",
+          "viz": "arc",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        },
+        {
+          "key": "metric8",
+          "label": "Metric 8",
+          "unit": "%",
+          "viz": "bullet",
+          "input": "step",
+          "min_val": 0,
+          "max_val": 100,
+          "init_val": 50,
+          "step": 0.1,
+          "sim": {
+            "profile": "random_walk",
+            "rand_min": 10,
+            "rand_max": 90
+          }
+        }
+      ]
+    }
+  ],
+  "people": []
+}

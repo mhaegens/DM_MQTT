@@ -176,7 +176,7 @@ The tick interval is 1.5 seconds. The `* 1.5` factor makes `period_s` work in wa
 ```json
 {
   "id": "EMP-0042",
-  "name": "Michiel Haegens",
+  "name": "Demo Operator",
   "role": "Shift Lead",
   "role_key": "lead",
   "dept": "Production",

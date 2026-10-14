@@ -91,7 +91,7 @@ static void update_carousel(void) {
 
     if (s_counter_lbl) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%d of %d", s_carousel_idx + 1, g_badge_count);
+        snprintf(buf, sizeof(buf), "%d of %d", g_badge_count ? s_carousel_idx + 1 : 0, g_badge_count);
         lv_label_set_text(s_counter_lbl, buf);
     }
 }
@@ -134,6 +134,7 @@ static void restore_select_cb(lv_timer_t *t) {
 
 static void select_btn_cb(lv_event_t *e) {
     (void)e;
+    if (s_carousel_idx < 0 || s_carousel_idx >= g_badge_count) return;
     g_active_badge = s_carousel_idx;
     if (s_select_btn) lv_obj_set_style_bg_color(s_select_btn, COL_OK, 0);
     if (s_select_lbl) lv_label_set_text(s_select_lbl, "Operator Selected");
@@ -146,6 +147,7 @@ static void select_btn_cb(lv_event_t *e) {
 // ─── Physical mode: Simulate Tap ─────────────────────────────────────────────
 static void sim_tap_cb(lv_event_t *e) {
     (void)e;
+    if (g_badge_count <= 0) return;
     g_active_badge = (g_active_badge + 1) % g_badge_count;
     Badge *b = &g_badges[g_active_badge];
 

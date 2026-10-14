@@ -1,4 +1,5 @@
 #pragma once
+#include "sdkconfig.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  config.h — Edit these before flashing.
@@ -7,17 +8,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Default WiFi credentials (overridden by captive-portal provisioning after first boot)
-#define DEFAULT_WIFI_SSID     "iPhone van Michiel"
-#define DEFAULT_WIFI_PASSWORD "LegoPi123"
+#define DEFAULT_WIFI_SSID     ""
+#define DEFAULT_WIFI_PASSWORD ""
 
 // MQTT broker — Cloudflare Tunnel WSS endpoint
-#define MQTT_BROKER_URI  "wss://mqttfordm.haegens.be"
+#ifndef MQTT_BROKER_URI
+#define MQTT_BROKER_URI  CONFIG_DM_MQTT_BROKER_URI
+#endif
 // Port is 443 for WSS; embedded in URI above, but kept explicit for logging
-#define MQTT_BROKER_PORT  443
+#ifndef MQTT_BROKER_PORT
+#define MQTT_BROKER_PORT  CONFIG_DM_MQTT_BROKER_PORT
+#endif
 
 // MQTT client identity
 #define MQTT_CLIENT_ID    "esp32p4-sapdm-01"
-#define MQTT_KEEPALIVE_S  60
+#define MQTT_KEEPALIVE_S  15
 
 // Topic prefix
 #define TOPIC_PREFIX      "factory"
@@ -26,8 +31,9 @@
 #define STATUS_TOPIC      TOPIC_PREFIX "/device/status"
 
 // ─── Timing — sim and UI refresh cadence (keep in sync; UI polls sim output) ──
-#define SIM_TICK_MS        3000   // simulator tick + MQTT publish interval
-#define UI_REFRESH_MS      3000   // home / machines live-refresh timers
+#define SIM_TICK_MS        3000   // preserve simulation and auto-pulse pacing
+#define TELEMETRY_CHECK_MS  100   // observe user changes independently of simulation
+#define UI_REFRESH_MS       500   // home / machines live-refresh timers
 #define TANK_REFRESH_MS     500   // tanks screen refresh timer (active tab only)
 
 // Ghost-scroll on the machines grid: each card is pre-rendered into an opaque
@@ -60,6 +66,7 @@
 #define GPIO_SD_D1        40
 #define GPIO_SD_D2        41
 #define GPIO_SD_D3        42
+#define GPIO_SD_POWER     45   // PMOS gate: low enables card power
 
 // Audio (ES8311 + ES7210 + NS4150B)
 #define GPIO_I2S_MCLK     13

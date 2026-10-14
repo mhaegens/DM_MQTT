@@ -62,6 +62,26 @@ else
   fail "No HTTP 200 response on /editor/"
 fi
 
+# All workbench pages and local runtime assets must be reachable.
+for endpoint in /shopfloor/ /config-editor/ /assets/site-config.js /assets/mqtt.min.js /assets/sap-logo.svg /assets/monitor.js; do
+  if curl -sf --max-time 5 "http://localhost${endpoint}" -o /dev/null; then
+    pass "HTTP 200 on ${endpoint}"
+  else
+    fail "No HTTP 200 response on ${endpoint}"
+  fi
+done
+
+# Verify the same-origin MQTT WebSocket upgrade through Nginx. curl may time
+# out after a successful upgrade because the socket intentionally stays open.
+WS_HEADERS=$(mktemp)
+curl -s --http1.1 --max-time 2 -D "$WS_HEADERS" -o /dev/null   -H 'Connection: Upgrade' -H 'Upgrade: websocket'   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Protocol: mqtt'   -H 'Sec-WebSocket-Key: ZG0tbXF0dC1hdWRpdC0wMQ=='   http://localhost/mqtt || true
+if rg -q '^HTTP/1.1 101' "$WS_HEADERS" 2>/dev/null || grep -q '^HTTP/1.1 101' "$WS_HEADERS"; then
+  pass "Nginx /mqtt WebSocket upgrade"
+else
+  fail "Nginx /mqtt WebSocket upgrade failed"
+fi
+rm -f "$WS_HEADERS"
+
 # ── 4. MQTT TCP publish/subscribe ────────────────────────────────────────────
 echo ""
 echo "4. MQTT TCP pub/sub (:1883)"
@@ -107,8 +127,10 @@ fi
 # ── 6. External tunnel URL (optional) ────────────────────────────────────────
 echo ""
 echo "6. External tunnel URL (optional)"
-TUNNEL_URL="https://mqttfordm.haegens.be/dashboard/"
-if curl -sf --max-time 8 "$TUNNEL_URL" -o /dev/null; then
+TUNNEL_URL="${TUNNEL_URL:-}"
+if [[ -z "$TUNNEL_URL" ]]; then
+  warn "Set TUNNEL_URL to check your public dashboard URL"
+elif curl -sf --max-time 8 "$TUNNEL_URL" -o /dev/null; then
   pass "Tunnel URL reachable: $TUNNEL_URL"
 else
   warn "Tunnel URL not reachable: $TUNNEL_URL — check your Proxmox cloudflared config"

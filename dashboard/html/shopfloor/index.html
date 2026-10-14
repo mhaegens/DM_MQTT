@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Shop Floor Monitor · SAP DM</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script src="/assets/mqtt.min.js"></script>
 <style>
 :root {
   --hi:#0070F2; --hi-dk:#0050BE; --hi-lt:#E8F2FF; --hi-mid:#C5DCFF;
@@ -153,6 +152,9 @@ body{font-family:var(--font);color:var(--tx);background:var(--bg);display:flex;f
 .empty-state{text-align:center;padding:40px 20px;color:var(--tx3);font-family:var(--mono);
   font-size:12px;letter-spacing:.06em;border:1.5px dashed var(--bd-str);border-radius:var(--r)}
 </style>
+<link rel="stylesheet" href="/assets/sap-workbench.css">
+<script src="/assets/site-config.js"></script>
+<script src="/assets/mqtt-connection.js"></script>
 </head>
 <body>
 
@@ -160,9 +162,7 @@ body{font-family:var(--font);color:var(--tx);background:var(--bg);display:flex;f
 <div class="shell">
   <div class="shell-l">
     <div class="sap-badge">
-      <svg viewBox="0 0 64 44" fill="none">
-        <text x="0" y="38" font-family="'IBM Plex Sans',sans-serif" font-weight="600" font-size="38" fill="white" letter-spacing="2">SAP</text>
-      </svg>
+      <img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
     </div>
     <div>
       <div class="shell-title">Shop Floor Monitor</div>
@@ -267,14 +267,14 @@ function initCap(s) {
 /* ═══════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════ */
-const machines = {};  // keyed by id: { id, status, pulses, metrics: {key: value} }
-const tanks = {};     // keyed by id: { id, level, metrics: {key: value} }
+const machines = Object.create(null);  // keyed by id: { id, status, pulses, metrics: {key: value} }
+const tanks = Object.create(null);     // keyed by id: { id, level, metrics: {key: value} }
 let operator = null;
 
 /* ═══════════════════════════════════════════════
    TANK ANIMATION STATE
 ═══════════════════════════════════════════════ */
-const tankAnim = {}; // keyed by id: { phase, slosh }
+const tankAnim = Object.create(null); // keyed by id: { phase, slosh }
 
 function ensureTankAnim(id) {
   if (!tankAnim[id]) {
@@ -316,12 +316,16 @@ function renderTankSVG(id) {
   svg.setAttribute('viewBox', `0 0 ${W} ${lH}`);
   svg.setAttribute('width', W);
   svg.setAttribute('height', lH);
-  svg.innerHTML = `<defs><linearGradient id="lg${id}" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0%" stop-color="${c.fill}" stop-opacity=".8"/>
-    <stop offset="100%" stop-color="${c.dark}"/></linearGradient></defs>
-    <rect x="0" y="0" width="${W}" height="${lH}" fill="url(#lg${id})"/>
-    <path d="${wp}" fill="${c.fill}" opacity=".6"/>
-    <path d="${wp}" fill="rgba(255,255,255,.16)" transform="translate(0,-3)"/>`;
+  if (!svg.firstElementChild) {
+    svg.innerHTML = '<defs><linearGradient x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-opacity=".8"/><stop offset="100%"/></linearGradient></defs><rect x="0" y="0"/><path opacity=".6"/><path fill="rgba(255,255,255,.16)" transform="translate(0,-3)"/>';
+    svg.querySelector('linearGradient').id = 'lg' + id;
+    svg.querySelector('rect').setAttribute('fill', 'url(#lg' + id + ')');
+  }
+  const stops = svg.querySelectorAll('stop');
+  stops[0].setAttribute('stop-color', c.fill); stops[1].setAttribute('stop-color', c.dark);
+  const rect = svg.querySelector('rect'); rect.setAttribute('width', W); rect.setAttribute('height', lH);
+  const waves = svg.querySelectorAll('path');
+  waves[0].setAttribute('d', wp); waves[0].setAttribute('fill', c.fill); waves[1].setAttribute('d', wp);
 
   const pctEl = document.getElementById('tpct-' + id);
   if (pctEl) {
@@ -330,15 +334,18 @@ function renderTankSVG(id) {
   }
 }
 
-(function animLoop() {
-  const dt = 0.016;
-  for (const id in tankAnim) {
-    const a = tankAnim[id];
-    a.phase += dt * 1.2;
-    a.slosh *= 0.93;
-  }
-  for (const id in tanks) {
-    renderTankSVG(id);
+let tankFrameTime = 0;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+(function animLoop(now = 0) {
+  // 30 Hz is sufficient for a decorative liquid surface. Never animate a
+  // hidden tab, and keep a static visualization for reduced-motion users.
+  if (!document.hidden && now - tankFrameTime >= 33) {
+    const dt = Math.min((now - tankFrameTime) / 1000, .1); tankFrameTime = now;
+    for (const id in tankAnim) {
+      const a = tankAnim[id]; if (!reducedMotion.matches) a.phase += dt * 1.2;
+      a.slosh *= .86;
+    }
+    if (!reducedMotion.matches) for (const id in tanks) renderTankSVG(id);
   }
   requestAnimationFrame(animLoop);
 })();
@@ -384,7 +391,7 @@ function upsertMachineCard(id) {
     tilesHTML = `<div class="tiles-grid">`;
     metricKeys.forEach(key => {
       const val = mc.metrics[key];
-      const u = UNITS[key] || { unit: '', label: initCap(key) };
+      const u = (Object.hasOwn(UNITS, key) ? UNITS[key] : null) || { unit: '', label: initCap(key) };
       const cls = metricColor(key, val);
       const elemId = `mv-${id}-${key}`;
       tilesHTML += `<div class="mtile">
@@ -463,7 +470,7 @@ function upsertTankCard(id) {
     metricsHTML = `<div class="tank-indicator-strip">`;
     metricKeys.forEach(key => {
       const val = t.metrics[key];
-      const u = UNITS[key] || { unit: '', label: initCap(key) };
+      const u = (Object.hasOwn(UNITS, key) ? UNITS[key] : null) || { unit: '', label: initCap(key) };
       const cls = metricColor(key, val);
       const elemId = `tmv-${id}-${key}`;
       metricsHTML += `<div class="tank-metric-btn">
@@ -521,11 +528,11 @@ function renderOperator() {
 
   card.className = 'opcard';
   card.innerHTML = `
-    <div class="opav">${initials}</div>
+    <div class="opav">${esc(initials)}</div>
     <div class="op-info">
-      <div class="opname">${op.name}</div>
-      <div class="opmeta">${op.role} &middot; ${op.id} &middot; ${op.dept}</div>
-      <div class="opmeta">${op.plant}</div>
+      <div class="opname">${esc(op.name)}</div>
+      <div class="opmeta">${esc(op.role)} &middot; ${esc(op.id)} &middot; ${esc(op.dept)}</div>
+      <div class="opmeta">${esc(op.plant)}</div>
       <div class="op-badges">
         <span class="badge ok">Active</span>
       </div>
@@ -536,6 +543,7 @@ function renderOperator() {
 /* ═══════════════════════════════════════════════
    MQTT MESSAGE PARSER
 ═══════════════════════════════════════════════ */
+function esc(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function handleMessage(topic, payload) {
   const parts = topic.split('/');
   // factory/machines/{id}/status|pulses|{metric}
@@ -543,12 +551,15 @@ function handleMessage(topic, payload) {
   // factory/operators/login
   if (parts.length < 3) return;
   if (parts[0] !== 'factory') return;
+  if (['machines','tanks'].includes(parts[1]) &&
+      (!/^[A-Za-z0-9_-]{1,15}$/.test(parts[2]) || !/^[A-Za-z0-9_-]{1,31}$/.test(parts[3]) || parts.length !== 4)) return;
 
   const domain = parts[1];
 
   if (domain === 'operators' && parts[2] === 'login') {
     try {
       const obj = JSON.parse(payload);
+      if (!obj || typeof obj !== 'object' || typeof obj.name !== 'string') return;
       operator = {
         id: obj.id || '',
         name: obj.name || 'Unknown',
@@ -567,7 +578,7 @@ function handleMessage(topic, payload) {
     const machId = parts[2];
     const metricKey = parts[3];
     if (!machines[machId]) {
-      machines[machId] = { id: machId, status: null, pulses: null, metrics: {} };
+      machines[machId] = { id: machId, status: null, pulses: null, metrics: Object.create(null) };
     }
     const mc = machines[machId];
 
@@ -579,7 +590,7 @@ function handleMessage(topic, payload) {
       upsertMachineCard(machId);
     } else {
       const val = parseFloat(payload);
-      if (!isNaN(val)) {
+      if (Number.isFinite(val)) {
         mc.metrics[metricKey] = val;
         updateMachineMetric(machId, metricKey, val);
       }
@@ -591,15 +602,16 @@ function handleMessage(topic, payload) {
     const tankId = parts[2];
     const metricKey = parts[3];
     if (!tanks[tankId]) {
-      tanks[tankId] = { id: tankId, level: 0, metrics: {} };
+      tanks[tankId] = { id: tankId, level: 0, metrics: Object.create(null) };
     }
     const t = tanks[tankId];
     const val = parseFloat(payload);
-    if (!isNaN(val)) {
+    if (Number.isFinite(val)) {
       if (metricKey === 'level') {
-        t.level = val;
+        t.level = Math.max(0, Math.min(100, val));
         t.metrics['level'] = val;
-        upsertTankCard(tankId);
+        if (!document.getElementById('tcol-' + tankId)) upsertTankCard(tankId);
+        if (reducedMotion.matches) renderTankSVG(tankId);
       } else {
         t.metrics[metricKey] = val;
         updateTankMetric(tankId, metricKey, val);
@@ -612,9 +624,7 @@ function handleMessage(topic, payload) {
 /* ═══════════════════════════════════════════════
    MQTT CONNECTION
 ═══════════════════════════════════════════════ */
-const mqttUrl = window.location.protocol === 'https:'
-  ? 'wss://' + window.location.hostname
-  : 'ws://' + window.location.hostname + ':9001';
+const mqttUrl = dmMqtt.url;
 
 const connBadge = document.getElementById('conn-badge');
 const connText = document.getElementById('conn-text');
@@ -631,15 +641,13 @@ function setConnStatus(connected) {
 
 let client;
 try {
-  client = mqtt.connect(mqttUrl, {
-    reconnectPeriod: 3000,
-    connectTimeout: 10000,
-  });
+  client = mqtt.connect(mqttUrl, dmMqtt.options);
 
   client.on('connect', () => {
     setConnStatus(true);
-    client.subscribe('#', err => {
+    client.subscribe('factory/#', err => {
       if (err) console.warn('Subscribe error:', err);
+      else client.publish('factory/device/request_snapshot', 'state', {qos: 0, retain: false});
     });
   });
 
@@ -659,5 +667,6 @@ try {
   setConnStatus(false);
 }
 </script>
+<script src="/assets/workbench.js"></script>
 </body>
 </html>

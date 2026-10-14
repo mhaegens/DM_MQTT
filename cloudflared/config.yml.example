@@ -1,37 +1,13 @@
-# Cloudflare Tunnel ingress rules for the SAP DM MQTT stack
+# Add these rules BEFORE the existing Mosquitto catch-all for this hostname.
+# Replace 192.168.x.x with the broker LXC IP. Keep the catch-all so existing
+# ESP/SAP DM clients using wss://mqtt.example.com continue to connect.
 #
-# This stack does NOT run its own cloudflared container.
-# Add the rules below to your EXISTING Cloudflare Tunnel config
-# (the one already serving jellyfin.haegens.be and other services).
-#
-# Find your tunnel config at the path shown by:
-#   cloudflared tunnel info <your-tunnel-name>
-# Typically: ~/.cloudflared/config.yml  or  /etc/cloudflared/config.yml
-#
-# Paste these three ingress rules into the existing ingress: list.
-# Rule ordering matters: Cloudflare evaluates rules top-to-bottom and stops
-# at the first match. The HTTP path rules (/editor, /dashboard) must come
-# BEFORE the WebSocket catch-all (no path field), otherwise all traffic for
-# this hostname goes to Mosquitto and the dashboard/editor are unreachable.
-#
-# Replace 192.168.x.x with the LAN IP of the sapdm-demo LXC.
-
-# --- paste into your existing ingress: list ---
-#
-#   - hostname: mqttfordm.haegens.be
-#     path: /editor.*
+#   - hostname: mqtt.example.com
+#     path: ^/(dashboard|editor|shopfloor|config-editor|previews|assets|mqtt)(/.*)?$
 #     service: http://192.168.x.x:80
 #
-#   - hostname: mqttfordm.haegens.be
-#     path: /dashboard.*
-#     service: http://192.168.x.x:80
-#
-#   - hostname: mqttfordm.haegens.be
+#   - hostname: mqtt.example.com
 #     service: ws://192.168.x.x:9001
 #
-# --- end of rules to paste ---
-#
-# After editing, reload your tunnel:
-#   cloudflared tunnel reload
-# or restart the cloudflared service:
-#   systemctl restart cloudflared
+# Open /dashboard/ directly. The root path remains the legacy MQTT endpoint.
+# Restart the existing cloudflared service after updating its ingress rules.
