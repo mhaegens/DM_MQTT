@@ -16,8 +16,9 @@ const server = createServer(async (req,res) => {
     if(!file.startsWith(root+path.sep)) throw Error('path');
     let data;
     if (url === '/assets/site-config.js') {
-      try { data = await readFile(path.join(root,'assets/site-config.local.js')); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; data = await readFile(file); }
+      // Manual previews must also stay on the disposable broker. Never load a
+      // developer's production override into this test-only HTTP server.
+      data = 'window.DM_MQTT_PUBLIC_BROKER = "ws://" + location.host + "/mqtt";';
     } else data = await readFile(file);
     res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml'})[path.extname(file)]||'application/octet-stream');
     res.end(data);

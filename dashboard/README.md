@@ -2,6 +2,8 @@
 
 Four buildless browser apps share the Slide Design project's SAP light style, local runtime assets, and an official SAP SVG logo.
 
+The workbench uses one shared navigation header, with live connection status in the same row. Configuration pages put their file actions in a compact toolbar. The shop floor has spaced machine cards and responsive vessel cards; its tanks and the studio preview share `assets/tank-vessel.js`, which follows the ESP's rounded vessel, conical base, legs, outlet, level marks, and status colors. Live tank updates preserve the SVG and repaint on incoming readings.
+
 | Path | Function |
 | --- | --- |
 | `/dashboard/` | MQTT live feed, last values, publishing, broker selection, round-trip measurement, device availability and device diagnostics |

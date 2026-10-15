@@ -61,6 +61,8 @@ on a board, then restore that exact profile after the test.
 
 Install the test-only dependencies in this directory (`npm install`), then run `npm run preview` in one terminal and `npm run browser` in another. The preview binds only to 127.0.0.1:8787 and uses a disposable in-memory MQTT broker, with no production data. The browser suite needs Google Chrome on macOS by default; set `DM_QA_CHROME` to another Chromium executable on other platforms.
 
+Manual preview pages also use the disposable broker by default. The preview server substitutes its local broker setting for `/assets/site-config.js` and never loads the deployment's local override.
+
 Optional variables: `DM_QA_MODULES` (external temporary node_modules), `DM_QA_URL`, `DM_QA_OUTPUT`, `DM_HTML_ROOT`.
 
 The browser suite verifies a 2,000-message burst, last-value accuracy, persistent topic rows, bounded feed, publication, round-trip measurement, persistent tank SVGs, escaped operator text, invalid config rejection, official logo loading, and all four screens at 1440px and 390px.

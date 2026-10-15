@@ -253,24 +253,16 @@ main{ flex:1; display:flex; min-height:0; }
 .mc-pill{ height:36px; border-radius:8px; border:1px solid #DDE1EA; background:#EEF1F8;
   color:#4A6080; font-size:13px; display:flex; align-items:center; padding:0 10px; white-space:nowrap;}
 
-/* tanks (representative) */
-.tk-wrap{ display:flex; gap:12px; padding:14px; height:100%; }
-.tk-col{ flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; cursor:pointer; }
-.tk-col.hilite .tk-body{ box-shadow:0 0 0 3px #0070F2; }
-.tk-name{ font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#4A6080;
-  text-align:center; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.tk-body{ flex:1; background:#ECF0F8; border:2px solid #B8BFCC; border-radius:12px 12px 8px 8px;
-  position:relative; overflow:hidden; box-shadow:inset 0 2px 8px rgba(30,50,100,.09); }
-.tk-fill{ position:absolute; left:0; right:0; bottom:0; }
-.tk-pct{ position:absolute; left:0; right:0; text-align:center; font-size:24px; font-weight:600;
-  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.25); }
-.tk-mets{ display:flex; flex-direction:column; gap:4px; }
-.tk-met{ background:#fff; border:1px solid #DDE1EA; border-radius:8px; padding:5px 10px;
-  display:flex; align-items:center; gap:6px; font-size:13px; }
-.tk-met .k{ flex:1; color:#4A6080; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.tk-met .v{ font-weight:600; }
-.tk-met .u{ color:#8090A8; font-size:12px; }
-.tk-met .dotc{ width:7px; height:7px; border-radius:50%; flex:none; }
+/* Device tank layout; vessel geometry lives in tank-vessel.js. */
+.tk-wrap{display:flex}
+.tk-col{flex:1;display:flex;flex-direction:column;min-width:0;cursor:pointer}
+.tk-name{text-transform:uppercase;text-align:center;overflow-wrap:anywhere}
+.tk-mets{display:flex;flex-direction:column}
+.tk-met{background:#fff;border:1px solid #DDE1EA;border-radius:8px;display:flex;align-items:center;gap:6px}
+.tk-met .k{flex:1;color:#4A6080;overflow-wrap:anywhere}
+.tk-met .v{font-weight:600}
+.tk-met .u{color:#8090A8;font-size:12px}
+.tk-met .dotc{width:7px;height:7px;border-radius:50%;flex:none}
 
 /* people (representative) */
 .pp-wrap{ display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:16px; }
@@ -294,17 +286,14 @@ main{ flex:1; display:flex; min-height:0; }
   font-family:ui-monospace,Menlo,monospace; }
 </style>
 
-<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.1">
+<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.2">
+<script src="/assets/tank-vessel.js?v=20261015.2"></script>
 <script src="/assets/site-config.js?v=20261015.1"></script>
 <script src="/assets/mqtt-connection.js?v=20261015.1"></script>
 <script src="/assets/config-validation.js?v=20261015.1"></script>
 </head>
 <body>
-<header>
-  <div class="brand"><img class="sap-logo" src="/assets/sap-logo.svg?v=20261015.1" alt="SAP" width="52" height="26">
-    <div><div class="eyebrow">SAP DM &middot; MQTT Demo</div><h1>Shop Floor Config Studio</h1></div>
-  </div>
-  <div class="spacer"></div>
+<div class="studio-tools" role="toolbar" aria-label="Configuration actions">
   <div class="menu" id="newmenu">
     <button class="hbtn" data-a="menu">New from template &#9662;</button>
     <div class="menu-pop">
@@ -319,7 +308,7 @@ main{ flex:1; display:flex; min-height:0; }
   <button class="hbtn" data-a="copy">Copy</button>
   <button class="hbtn primary" data-a="download">&#8681; Download</button>
   <button class="hbtn" data-a="theme" title="Toggle light/dark">&#9681;</button>
-</header>
+</div>
 
 <main>
   <div id="editor"></div>
@@ -760,6 +749,12 @@ function tankFillColor(m, pct){
   for (const t of (m.thresholds||[])) if (pct <= t.limit) return cssCol(t.color);
   return pct < 75 ? '#0070F2' : '#0092D1';
 }
+document.addEventListener('keydown', event => {
+  if (event.target.matches('.tk-col') && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    event.target.click();
+  }
+});
 function renderTanks(){
   if (!cfg.tanks.length) return `<div class="dv-empty"><div style="font-size:34px">&#128167;</div>
     <div class="big">No tanks in this configuration</div><div style="font-size:13px">Add one in the editor panel</div></div>`;
@@ -775,10 +770,10 @@ function renderTanks(){
       mets += `<div class="tk-met"><span class="dotc" style="background:${metricColor(m,v)}"></span>
         <span class="k">${esc(m.label)}</span><span class="v" style="color:${metricColor(m,v)}">${fmtVal(v)}</span>
         <span class="u">${esc(m.unit)}</span></div>`; });
-    html += `<div class="tk-col ${selT?'hilite':''}" data-sel="t:${i}">
+    html += `<div class="tk-col ${selT?'hilite':''}" data-sel="t:${i}" role="button" tabindex="0" aria-label="Edit ${esc(tk.name)}">
       <div class="tk-name">${esc(tk.name)}</div>
-      <div class="tk-body"><div class="tk-fill" style="height:${lvl}%;background:linear-gradient(180deg,${col}CC,${col})"></div>
-        <div class="tk-pct" style="${lvl>18?`bottom:calc(${lvl}% - 38px)`:`bottom:calc(${lvl}% + 10px);color:#4A6080;text-shadow:none`}">${Math.round(lvl)}%</div></div>
+      <div class="tk-body">${dmTank.markup(lvl,col)}</div>
+      <span class="tank-state ${dmTank.status(lvl).tone}">${dmTank.status(lvl).label}</span>
       ${mets?`<div class="tk-mets">${mets}</div>`:''}</div>`;
   });
   return html + '</div>';
@@ -1215,6 +1210,6 @@ window.addEventListener('resize', ()=>{ if (ui.zoom==='fit') applyZoom(); });
   fullRender();
 })();
 </script>
-<script src="/assets/workbench.js?v=20261015.1"></script>
+<script src="/assets/workbench.js?v=20261015.2"></script>
 </body>
 </html>

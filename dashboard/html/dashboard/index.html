@@ -391,20 +391,17 @@ tbody td {
   vertical-align: middle;
 }
 </style>
-<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.1">
+<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.2">
 <script src="/assets/site-config.js?v=20261015.1"></script>
 <script src="/assets/mqtt-connection.js?v=20261015.1"></script>
 </head>
 <body>
 
-<header>
-  <div class="header-title">SAP DM <span>MQTT</span> Monitor</div>
-  <div id="status-badge" class="disconnected">
-    <div class="status-dot"></div>
-    <span id="status-label">Disconnected</span>
-    <span id="status-ts"></span>
-  </div>
-</header>
+<div id="status-badge" class="disconnected">
+  <div class="status-dot"></div>
+  <span id="status-label">Disconnected</span>
+  <span id="status-ts"></span>
+</div>
 
 <section class="connection-tools" aria-label="Broker connection">
   <label>Broker WebSocket address<input id="broker-url" spellcheck="false" aria-label="Broker WebSocket address"></label>
@@ -479,6 +476,6 @@ tbody td {
 </div>
 
 <script src="/assets/monitor.js?v=20261015.1"></script>
-<script src="/assets/workbench.js?v=20261015.1"></script>
+<script src="/assets/workbench.js?v=20261015.2"></script>
 </body>
 </html>
