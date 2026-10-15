@@ -61,16 +61,12 @@ ingress:
 
   # SAP DM MQTT demo stack
   - hostname: mqtt.example.com
-    path: ^/(dashboard|editor|shopfloor|config-editor|previews|assets|mqtt)(/.*)?$
     service: http://192.0.2.10:80
-
-  - hostname: mqtt.example.com
-    service: ws://192.0.2.10:9001
 
   - service: http_status:404
 ```
 
-**Rule ordering is critical.** The workbench HTTP path rule must come before the pathless WebSocket catch-all. If the catch-all is listed first, it matches every request for the hostname and forwards everything to Mosquitto — the dashboard and editor become unreachable with no error.
+**Install the current Nginx configuration first.** Replace older path-specific and port 9001 rules for this hostname with this single port 80 rule. Nginx redirects ordinary root requests to `/dashboard/` and proxies WebSocket upgrades at `/` and `/mqtt` to Mosquitto. Existing ESP and SAP DM clients keep using `wss://mqtt.example.com`. Leave unrelated tunnel hostnames unchanged.
 
 ### Step 2: Create the DNS record
 

@@ -15,7 +15,7 @@ Two programs run together on a small virtual server (called an LXC container) in
 | **Mosquitto** | Receives and delivers MQTT messages | Port 1883 (local TCP) and port 9001 (WebSocket) |
 | **Dashboard** (nginx) | Shows a live MQTT monitor and a config editor in your browser | `/dashboard` and `/editor` |
 
-Internet access is provided by **your existing Cloudflare Tunnel** already running on the Proxmox host (the same one that serves `jellyfin.example.com` and other services). You will add three new ingress rules to it, pointing at this LXC's LAN IP. No second cloudflared instance is needed.
+Internet access is provided by **your existing Cloudflare Tunnel** already running on the Proxmox host (the same one that serves `jellyfin.example.com` and other services). You will add one hostname rule pointing at Nginx on this LXC's port 80. No second cloudflared instance is needed.
 
 ---
 
@@ -155,9 +155,9 @@ sapdm-mosquitto      running
 
 ## Part 3: Add ingress rules to your existing Cloudflare Tunnel
 
-You already have a Cloudflare Tunnel running on the Proxmox host that serves other services like `jellyfin.example.com`. You do not need to create a new tunnel or run cloudflared again inside this LXC. Instead, you add three ingress rules to the existing tunnel config so traffic for `mqtt.example.com` is routed to the new LXC.
+You already have a Cloudflare Tunnel running on the Proxmox host that serves other services like `jellyfin.example.com`. You do not need to create a new tunnel or run cloudflared again inside this LXC. Instead, add one hostname rule routing `mqtt.example.com` to Nginx on the new LXC.
 
-> **Why three rules, not one?** The MQTT dashboard and editor are served over HTTP by nginx. The MQTT broker itself talks WebSocket. A single catch-all rule cannot handle both, so we need one rule per path for HTTP and one catch-all for WebSocket.
+Nginx handles both protocols: normal browser requests at the root redirect to `/dashboard/`, while WebSocket upgrades at `/` and `/mqtt` reach Mosquitto. The public MQTT URL stays `wss://mqtt.example.com`.
 
 ### Step 3.1: Find your existing tunnel config file
 
@@ -179,24 +179,16 @@ The config file is usually at `/etc/cloudflared/config.yml` or `~/.cloudflared/c
 nano /etc/cloudflared/config.yml
 ```
 
-### Step 3.2: Add the three ingress rules
+### Step 3.2: Route the hostname to Nginx
 
-Inside the `ingress:` section, add these three rules. They must go **above** the existing catch-all rule (the one with no `hostname` or the final `service: http_status:404` line).
+Install the current Nginx configuration first. Inside `ingress:`, replace older rules for this MQTT hostname with the rule below, above the final `service: http_status:404` rule. Preserve all unrelated hostnames.
 
 ```yaml
   - hostname: mqtt.example.com
-    path: /editor.*
     service: http://192.0.2.10:80
-
-  - hostname: mqtt.example.com
-    path: /dashboard.*
-    service: http://192.0.2.10:80
-
-  - hostname: mqtt.example.com
-    service: ws://192.0.2.10:9001
 ```
 
-> **Rule ordering matters.** Cloudflare evaluates rules from top to bottom and stops at the first match. The `/editor` and `/dashboard` path rules must come before the WebSocket catch-all (the one with no `path:` field), otherwise all traffic for this hostname goes to the MQTT broker and the dashboard never loads.
+Do not leave an earlier rule sending this hostname directly to port 9001: a browser root request would reach the MQTT-only listener and can return 502.
 
 Save the file with `Ctrl + X`, then `Y`, then Enter.
 
@@ -227,7 +219,7 @@ systemctl restart cloudflared
 From any device, open:
 
 ```
-https://mqtt.example.com/dashboard/
+https://mqtt.example.com/
 ```
 
 ✅ **You should see** the MQTT monitor dashboard loading over HTTPS.
@@ -271,12 +263,12 @@ mosquitto_pub -h <lxc-ip> -p 1883 -t test/hello -m "world"
 Open a browser on any device (including a phone with mobile data, not connected to your LAN):
 
 ```
-https://mqtt.example.com/dashboard/
+https://mqtt.example.com/
 ```
 
 ✅ **You should see** the same MQTT monitor dashboard, now served through the Cloudflare Tunnel over HTTPS.
 
-> **Note:** If this does not work, confirm that Part 3 is complete and that `docker logs sapdm-cloudflared` shows `Registered tunnel connection`.
+> **Note:** If this does not work, confirm that Part 3 is complete and that `journalctl -u cloudflared` on the Proxmox host shows `Registered tunnel connection`.
 
 ### Step 4.5: Run the smoke test
 

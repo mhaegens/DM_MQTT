@@ -17,6 +17,32 @@ fail() { echo -e "  ${RED}FAIL${NC}  $*"; FAILED=$((FAILED + 1)); }
 warn() { echo -e "  ${YELLOW}SKIP${NC}  $*"; }
 PASSED=0; FAILED=0
 
+check_entrypoint() {
+  local base="$1" result
+  result=$(curl -sS --max-time 8 -o /dev/null -w '%{http_code} %{redirect_url}' "$base/") || result=''
+  if [[ "$result" == "302 $base/dashboard/" ]]; then
+    pass "$base/ redirects to the dashboard"
+  else
+    fail "$base/ dashboard redirect failed (${result:-no response})"
+  fi
+}
+
+check_websocket() {
+  local url="$1" headers
+  headers=$(mktemp)
+  # A successful upgrade leaves the connection open until curl times out.
+  curl -s --http1.1 --max-time 2 -D "$headers" -o /dev/null \
+    -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+    -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Protocol: mqtt' \
+    -H 'Sec-WebSocket-Key: ZG0tbXF0dC1hdWRpdC0wMQ==' "$url" || true
+  if grep -q '^HTTP/1.1 101' "$headers"; then
+    pass "$url MQTT WebSocket upgrade"
+  else
+    fail "$url MQTT WebSocket upgrade failed"
+  fi
+  rm -f "$headers"
+}
+
 echo ""
 echo -e "${BOLD}SAP DM MQTT Demo — Smoke Test${NC}"
 echo "────────────────────────────────"
@@ -71,16 +97,9 @@ for endpoint in /shopfloor/ /config-editor/ /assets/site-config.js /assets/mqtt.
   fi
 done
 
-# Verify the same-origin MQTT WebSocket upgrade through Nginx. curl may time
-# out after a successful upgrade because the socket intentionally stays open.
-WS_HEADERS=$(mktemp)
-curl -s --http1.1 --max-time 2 -D "$WS_HEADERS" -o /dev/null   -H 'Connection: Upgrade' -H 'Upgrade: websocket'   -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Protocol: mqtt'   -H 'Sec-WebSocket-Key: ZG0tbXF0dC1hdWRpdC0wMQ=='   http://localhost/mqtt || true
-if rg -q '^HTTP/1.1 101' "$WS_HEADERS" 2>/dev/null || grep -q '^HTTP/1.1 101' "$WS_HEADERS"; then
-  pass "Nginx /mqtt WebSocket upgrade"
-else
-  fail "Nginx /mqtt WebSocket upgrade failed"
-fi
-rm -f "$WS_HEADERS"
+check_entrypoint http://localhost
+check_websocket http://localhost/
+check_websocket http://localhost/mqtt
 
 # ── 4. MQTT TCP publish/subscribe ────────────────────────────────────────────
 echo ""
@@ -133,7 +152,21 @@ if [[ -z "$TUNNEL_URL" ]]; then
 elif curl -sf --max-time 8 "$TUNNEL_URL" -o /dev/null; then
   pass "Tunnel URL reachable: $TUNNEL_URL"
 else
-  warn "Tunnel URL not reachable: $TUNNEL_URL — check your Proxmox cloudflared config"
+  fail "Tunnel URL not reachable: $TUNNEL_URL — check your Proxmox cloudflared config"
+fi
+
+if [[ "$TUNNEL_URL" =~ ^(https?://[^/]+) ]]; then
+  TUNNEL_ORIGIN="${BASH_REMATCH[1]}"
+  check_entrypoint "$TUNNEL_ORIGIN"
+  check_websocket "$TUNNEL_ORIGIN/"
+  check_websocket "$TUNNEL_ORIGIN/mqtt"
+  for endpoint in /config-editor/ /assets/site-config.js /assets/mqtt.min.js /assets/sap-logo.svg; do
+    if curl -sf --max-time 8 "$TUNNEL_ORIGIN$endpoint" -o /dev/null; then
+      pass "Public HTTP 200 on $endpoint"
+    else
+      fail "Public endpoint unavailable: $endpoint"
+    fi
+  done
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────

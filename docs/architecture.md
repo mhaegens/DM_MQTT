@@ -19,7 +19,7 @@ This document explains how the system fits together and why each major architect
 ┌──────────────────────────▼─────────────────────────────────┐
 │  Cloudflare Tunnel                                         │
 │  Zero Trust ingress, no open firewall ports required       │
-│  Routes /editor and /dashboard to nginx, WS to Mosquitto   │
+│  Routes the hostname to Nginx for HTTP and WebSockets   │
 └──────────┬───────────────────────────────┬─────────────────┘
            │ WebSocket MQTT               │ HTTP
 ┌──────────▼──────────┐       ┌───────────▼──────────────────┐
@@ -35,7 +35,7 @@ This document explains how the system fits together and why each major architect
 └─────────────────────┘
 ```
 
-All server components run on the demo-tunnel Proxmox node (`virtualization-host`, `192.0.2.2`). Mosquitto and Nginx run as Docker containers in a Debian 13 LXC (`192.0.2.10`). `cloudflared` runs as a host service on `virtualization-host` — the existing `demo-tunnel` tunnel is reused, with three new ingress rules added for this demo.
+All server components run on the demo-tunnel Proxmox node (`virtualization-host`, `192.0.2.2`). Mosquitto and Nginx run as Docker containers in a Debian 13 LXC (`192.0.2.10`). `cloudflared` runs as a host service on `virtualization-host` — the existing `demo-tunnel` tunnel is reused, with one hostname rule routing this demo through Nginx on port 80.
 
 ---
 
@@ -51,7 +51,7 @@ Docker Compose makes the stack fully reproducible. A single `docker compose up -
 
 ### Why no reverse proxy like Traefik or Caddy
 
-The routing logic is exactly three rules: `/editor` goes to Nginx, `/dashboard` goes to Nginx, everything else goes to Mosquitto as WebSocket. Traefik adds complexity with no benefit here. Cloudflared itself handles the routing via ingress rules.
+The existing Nginx container serves the workbench and proxies MQTT WebSockets. Cloudflared sends this hostname to Nginx on port 80. A normal request at `/` redirects to `/dashboard/`; an upgrade at `/` or `/mqtt` reaches Mosquitto on port 9001. A second reverse proxy is unnecessary.
 
 ### Why JSON config on SD card
 
@@ -61,7 +61,7 @@ The entire demo scenario (machines, tanks, operators, simulation profiles) is in
 
 ## Cloudflare Tunnel Ingress Rules
 
-The `demo-tunnel` tunnel on `virtualization-host` (`/etc/cloudflared/config.yml`) needs three rules for the demo. The order is critical — Cloudflared stops at the first match.
+The `demo-tunnel` tunnel on `virtualization-host` (`/etc/cloudflared/config.yml`) needs one hostname rule for the demo. Replace older direct-to-Mosquitto rules only after deploying the current Nginx configuration. Preserve unrelated hostnames.
 
 ```yaml
 ingress:
@@ -69,13 +69,7 @@ ingress:
 
   # SAP DM MQTT demo stack
   - hostname: mqtt.example.com
-    path: /editor.*
     service: http://192.0.2.10:80
-  - hostname: mqtt.example.com
-    path: /dashboard.*
-    service: http://192.0.2.10:80
-  - hostname: mqtt.example.com
-    service: ws://192.0.2.10:9001
 
   - service: http_status:404
 ```

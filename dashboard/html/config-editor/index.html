@@ -294,14 +294,14 @@ main{ flex:1; display:flex; min-height:0; }
   font-family:ui-monospace,Menlo,monospace; }
 </style>
 
-<link rel="stylesheet" href="/assets/sap-workbench.css">
-<script src="/assets/site-config.js"></script>
-<script src="/assets/mqtt-connection.js"></script>
-<script src="/assets/config-validation.js"></script>
+<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.1">
+<script src="/assets/site-config.js?v=20261015.1"></script>
+<script src="/assets/mqtt-connection.js?v=20261015.1"></script>
+<script src="/assets/config-validation.js?v=20261015.1"></script>
 </head>
 <body>
 <header>
-  <div class="brand"><img class="sap-logo" src="/assets/sap-logo.svg" alt="SAP" width="52" height="26">
+  <div class="brand"><img class="sap-logo" src="/assets/sap-logo.svg?v=20261015.1" alt="SAP" width="52" height="26">
     <div><div class="eyebrow">SAP DM &middot; MQTT Demo</div><h1>Shop Floor Config Studio</h1></div>
   </div>
   <div class="spacer"></div>
@@ -814,7 +814,7 @@ const TABSVG = {
 function renderPreview(){
   const view = ui.tab==='machines' ? renderMachines() : ui.tab==='tanks' ? renderTanks() : renderPeople();
   $('#device').innerHTML = `
-    <div class="dv-shell"><img class="dv-logo" src="/assets/sap-logo.svg" alt="SAP" width="68" height="34">
+    <div class="dv-shell"><img class="dv-logo" src="/assets/sap-logo.svg?v=20261015.1" alt="SAP" width="68" height="34">
       <div><div class="dv-t1">Shop Floor Simulator</div>
       <div class="dv-t2">SAP Digital Manufacturing - ${esc(cfg.plant_name)}</div></div>
       <div class="dv-pills"><span class="dv-pill"><i></i>MQTT</span><span class="dv-pill"><i></i>WiFi</span></div></div>
@@ -1215,6 +1215,6 @@ window.addEventListener('resize', ()=>{ if (ui.zoom==='fit') applyZoom(); });
   fullRender();
 })();
 </script>
-<script src="/assets/workbench.js"></script>
+<script src="/assets/workbench.js?v=20261015.1"></script>
 </body>
 </html>

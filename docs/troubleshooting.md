@@ -150,3 +150,18 @@ Do not pass `--compressed` or set `bitmap_format` in the output options.
 ```
 
 The two display framebuffers themselves live in PSRAM (allocated by the BSP DPI driver via `MALLOC_CAP_SPIRAM`). Only the LVGL software render buffer must stay in internal SRAM.
+
+## Main hostname returns 502, or pages load without controls
+
+Route the entire MQTT hostname to Nginx on port 80 using the current `cloudflared/config.yml.example`. Deploy the current Nginx configuration first: it redirects browser root requests to `/dashboard/` and proxies MQTT WebSocket upgrades at `/` and `/mqtt` to Mosquitto. An older tunnel rule sending the root directly to port 9001 can serve MQTT while returning 502 to a browser.
+
+After pulling changed bind-mounted Nginx configuration, validate and recreate the web container. When running inside a pasted heredoc, explicitly disconnect the validation command from the script's input:
+
+```bash
+docker compose run --rm --no-deps -T --interactive=false dashboard nginx -t </dev/null
+docker compose up -d --no-deps --force-recreate dashboard </dev/null
+```
+
+`docker compose run` keeps standard input open by default and can consume the commands following it. A successful configuration test alone does not confirm that the running web container has reloaded.
+
+A page with unstyled controls or an empty broker field can indicate missing JavaScript or CSS. Deploy the HTML and assets together. Versioned asset references bypass cached responses from the previous deployment. Run `TUNNEL_URL=https://mqtt.example.com/dashboard/ bash scripts/smoke-test.sh` inside the LXC to check the public root, assets and both MQTT WebSocket paths.

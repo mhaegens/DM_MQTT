@@ -1,13 +1,10 @@
-# Add these rules BEFORE the existing Mosquitto catch-all for this hostname.
-# Replace 192.168.x.x with the broker LXC IP. Keep the catch-all so existing
-# ESP/SAP DM clients using wss://mqtt.example.com continue to connect.
+# Route this hostname to Nginx for both browser pages and MQTT WebSockets.
+# Replace 192.168.x.x with the broker LXC IP. Install the updated Nginx
+# configuration before replacing older path-specific / port 9001 rules.
 #
 #   - hostname: mqtt.example.com
-#     path: ^/(dashboard|editor|shopfloor|config-editor|previews|assets|mqtt)(/.*)?$
 #     service: http://192.168.x.x:80
 #
-#   - hostname: mqtt.example.com
-#     service: ws://192.168.x.x:9001
-#
-# Open /dashboard/ directly. The root path remains the legacy MQTT endpoint.
+# https://mqtt.example.com redirects to /dashboard/.
+# wss://mqtt.example.com and wss://mqtt.example.com/mqtt both proxy to Mosquitto.
 # Restart the existing cloudflared service after updating its ingress rules.
