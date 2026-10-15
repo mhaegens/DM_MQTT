@@ -1,0 +1,7 @@
+{
+  "widgets": [{
+    "modulePath": "custom/pod2/mqttdashboard/widget/MqttDashboard",
+    "type": "custom.pod2.mqttdashboard.widget.MqttDashboard"
+  }],
+  "actions": []
+}

@@ -1,0 +1,60 @@
+{
+  "plant_name": "Bakery LE02",
+  "machines": [
+    {
+      "id": "mix01", "name": "MIX-01", "type": "Dough Mixer",
+      "running": true, "auto_pulse": true, "pulses": 128,
+      "metrics": [
+        {"key":"mixSpeed","label":"Mixer Speed","unit":"RPM","viz":"spark","input":"step","color":"0x0070F2","init_val":220,"min_val":0,"max_val":400,"step":10,"sim":{"profile":"random_walk","rand_min":180,"rand_max":320}},
+        {"key":"doughTemp","label":"Dough Temp","unit":"°C","viz":"thermo","input":"step","init_val":24.5,"min_val":10,"max_val":40,"step":0.2,"sim":{"profile":"sine","amplitude":1.5,"period_s":90,"offset":24.5}},
+        {"key":"batchProg","label":"Batch Progress","unit":"%","viz":"arc","input":"slider","init_val":42,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":50,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"ramp"}}
+      ]
+    },
+    {
+      "id": "prov01", "name": "PROV-01", "type": "Proofing Chamber",
+      "running": true, "auto_pulse": false, "pulses": 62,
+      "metrics": [
+        {"key":"chambTemp","label":"Chamber Temp","unit":"°C","viz":"thermo","input":"step","init_val":32.0,"min_val":20,"max_val":45,"step":0.2,"sim":{"profile":"sine","amplitude":0.8,"period_s":180,"offset":32.0}},
+        {"key":"humidity","label":"Humidity","unit":"%","viz":"arc","input":"slider","init_val":78,"min_val":40,"max_val":100,"step":1,"thresholds":[{"limit":60,"color":"0xBB0000"},{"limit":75,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"random_walk","rand_min":72,"rand_max":86}}
+      ]
+    },
+    {
+      "id": "oven01", "name": "OVEN-01", "type": "Deck Oven",
+      "running": true, "auto_pulse": true, "pulses": 341,
+      "metrics": [
+        {"key":"ovenTemp","label":"Oven Temp","unit":"°C","viz":"thermo","input":"step","init_val":215.0,"min_val":100,"max_val":280,"step":1,"sim":{"profile":"sine","amplitude":6.0,"period_s":60,"offset":215.0}},
+        {"key":"bakeTime","label":"Bake Timer","unit":"s","viz":"arc","input":"slider","init_val":900,"min_val":0,"max_val":1800,"step":10,"thresholds":[{"limit":600,"color":"0x107E3E"},{"limit":1200,"color":"0xE76500"},{"limit":1800,"color":"0xBB0000"}],"sim":{"profile":"ramp"}},
+        {"key":"steamPres","label":"Steam Pressure","unit":"bar","viz":"bullet","input":"step","color":"0x0070F2","init_val":1.4,"min_val":0,"max_val":3,"step":0.05,"sim":{"profile":"sine","amplitude":0.15,"period_s":30,"offset":1.4}}
+      ]
+    },
+    {
+      "id": "pack01", "name": "PACK-01", "type": "Wrapping Line",
+      "running": false, "auto_pulse": false, "pulses": 74,
+      "metrics": [
+        {"key":"lineSpeed","label":"Line Speed","unit":"ppm","viz":"spark","input":"step","color":"0x0070F2","init_val":0,"min_val":0,"max_val":120,"step":5,"sim":{"profile":"random_walk","rand_min":80,"rand_max":110}},
+        {"key":"rejectRate","label":"Reject Rate","unit":"%","viz":"arc","input":"slider","init_val":1.8,"min_val":0,"max_val":10,"step":0.1,"thresholds":[{"limit":2,"color":"0x107E3E"},{"limit":5,"color":"0xE76500"},{"limit":10,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":1.2,"rand_max":3.5}}
+      ]
+    }
+  ],
+  "tanks": [
+    {
+      "id": "flour", "name": "Flour Silo",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":72,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":65,"rand_max":82}},
+        {"key":"temperature","label":"Silo Temp","unit":"°C","viz":"thermo","input":"step","init_val":18.5,"min_val":5,"max_val":40,"step":0.2,"sim":{"profile":"sine","amplitude":1.0,"period_s":120,"offset":18.5}}
+      ]
+    },
+    {
+      "id": "water", "name": "Water Buffer",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":54,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":20,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":48,"rand_max":66}},
+        {"key":"temperature","label":"Water Temp","unit":"°C","viz":"thermo","input":"step","init_val":14.2,"min_val":2,"max_val":30,"step":0.2,"sim":{"profile":"sine","amplitude":0.5,"period_s":180,"offset":14.2}}
+      ]
+    }
+  ],
+  "people": [
+    {"id":"EMP-B001","name":"Sofie Peeters","role":"Head Baker","role_key":"lead","dept":"Production","plant":"Bakery LE02","uid":"B0:11:AA:20","avatar_color":"0x8A4A00","certs":["HACCP","Lean Bakery"]},
+    {"id":"EMP-B012","name":"Youssef Ait","role":"Oven Operator","role_key":"operator","dept":"Baking","plant":"Bakery LE02","uid":"B0:11:BB:44","avatar_color":"0xE76500","certs":["HACCP","Safety"]},
+    {"id":"EMP-B033","name":"Els Vermeersch","role":"QA Inspector","role_key":"quality","dept":"Quality","plant":"Bakery LE02","uid":"B0:11:CC:71","avatar_color":"0xBB0000","certs":["ISO 22000","HACCP Lead"]}
+  ]
+}

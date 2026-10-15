@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MQTT POD 2 · UI5 lifecycle harness</title>
+  <style>body{margin:0;background:#f6f9fc}#harness-label{font:12px Arial,sans-serif;padding:12px;background:#031d54;color:white}</style>
+  <!-- This test-only harness downloads OpenUI5. The upload ZIP excludes it. -->
+  <script id="sap-ui-bootstrap" src="https://sdk.openui5.org/resources/sap-ui-core.js"
+    data-sap-ui-theme="sap_horizon" data-sap-ui-async="true" data-sap-ui-libs="sap.m"
+    data-sap-ui-resourceroots='{"custom.pod2.mqttdashboard":"../"}'></script>
+  <script defer src="ui5-harness.js"></script>
+</head>
+<body class="sapUiBody"><div id="harness-label">UI5 integration harness · POD SDK modules are test doubles</div><div id="pod-container"></div></body>
+</html>

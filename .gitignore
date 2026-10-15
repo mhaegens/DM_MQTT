@@ -43,3 +43,9 @@ docs/audit-preview/
 *.pfx
 id_rsa
 id_ed25519
+
+# Reproducible POD extension artifacts and private QA output
+pod-plugin/build/
+pod-plugin/.qa/
+__pycache__/
+*.py[cod]

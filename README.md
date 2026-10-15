@@ -111,3 +111,7 @@ All demo data (machines, tanks, operators, topics) is driven by a JSON config fi
 ## Deployment privacy
 
 Repository examples use documentation hostnames and addresses. Configure the firmware broker in menuconfig or ignored `firmware/sdkconfig.local.defaults`. The web tools derive public WSS from their page hostname; LAN deployments can set the public broker in ignored `dashboard/html/assets/site-config.local.js`. WiFi credentials are provisioned on-device. Private measurements, screenshots, local site configuration and board backups are excluded from Git.
+
+## SAP DM POD 2 dashboard
+
+The [MQTT Live Dashboard extension](pod-plugin/README.md) displays live machine, vessel and operator readings inside a POD 2 page. It updates existing cards in place and uses the web workbench design. Build the upload ZIP with `python3 pod-plugin/package.py`, then configure the public WSS broker and matching device profile in POD Designer. Source, lifecycle tests and a standalone preview are included. Tenant credentials and deployment settings are not packaged.

@@ -4,7 +4,9 @@
   "scripts": {
     "test": "node --test *.test.cjs",
     "preview": "node preview-server.mjs",
-    "browser": "node browser-qa.cjs"
+    "browser": "node browser-qa.cjs",
+    "pod:browser": "node pod-browser-qa.cjs",
+    "pod:package": "python3 ../pod-plugin/package.py"
   },
   "devDependencies": {
     "playwright": "1.58.2",

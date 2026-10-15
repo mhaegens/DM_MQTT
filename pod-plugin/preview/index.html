@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MQTT POD 2 · Preview</title>
+  <link rel="stylesheet" href="../assets/dashboard.css">
+  <style>
+    body{margin:0;background:#eaf0f6;font:13px Arial,sans-serif;color:#081c34}.preview-bar{background:#031d54;color:white;padding:14px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}.preview-bar strong{font-size:14px}.preview-bar label{display:flex;gap:7px;align-items:center;font-size:12px}.preview-bar input,.preview-bar select,.preview-bar button{font:inherit;border:1px solid #b5c9dc;border-radius:6px;padding:8px;background:white;color:#081c34}.preview-bar input{width:min(300px,65vw)}.preview-bar button{cursor:pointer}.preview-note{font-size:11px;opacity:.75}.preview-pod{max-width:1320px;margin:22px auto;background:white;border:1px solid #d7e2eb;border-radius:14px;overflow:hidden}@media(max-width:600px){.preview-bar{padding:14px}.preview-pod{margin:0;border-radius:0}}
+  </style>
+  <script src="../lib/Mqtt.js"></script>
+  <script src="../widget/State.js"></script>
+  <script src="../widget/Dashboard.js"></script>
+  <script src="../widget/Connection.js"></script>
+  <script defer src="preview.js"></script>
+</head>
+<body>
+  <div class="preview-bar">
+    <strong>POD 2 extension preview</strong>
+    <label>Profile <select id="profile"><option value="brewery">Brewery</option><option value="factory">Factory</option><option value="bakery">Bakery</option><option value="ev_battery">EV battery</option></select></label>
+    <button id="simulate" type="button">Simulated readings</button>
+    <label>Broker <input id="broker" type="url" placeholder="wss://mqtt.example.com" autocomplete="off"></label>
+    <button id="connect" type="button">Connect live</button>
+    <span class="preview-note">Shared widget renderer · simulated until connected</span>
+  </div>
+  <main class="preview-pod"><div id="dashboard"></div></main>
+</body>
+</html>

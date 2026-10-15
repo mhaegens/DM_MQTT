@@ -70,3 +70,9 @@ The browser suite verifies a 2,000-message burst, last-value accuracy, persisten
 Use ESP-IDF 5.4.1 and the pinned component manifest/lockfile. Run `firmware/tools/build_check.sh` after activating ESP-IDF if the checkout path contains spaces. It copies the source into a temporary path, builds it there, and prints the build location. It does not flash the device.
 
 Physical checks remain required: sustained ten-machine/eight-metric load, scrolling and tank dragging while publishing, reconnect behavior, C6 firmware compatibility, free internal memory, SD-card profiles, and device round-trip latency on the intended network.
+
+## POD 2 MQTT dashboard
+
+`node --test tests/*.test.cjs` includes bounded state, change-only staleness, connection cleanup, snapshot sequencing, and POD adapter lifecycle tests. `DM_QA_MODULES=/path/to/node_modules node tests/pod-browser-qa.cjs` starts its own disposable HTTP/MQTT server and runs Chrome checks for a 5,001-message burst, fixed DOM/page height, exact final values, multiple instances, reconnects, four profiles and the maximum 104 metrics. It also loads real OpenUI5 from the official CDN for container-preservation/teardown checks, so that part needs network access; only tenant-specific POD SDK modules are doubled. QA results/screenshots stay in ignored `pod-plugin/.qa/`.
+
+Build and verify the allowlisted, reproducible upload with `python3 pod-plugin/package.py`. Preview and test harness files are excluded from the ZIP. See [POD extension instructions](../pod-plugin/README.md).

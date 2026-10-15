@@ -1,0 +1,77 @@
+{
+  "plant_name": "Brewery GE01",
+  "machines": [
+    {
+      "id": "mash01", "name": "MASH-01", "type": "Mash Tun",
+      "running": true, "auto_pulse": true, "pulses": 82,
+      "metrics": [
+        {"key":"mashTemp","label":"Mash Temp","unit":"°C","viz":"thermo","input":"step","init_val":66.5,"min_val":30,"max_val":85,"step":0.2,"sim":{"profile":"sine","amplitude":0.8,"period_s":120,"offset":66.5}},
+        {"key":"stirRpm","label":"Stirrer","unit":"RPM","viz":"spark","input":"step","color":"0x0070F2","init_val":38,"min_val":0,"max_val":80,"step":2,"sim":{"profile":"random_walk","rand_min":30,"rand_max":50}},
+        {"key":"gravity","label":"Gravity","unit":"°P","viz":"arc","input":"slider","init_val":12.4,"min_val":0,"max_val":20,"step":0.1,"thresholds":[{"limit":8,"color":"0xE76500"},{"limit":16,"color":"0x107E3E"},{"limit":20,"color":"0xBB0000"}],"sim":{"profile":"ramp"}}
+      ]
+    },
+    {
+      "id": "boil01", "name": "BOIL-01", "type": "Wort Kettle",
+      "running": true, "auto_pulse": true, "pulses": 156,
+      "metrics": [
+        {"key":"boilTemp","label":"Wort Temp","unit":"°C","viz":"thermo","input":"step","init_val":98.4,"min_val":50,"max_val":110,"step":0.2,"sim":{"profile":"sine","amplitude":0.4,"period_s":45,"offset":98.4}},
+        {"key":"steamPres","label":"Steam Pressure","unit":"bar","viz":"bullet","input":"step","color":"0xE76500","init_val":2.6,"min_val":0,"max_val":5,"step":0.05,"sim":{"profile":"random_walk","rand_min":2.2,"rand_max":3.0}},
+        {"key":"boilProg","label":"Boil Progress","unit":"%","viz":"arc","input":"slider","init_val":63,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":50,"color":"0xE76500"},{"limit":100,"color":"0x107E3E"}],"sim":{"profile":"ramp"}}
+      ]
+    },
+    {
+      "id": "ferm01", "name": "FERM-01", "type": "Fermenter",
+      "running": true, "auto_pulse": false, "pulses": 27,
+      "metrics": [
+        {"key":"fermTemp","label":"Fermenter","unit":"°C","viz":"thermo","input":"step","init_val":19.8,"min_val":0,"max_val":30,"step":0.1,"sim":{"profile":"sine","amplitude":0.3,"period_s":300,"offset":19.8}},
+        {"key":"co2Rate","label":"CO2 Rate","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":4.6,"min_val":0,"max_val":15,"step":0.2,"sim":{"profile":"random_walk","rand_min":3.5,"rand_max":6.8}},
+        {"key":"pressure","label":"Head Pressure","unit":"bar","viz":"arc","input":"step","init_val":1.1,"min_val":0,"max_val":3,"step":0.05,"thresholds":[{"limit":1.5,"color":"0x107E3E"},{"limit":2.2,"color":"0xE76500"},{"limit":3.0,"color":"0xBB0000"}],"sim":{"profile":"sine","amplitude":0.1,"period_s":180,"offset":1.1}}
+      ]
+    },
+    {
+      "id": "fill01", "name": "FILL-01", "type": "Bottle Filler",
+      "running": true, "auto_pulse": true, "pulses": 512,
+      "metrics": [
+        {"key":"flowRate","label":"Flow Rate","unit":"L/min","viz":"spark","input":"step","color":"0x0070F2","init_val":18.4,"min_val":0,"max_val":30,"step":0.2,"sim":{"profile":"random_walk","rand_min":16,"rand_max":22}},
+        {"key":"bottleCnt","label":"Bottles/min","unit":"bpm","viz":"bullet","input":"step","color":"0x0070F2","init_val":220,"min_val":0,"max_val":400,"step":5,"sim":{"profile":"random_walk","rand_min":180,"rand_max":260}},
+        {"key":"foamLoss","label":"Foam Loss","unit":"%","viz":"arc","input":"slider","init_val":1.4,"min_val":0,"max_val":8,"step":0.1,"thresholds":[{"limit":2,"color":"0x107E3E"},{"limit":4,"color":"0xE76500"},{"limit":8,"color":"0xBB0000"}],"sim":{"profile":"random_walk","rand_min":0.8,"rand_max":2.6}}
+      ]
+    },
+    {
+      "id": "clean01", "name": "CIP-01", "type": "Clean-In-Place",
+      "running": false, "auto_pulse": false, "pulses": 18,
+      "metrics": [
+        {"key":"cleanTemp","label":"Cleaner Temp","unit":"°C","viz":"thermo","input":"step","init_val":22.0,"min_val":10,"max_val":90,"step":0.5,"sim":{"profile":"steady"}},
+        {"key":"causticConc","label":"Caustic","unit":"%","viz":"arc","input":"slider","init_val":0.8,"min_val":0,"max_val":5,"step":0.05,"thresholds":[{"limit":1,"color":"0x107E3E"},{"limit":3,"color":"0xE76500"},{"limit":5,"color":"0xBB0000"}],"sim":{"profile":"steady"}}
+      ]
+    }
+  ],
+  "tanks": [
+    {
+      "id": "malt", "name": "Malt Silo",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":58,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":35,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":50,"rand_max":66}}
+      ]
+    },
+    {
+      "id": "bright", "name": "Bright Beer",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":81,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":15,"color":"0xBB0000"},{"limit":40,"color":"0xE76500"}],"sim":{"profile":"random_walk","rand_min":75,"rand_max":88}},
+        {"key":"temperature","label":"Serving Temp","unit":"°C","viz":"thermo","input":"step","init_val":4.2,"min_val":0,"max_val":15,"step":0.1,"sim":{"profile":"sine","amplitude":0.2,"period_s":180,"offset":4.2}},
+        {"key":"pressure","label":"Head Pressure","unit":"bar","viz":"arc","input":"step","init_val":1.6,"min_val":0,"max_val":3,"step":0.05,"thresholds":[{"limit":2,"color":"0x107E3E"},{"limit":2.5,"color":"0xE76500"},{"limit":3,"color":"0xBB0000"}],"sim":{"profile":"sine","amplitude":0.1,"period_s":90,"offset":1.6}}
+      ]
+    },
+    {
+      "id": "spent", "name": "Spent Grain",
+      "metrics": [
+        {"key":"level","label":"Fill Level","unit":"%","viz":"tank","input":"slider","init_val":34,"min_val":0,"max_val":100,"step":1,"thresholds":[{"limit":75,"color":"0x107E3E"},{"limit":90,"color":"0xE76500"},{"limit":100,"color":"0xBB0000"}],"sim":{"profile":"ramp"}}
+      ]
+    }
+  ],
+  "people": [
+    {"id":"EMP-BW01","name":"Franz Huber","role":"Braumeister","role_key":"lead","dept":"Brewhouse","plant":"Brewery GE01","uid":"BW:11:22:33","avatar_color":"0x8A4A00","certs":["VLB","IBD","HACCP"]},
+    {"id":"EMP-BW07","name":"Klara Schmidt","role":"Cellar Operator","role_key":"operator","dept":"Cellar","plant":"Brewery GE01","uid":"BW:22:33:44","avatar_color":"0x0070F2","certs":["HACCP","Safety"]},
+    {"id":"EMP-BW14","name":"Dieter Vogel","role":"QC Analyst","role_key":"quality","dept":"Lab","plant":"Brewery GE01","uid":"BW:33:44:55","avatar_color":"0xBB0000","certs":["ISO 17025","EBC","VLB"]},
+    {"id":"EMP-BW22","name":"Anita Weber","role":"Packaging Supervisor","role_key":"supervisor","dept":"Packaging","plant":"Brewery GE01","uid":"BW:44:55:66","avatar_color":"0x4A1A8C","certs":["Lean","MES Certified"]}
+  ]
+}
