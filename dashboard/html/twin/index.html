@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fb">
+  <meta name="description" content="An interactive brewery digital twin driven by live MQTT signals from the SAP DM demo rig.">
+  <title>Brewery Digital Twin · SAP DM</title>
+  <link rel="icon" href="/assets/sap-logo.svg">
+  <link rel="stylesheet" href="/assets/sap-workbench.css?v=20261019.1">
+  <link rel="stylesheet" href="./styles.css?v=20261019.1">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+  <script src="/assets/site-config.js"></script>
+  <script src="/assets/mqtt-connection.js"></script>
+  <script src="/assets/mqtt.min.js"></script>
+  <script src="./state.js"></script>
+</head>
+<body>
+  <span class="connection-badge" id="conn-badge"><i></i><span id="conn-text">Connecting…</span></span>
+  <main class="twin-main">
+    <a class="all-twins" href="/digital-twins/">← All digital twins</a>
+    <header class="page-heading">
+      <div><p class="eyebrow">OPERATIONS <span>/</span> DIGITAL TWIN</p><h1>A brewery, in motion<span>.</span></h1><p class="intro">From grain to glass. Every signal has a place.</p></div>
+      <div class="heading-actions"><div class="mode-switch" aria-label="Data source"><button id="live-mode" aria-pressed="true">Live rig</button><button id="demo-mode" aria-pressed="false">Demo</button></div><button class="button" id="connection-open">Connection <span aria-hidden="true">↗</span></button></div>
+    </header>
+    <section class="kpis" aria-label="Brewery readings">
+      <article><div><span class="kpi-icon">◉</span><span>Machines running</span></div><p><strong id="kpi-running">—</strong><small>/ 5</small></p><span id="running-note">Waiting for machine states</span></article>
+      <article><div><span class="kpi-icon">♨</span><span>Mash temperature</span></div><p><strong id="kpi-mash">—</strong><small>°C</small></p><span id="mash-note">MASH-01 · awaiting signal</span></article>
+      <article><div><span class="kpi-icon amber">◒</span><span>Bright beer level</span></div><p><strong id="kpi-bright">—</strong><small>%</small></p><span id="bright-note">Storage · awaiting signal</span></article>
+      <article><div><span class="kpi-icon">↗</span><span>Filling rate</span></div><p><strong id="kpi-fill">—</strong><small>bottles/min</small></p><span id="fill-note">FILL-01 · awaiting signal</span></article>
+    </section>
+    <section class="twin-workspace" aria-label="Brewery floor and equipment inspector">
+      <div class="scene" id="scene">
+        <div class="scene-heading"><span class="floor-icon" aria-hidden="true">⌘</span><div><h2>Brewery GE01</h2><p>Brewhouse & cellar <span>·</span> 8 connected assets</p></div></div>
+        <div class="scene-tools"><button id="view-reset" title="Reset camera" aria-label="Reset camera">⌂</button><button id="view-top" aria-pressed="false">Top view</button><button id="view-labels" aria-pressed="true">Labels</button></div>
+        <div id="canvas-host"></div><div id="asset-labels"></div>
+        <div id="scene-loading" role="status">Preparing the brewhouse…</div>
+        <div class="scene-data-badge" id="scene-data-badge"><i></i><span>Waiting for rig</span></div>
+        <div class="scene-bottom"><div class="legend"><span><i class="running"></i>Running</span><span><i class="stopped"></i>Stopped</span><span><i class="waiting"></i>No live state</span></div><span class="camera-hint">Drag to orbit <b>·</b> Scroll to zoom <b>·</b> Select equipment</span></div>
+      </div>
+      <aside class="inspector" aria-label="Selected equipment details">
+        <div class="inspector-eyebrow"><span>EQUIPMENT DETAILS</span><span id="selected-number">01 / 08</span></div>
+        <div class="asset-head"><div><p id="asset-id">MASH-01</p><h2 id="asset-name">Mash Tun</h2></div><span class="state-pill waiting" id="asset-status">Waiting</span></div>
+        <p class="asset-description" id="asset-description">Warm water meets malt. Temperature and agitation shape the mash.</p>
+        <div class="metric-list" id="metric-list"></div>
+        <div class="pulse-row" id="pulse-row"><span>Production pulses</span><strong id="asset-pulses">—</strong></div>
+        <div class="inspector-note"><span aria-hidden="true">ⓘ</span><p id="inspector-note">Select an asset to inspect its signals.</p></div>
+      </aside>
+    </section>
+    <section class="equipment-section" aria-labelledby="equipment-title"><div class="section-heading"><h2 id="equipment-title">The brewery floor</h2><span>Select an asset to follow its signals <span aria-hidden="true">↘</span></span></div><div id="equipment-list" class="equipment-list"></div></section>
+    <section class="bottom-grid">
+      <article class="signals-panel"><div class="section-heading"><h2>Signal activity</h2><span id="signal-count">0 readings received</span></div><div id="signal-events" class="signal-events"><p class="empty-message">Waiting for the brewery’s first signals.</p></div></article>
+      <article class="operator-panel"><div class="section-heading"><h2>On the floor</h2><span>Operator badge</span></div><div class="operator"><span class="avatar" id="operator-avatar">—</span><div><h3 id="operator-name">No badge received</h3><p id="operator-role">Tap an NFC badge on the rig</p></div></div><p id="operator-time">Badge events appear here when received.</p></article>
+    </section>
+    <footer><span><b>BREWERY GE01</b><span class="footer-divider">/</span>STANDARD BREWERY PROFILE</span><span>Schematic layout · Activity animation follows signals; pipe routes are illustrative.</span></footer>
+  </main>
+  <dialog id="connection-dialog" aria-labelledby="connection-title"><form id="connection-form"><div class="dialog-heading"><div><p class="eyebrow">LIVE TELEMETRY</p><h2 id="connection-title">Connect your rig</h2></div><button type="button" class="close-button" id="connection-close" aria-label="Close connection settings">×</button></div><p>Use the same MQTT WebSocket broker as the rig. The brewery profile must be active on the device.</p><label for="broker-url">Broker address</label><input type="url" id="broker-url" required placeholder="wss://mqtt.example.com" spellcheck="false"><p class="field-hint">Saved for all workbench pages on this browser.</p><p id="connection-error" role="alert"></p><div class="connection-detail"><span>Profile</span><strong>Brewery GE01</strong><span>Signals</span><code>factory/machines/…<br>factory/tanks/…</code></div><p>Subscribes to telemetry and requests a fresh snapshot. Machine controls stay on the rig.</p><div class="dialog-actions"><button type="button" class="button" id="snapshot-request">Refresh readings</button><button class="button primary" type="submit">Connect broker</button></div></form></dialog>
+  <script src="/assets/workbench.js?v=20261019.1"></script>
+  <script type="module" src="./app.js?v=20261019.1"></script>
+</body>
+</html>

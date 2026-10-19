@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fb">
+  <meta name="description" content="Choose a digital twin to explore live signals from your manufacturing rig.">
+  <title>Digital Twins · SAP DM</title>
+  <link rel="icon" href="/assets/sap-logo.svg">
+  <link rel="stylesheet" href="/assets/sap-workbench.css?v=20261019.2">
+  <link rel="stylesheet" href="./styles.css?v=20261019.2">
+</head>
+<body>
+  <main class="library-main">
+    <header class="library-heading">
+      <div><p class="eyebrow">OPERATIONS <span>/</span> EXPLORE</p><h1>Digital twins<span>.</span></h1><p class="intro">Choose a twin. See your signals come to life.</p></div>
+      <span class="library-badge"><span aria-hidden="true">▧</span> TWIN LIBRARY</span>
+    </header>
+    <div class="library-layout">
+      <section aria-labelledby="available-heading" class="collection">
+        <div class="collection-heading"><h2 id="available-heading">Available twins</h2><span id="twin-count" role="status">Loading…</span></div>
+        <div id="twin-list" class="twin-list" aria-busy="true"></div>
+        <p id="catalog-error" role="alert" hidden>The twin library could not be loaded. Reload this page to try again.</p>
+        <noscript><p>Open the <a href="/twin/">Brewery GE01 twin</a> directly.</p></noscript>
+      </section>
+      <aside class="library-guide" aria-labelledby="guide-title">
+        <div class="guide-symbol" aria-hidden="true">⌘</div>
+        <h2 id="guide-title">A window into your rig.</h2>
+        <p>Each twin gives your equipment and signals a place on the floor.</p>
+        <div class="guide-mode"><span class="mode-icon" aria-hidden="true">↗</span><div><h3>Follow the live rig</h3><p>Open a twin to see its equipment respond to your MQTT readings.</p></div></div>
+        <div class="guide-mode"><span class="mode-icon demo" aria-hidden="true">▷</span><div><h3>Explore a demo</h3><p>Try the same twin with simulated readings, even when the rig is offline.</p></div></div>
+        <div class="profile-note"><span aria-hidden="true">ⓘ</span><p>For live readings, activate the matching standard profile on your rig.</p></div>
+      </aside>
+    </div>
+    <footer><span>DIGITAL MANUFACTURING <span>/</span> DIGITAL TWINS</span><span>Choose an environment. Explore your operation.</span></footer>
+  </main>
+  <script src="/assets/workbench.js?v=20261019.2"></script>
+  <script type="module" src="./catalog.js?v=20261019.2"></script>
+</body>
+</html>

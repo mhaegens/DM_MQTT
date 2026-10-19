@@ -1,0 +1,16 @@
+[
+  {
+    "id": "brewery-ge01",
+    "name": "Brewery GE01",
+    "category": "Food & beverage",
+    "profile": "Standard brewery profile",
+    "description": "Follow the journey from grain to glass. Explore the brewhouse, fermentation, beer storage and bottling in one interactive 3D twin.",
+    "areas": ["Brewhouse", "Cellar", "Packaging"],
+    "machines": 5,
+    "vessels": 3,
+    "signals": 19,
+    "preview": "./assets/brewery-preview.png",
+    "url": "/twin/",
+    "demoUrl": "/twin/?demo=1"
+  }
+]

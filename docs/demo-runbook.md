@@ -60,9 +60,9 @@ The entire demo content (machine names, metrics, operators) is driven by `sapdm_
 3. Uploads are kept **permanently** under their original filename — they appear in the profile list and survive switching profiles and reboots. The SD card is the home of the profile library (the bundled scenarios are copied onto it at boot); with no card inserted, profiles are kept in flash instead.
 4. Activating or uploading a profile reboots the device into the new scenario.
 
-### Via the web editor (no SD card needed)
+### Via Config Studio
 
-1. Open `https://mqtt.example.com/editor/` in a browser.
+1. Open `https://mqtt.example.com/config-editor/` in a browser.
 2. Edit the JSON directly in the editor, or paste a new config.
 3. Download the file.
 4. Copy it to an SD card as `sapdm_config.json` (root of the card, no subdirectory).

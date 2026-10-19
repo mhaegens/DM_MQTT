@@ -240,13 +240,13 @@ http://<lxc-ip>/dashboard/
 
 ✅ **You should see** a live MQTT monitor page with a connection status indicator.
 
-### Step 4.2: Open the config editor
+### Step 4.2: Open Config Studio
 
 ```
-http://<lxc-ip>/editor/
+http://<lxc-ip>/config-editor/
 ```
 
-✅ **You should see** a JSON configuration editor page.
+✅ **You should see** Config Studio with the device preview and JSON import/export tools.
 
 ### Step 4.3: Send a test MQTT message
 

@@ -38,7 +38,7 @@ What `install.sh` does, in order:
 6. **Docker images + start:** runs `docker compose pull` then `docker compose up -d`.
 7. **Status output:** prints `docker compose ps` and the LAN access URLs.
 
-After the install, the full workbench is accessible on LAN; the dashboard and editor are at `http://<LXC-IP>/dashboard/` and `http://<LXC-IP>/editor/`.
+After the install, the full workbench is accessible on LAN; the dashboard and Config Studio are at `http://<LXC-IP>/dashboard/` and `http://<LXC-IP>/config-editor/`. The old `/editor/` address redirects to Config Studio.
 
 ---
 

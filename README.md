@@ -56,7 +56,7 @@ bash /opt/sapdm-demo/update.sh
 | Service   | Port(s)    | Purpose |
 |-----------|------------|---------|
 | Mosquitto | 1883, 9001 | MQTT broker — TCP (internal) + WebSocket (tunnel) |
-| Dashboard | 80         | nginx serving `/dashboard` (live monitor) and `/editor` (JSON config editor) |
+| Dashboard | 80         | nginx serving the MQTT Monitor, Asset Cards, Digital Twins and Config Studio |
 
 Internet access is provided by the **existing Cloudflare Tunnel on the Proxmox host** — no cloudflared container runs in this stack. Route the hostname to Nginx on this LXC's port 80; Nginx serves the browser pages and proxies MQTT WebSockets (see `cloudflared/config.yml.example` and `docs/INSTALL.md` Part 3).
 

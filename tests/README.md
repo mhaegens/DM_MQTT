@@ -65,7 +65,19 @@ Manual preview pages also use the disposable broker by default. The preview serv
 
 Optional variables: `DM_QA_MODULES` (external temporary node_modules), `DM_QA_URL`, `DM_QA_OUTPUT`, `DM_HTML_ROOT`.
 
-The browser suite verifies a 2,000-message burst, last-value accuracy, persistent topic rows, bounded feed, publication, round-trip measurement, persistent tank SVGs, escaped operator text, invalid config rejection, official logo loading, and all four screens at 1440px and 390px.
+The browser suite verifies a 2,000-message burst, last-value accuracy, persistent topic rows, bounded feed, publication, round-trip measurement, persistent tank SVGs, escaped operator text, invalid config rejection, official logo loading, the four-item menu, legacy editor redirection to Config Studio, and monitor/asset-card/studio layouts at 1440px and 390px. The Digital Twins and brewery layouts are covered by the twin suite below.
+
+## Brewery digital twin
+
+`node --test tests/*.test.cjs` includes the brewery profile, telemetry validation,
+change-only heartbeat, per-field reconnect freshness, thresholds, bounded
+history and isolated demo checks. With browser test dependencies installed,
+`node tests/brewery-browser-qa.cjs` starts its own disposable MQTT/HTTP server and
+checks the Digital Twins library's live/demo selection, offline browsing, return
+navigation and connection cleanup, plus real WebGL, MQTT updates and reconnects, a 2,000-message burst, operator
+escaping, demo isolation and desktop/tablet/mobile layouts. Optional variables:
+`DM_QA_MODULES`, `DM_QA_OUTPUT`, `DM_QA_CHROME`. See the
+[twin instructions](../dashboard/html/twin/README.md).
 
 ## Full firmware build
 

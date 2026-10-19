@@ -64,13 +64,11 @@ const output = process.env.DM_QA_OUTPUT || '/tmp/dm-mqtt-browser-qa';
  await studio.locator('[data-a=download]').click();
  await send('factory/operators/login',JSON.stringify({name:'Test Operator',role:'Shift Lead',plant:'Plant BE01'}));
  const editor=await context.newPage(); await editor.goto(base+'/editor/');
- await editor.getByRole('button',{name:'Raw JSON',exact:true}).click();
- await editor.locator('#jsonRaw').fill('{"machines":{}}');
- await editor.getByRole('button',{name:'Load from JSON'}).click();
- assert((await editor.locator('#jsonValidation').textContent()).includes('Invalid configuration'));
- await editor.getByRole('button',{name:'Machines',exact:true}).click();
- await editor.getByRole('button',{name:'Load Sample Config'}).click();
- for(const [name,page] of [['monitor',monitor],['shopfloor',floor],['studio',studio],['editor',editor]]) {
+ await editor.waitForURL(base+'/config-editor/');
+ assert.equal(await editor.locator('.workbench-links [aria-current=page]').textContent(),'Config Studio','Legacy editor link must open Config Studio');
+ await editor.close();
+ for(const [name,page] of [['monitor',monitor],['asset-cards',floor],['studio',studio]]) {
+   assert.deepEqual(await page.locator('.workbench-links a').allTextContents(),['MQTT Monitor','Asset Cards','Digital Twins','Config Studio']);
    const logo=await page.locator('.workbench-logo').evaluate(img=>img.complete&&img.naturalWidth>0);
    assert(logo,`${name} official SAP SVG failed to load`);
    await page.screenshot({path:path.join(output,name+'-desktop.png'),fullPage:true});
@@ -80,6 +78,6 @@ const output = process.env.DM_QA_OUTPUT || '/tmp/dm-mqtt-browser-qa';
    assert(overflow.width<=overflow.viewport+2,`${name} horizontal overflow ${JSON.stringify(overflow)}`);
  }
  assert.deepEqual(errors,[],'Browser errors');
- console.log(JSON.stringify({result:'PASS',burst:2000,burst_ms,roundtrip,checks:['topic row reuse','bounded feed','publish','tank SVG reuse','operator text escaping','invalid configuration rejection','all four screens at 1440px and 390px'],screenshots:output},null,2));
+ console.log(JSON.stringify({result:'PASS',burst:2000,burst_ms,roundtrip,checks:['topic row reuse','bounded feed','publish','tank SVG reuse','operator text escaping','invalid configuration rejection','legacy editor redirects to Config Studio','four-item workbench menu','monitor, asset cards and studio at 1440px and 390px'],screenshots:output},null,2));
  await pub.endAsync(); await browser.close();
 })().catch(err=>{console.error(err);process.exit(1);});
