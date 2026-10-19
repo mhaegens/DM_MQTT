@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
+const {primaryMetric}=window.BreweryMotion;
 
 const LAYOUT = {
   malt: {x:-10, z:-4, h:6.1, r:1.05}, mash01: {x:-5.1, z:-.5, h:3.5, r:1.35},
@@ -19,7 +20,7 @@ export function createBrewery(host, labelHost, profile, onSelect) {
   host.append(renderer.domElement);
   const camera = new THREE.OrthographicCamera(-20,20,15,-15,.1,160);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = .09; controls.minZoom = .6; controls.maxZoom = 3;
+  controls.enableDamping = true; controls.dampingFactor = .09; controls.minZoom = .6; controls.maxZoom = 5;
   controls.minPolarAngle = .05; controls.maxPolarAngle = Math.PI * .46;
   controls.mouseButtons = {LEFT:THREE.MOUSE.ROTATE, MIDDLE:THREE.MOUSE.DOLLY, RIGHT:THREE.MOUSE.PAN};
   scene.add(new THREE.HemisphereLight(0xffffff,0xb0c5b8,2.6));
@@ -119,9 +120,11 @@ export function createBrewery(host, labelHost, profile, onSelect) {
       if (asset.id==='mash01') {
         cyl(.2,.38,0x4f8075,0,p.h+.24,0,g);
         const paddle = new THREE.Group(); paddle.position.y=p.h+.5; g.add(paddle);
-        box(1,.08,.12,0x668c7c,0,0,0,paddle); parts.paddle=paddle;
+        box(1.65,.11,.16,0x578976,0,0,0,paddle);box(.16,.11,1.65,0x94b79a,0,0,0,paddle);parts.paddle=paddle;
       }
       if (asset.id==='boil01') {
+        const track=mesh(new THREE.TorusGeometry(p.r+.25,.045,8,72),0xc5d4c9,0,.08,0,g);track.rotation.x=-Math.PI/2;
+        const progress=mesh(new THREE.TorusGeometry(p.r+.25,.07,8,72),0xc09532,0,.1,0,g);progress.rotation.x=-Math.PI/2;parts.progress=progress;
         pipe([[0,p.h,0],[0,p.h+.7,0],[.3,p.h+.9,-.25]],0xb8c7bb,.12,g);
         parts.steam=[];
         for (let j=0;j<6;j++) {
@@ -131,7 +134,7 @@ export function createBrewery(host, labelHost, profile, onSelect) {
       if (asset.id==='ferm01') {
         pipe([[1,1.3,.8],[1.5,1.3,.8],[1.5,3.8,.8],[1,3.8,.8]],0x93b2a6,.05,g);
         parts.bubbles=[];
-        for (let j=0;j<4;j++) parts.bubbles.push(mesh(new THREE.SphereGeometry(.065,8,8),0x6aabba,1.5,1.6+j*.5,.8,g));
+        for (let j=0;j<4;j++) parts.bubbles.push(mesh(new THREE.SphereGeometry(.12,10,10),0x509eac,1.5,1.6+j*.5,.8,g));
       }
     } else if (asset.id==='fill01') {
       box(6.5,.25,1.3,0xa1b7aa,0,.92,0,g); box(6.4,.06,.93,0x466e5d,0,1.08,0,g);
@@ -139,13 +142,27 @@ export function createBrewery(host, labelHost, profile, onSelect) {
       for (const x of [-2.7,0,2.7]) for (const z of [-.5,.5]) box(.09,.85,.09,0x8ba494,x,.43,z,g);
       for (const x of [-1.3,1.3]) box(.15,1.7,.8,0x85a599,x,1.8,-.32,g);
       box(3,.25,1.1,0x6c998b,0,2.65,-.32,g);
-      for (let x=-.9;x<=1;x+=.6) cyl(.055,.5,0xb9c8b7,x,2.25,0,g);
+      parts.streams=[];
+      for (let x=-.9;x<=1;x+=.6) {
+        cyl(.055,.5,0xb9c8b7,x,2.25,0,g);
+        parts.streams.push(cyl(.045,.35,0xd5a648,x,1.82,0,g,{emissive:0xb18e3d,emissiveIntensity:.2}));
+      }
+      parts.belt=[];
+      for(let i=0;i<12;i++){
+        const mark=box(.16,.012,.65,i%3===0?0xe2c376:0x9ab9a0,-3+i*.5,1.12,0,g);parts.belt.push(mark);
+      }
+      parts.wheels=[];
+      for(const x of [-2.75,2.75]){
+        const wheel=new THREE.Group();wheel.position.set(x,.86,.79);g.add(wheel);
+        const hub=cyl(.24,.13,0x426f5c,0,0,0,wheel);hub.rotation.x=Math.PI/2;
+        box(.35,.06,.15,0xe3bf62,0,0,0,wheel);box(.06,.35,.15,0xe3bf62,0,0,0,wheel);parts.wheels.push(wheel);
+      }
       box(.75,.55,.1,0x3f635c,1.95,2,.6,g);box(.59,.36,.04,0xbedbcc,1.95,2.04,.67,g);
       parts.bottles=[];
       for (let j=0;j<12;j++) {
         const bottle=new THREE.Group(); bottle.position.set(-2.75+j*.5,1.13,0);g.add(bottle);
         cyl(.11,.36,0x8b622a,0,.18,0,bottle,{roughness:.25,metalness:.2});cone(.045,.11,.1,0x8b622a,0,.4,0,bottle);cyl(.045,.16,0x8b622a,0,.5,0,bottle);
-        cyl(.113,.13,0xece3bd,0,.19,0,bottle);cyl(.048,.035,0xe2c574,0,.59,0,bottle);parts.bottles.push(bottle);
+        cyl(.113,.13,j%3===0?0xe2c376:0xece3bd,0,.19,0,bottle);cyl(.048,.035,0xe2c574,0,.59,0,bottle);parts.bottles.push(bottle);
       }
     } else {
       box(3.8,.15,2,0xa8bdad,0,.18,0,g);
@@ -155,6 +172,9 @@ export function createBrewery(host, labelHost, profile, onSelect) {
       }
       pipe([[-1.5,.5,.65],[1.5,.5,.65],[1.5,.75,1.2]],0x6f9fae,.07,g);
       box(.75,.6,.13,0x628c80,-.1,1.2,1,g);box(.52,.32,.04,0xc4ddc8,-.1,1.24,1.09,g);
+      const pump=new THREE.Group();pump.position.set(1.3,.53,.91);g.add(pump);
+      const casing=cyl(.24,.15,0x5593a7,0,0,0,pump);casing.rotation.x=Math.PI/2;
+      box(.34,.07,.17,0xb8dae1,0,0,0,pump);box(.07,.34,.17,0xb8dae1,0,0,0,pump);parts.pump=pump;
     }
     const lamp = cyl(.085,.24,STATUS.waiting,asset.id==='fill01'?1.25:.75,p.h+.3,-.8,g,{emissive:STATUS.waiting,emissiveIntensity:.15});
     const hit=box(asset.id==='fill01'?6.5:3.2,p.h+1,3.4,0xffffff,0,(p.h+1)/2,0,g,{transparent:true,opacity:0,depthWrite:false});
@@ -195,15 +215,16 @@ export function createBrewery(host, labelHost, profile, onSelect) {
   function home() {isTop=false;camera.position.set(27,24,32);camera.zoom=1;controls.target.set(0,.4,0);camera.updateProjectionMatrix();controls.update();}
   home();
   const position=new THREE.Vector3();
-  function render(store,selected,time,animate=true) {
+  function render(store,selected,motion,animate=true) {
     const now=Date.now();controls.update();
     for (const [id,visual] of assets) {
       const asset=store.assets.get(id), status=store.status(asset,now), active=status==='running'&&animate, color=STATUS[status];
       visual.ring.visible=selected===id;visual.lamp.material=mat(color,{emissive:color,emissiveIntensity:.2});
       const label=labels.get(id);label.label.classList.toggle('selected',selected===id);label.dot.className=status;
       label.label.setAttribute('aria-pressed',String(selected===id));
-      const primary=asset.values.get(asset.metrics[0].key);
-      const reading=primary?`${Number(primary.value.toFixed(1))}${asset.metrics[0].unit==='%'?'%':asset.metrics[0].unit==='°C'?'°':''}`:'—';
+      const metric=primaryMetric(asset),primary=asset.values.get(metric.key);
+      const unit=metric.key==='bottleCnt'?'bottles/min':metric.unit;
+      const reading=primary?`${Number(primary.value.toFixed(1))} ${unit}`:'—';
       if(label.value.textContent!==reading)label.value.textContent=reading;
       label.value.classList.toggle('muted',primary&&!store.current(primary,now));
       position.set(visual.p.x,visual.p.h+1.15,visual.p.z).project(camera);
@@ -217,21 +238,35 @@ export function createBrewery(host, labelHost, profile, onSelect) {
         visual.parts.liquid.scale.y=height;visual.parts.liquid.position.y=1.28+height/2;
       }
       const val=key=>{const s=asset.values.get(key);return store.current(s,now)?s.value:0;};
-      if(visual.parts.paddle&&active)visual.parts.paddle.rotation.y=time*val('stirRpm')/60*Math.PI*2;
+      const frame=motion.get(id);
+      if(visual.parts.paddle)visual.parts.paddle.rotation.y=frame.stirrer;
+      if(visual.parts.progress){
+        const s=asset.values.get('boilProg'),fraction=Math.max(0,Math.min(100,s?.value||0))/100,ring=visual.parts.progress;
+        ring.visible=Boolean(s)&&fraction>0;
+        if(ring.userData.fraction!==fraction){
+          geometries.delete(ring.geometry);ring.geometry.dispose();
+          ring.geometry=new THREE.TorusGeometry(visual.p.r+.25,.07,8,72,Math.max(.001,fraction*Math.PI*2));geometries.add(ring.geometry);ring.userData.fraction=fraction;
+        }
+      }
       for(const [i,puff] of (visual.parts.steam||[]).entries()) {
-        const t=(time*.28+i/6)%1;puff.visible=active&&val('boilTemp')>80;
+        const t=(frame.steam+i/6)%1;puff.visible=active&&val('boilTemp')>80;
         puff.position.set(.3+Math.sin(i+t*3)*.15,visual.p.h+.9+t*1.3,-.25);puff.scale.setScalar(.5+t*1.7);
       }
-      for(const [i,bubble] of (visual.parts.bubbles||[]).entries()) {bubble.visible=active&&val('co2Rate')>0;bubble.position.y=1.4+((time*val('co2Rate')*.1+i/4)%1)*2.3;}
-      if(active&&val('bottleCnt')>0)for(const [i,bottle] of (visual.parts.bottles||[]).entries())bottle.position.x=-3+((time*Math.min(val('bottleCnt')/220,2)+i*.5)%6);
+      for(const [i,bubble] of (visual.parts.bubbles||[]).entries()) {bubble.visible=active&&val('co2Rate')>0;bubble.position.y=1.4+((frame.gas+i/4)%1)*2.3;}
+      for(const [i,bottle] of (visual.parts.bottles||[]).entries())bottle.position.x=-3+((frame.bottles+i)%12)*.5;
+      for(const [i,mark] of (visual.parts.belt||[]).entries())mark.position.x=-3+((frame.bottles+i)%12)*.5;
+      for(const wheel of visual.parts.wheels||[])wheel.rotation.z=-frame.bottles*Math.PI;
+      for(const stream of visual.parts.streams||[]){stream.visible=active&&val('flowRate')>0;stream.scale.x=stream.scale.z=.3+Math.min(30,Math.max(0,val('flowRate')))/30;}
+      if(visual.parts.pump)visual.parts.pump.rotation.z=frame.pump;
     }
     for(const flow of flows) {
       const a=store.assets.get(flow.from), b=store.assets.get(flow.to);
       const available=a.group==='machines'?store.status(a,now)==='running':store.current(a.values.get('level'),now)&&a.values.get('level').value>0;
       const moving=animate&&available&&(b.group==='machines'?store.status(b,now)==='running':store.current(b.values.get('level'),now));
-      for(const [i,dot] of flow.dots.entries()){dot.visible=moving;if(moving)dot.position.copy(flow.curve.getPointAt((time*.12+i/5)%1));}
+      for(const [i,dot] of flow.dots.entries()){dot.visible=moving;if(moving)dot.position.copy(flow.curve.getPointAt((motion.elapsed*.12+i/5)%1));}
     }
     renderer.render(scene,camera);
   }
-  return {render,home,labels(){showLabels=!showLabels;return showLabels;},top(){isTop=!isTop;camera.position.set(isTop?.01:27,isTop?42:24,isTop?.01:32);controls.target.set(0,.4,0);controls.update();return isTop;},dispose(){observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);for(const g of geometries)g.dispose();for(const m of materials.values())m.dispose();for(const t of textures)t.dispose();renderer.dispose();renderer.domElement.remove();labelHost.replaceChildren();}};
+  function focus(id){const p=LAYOUT[id];isTop=false;controls.target.set(p.x,p.h*.45,p.z);camera.position.set(p.x+14,p.h*.45+12,p.z+16);camera.zoom=Math.min(5,(camera.right-camera.left)/11,(camera.top-camera.bottom)/9);camera.updateProjectionMatrix();controls.update();}
+  return {render,home,focus,labels(){showLabels=!showLabels;return showLabels;},top(){isTop=!isTop;camera.zoom=1;camera.updateProjectionMatrix();camera.position.set(isTop?.01:27,isTop?42:24,isTop?.01:32);controls.target.set(0,.4,0);controls.update();return isTop;},dispose(){observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',onDown);renderer.domElement.removeEventListener('pointerup',onUp);for(const g of geometries)g.dispose();for(const m of materials.values())m.dispose();for(const t of textures)t.dispose();renderer.dispose();renderer.domElement.remove();labelHost.replaceChildren();}};
 }

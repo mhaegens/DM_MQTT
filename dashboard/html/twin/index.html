@@ -7,13 +7,14 @@
   <meta name="description" content="An interactive brewery digital twin driven by live MQTT signals from the SAP DM demo rig.">
   <title>Brewery Digital Twin · SAP DM</title>
   <link rel="icon" href="/assets/sap-logo.svg">
-  <link rel="stylesheet" href="/assets/sap-workbench.css?v=20261019.1">
-  <link rel="stylesheet" href="./styles.css?v=20261019.1">
+  <link rel="stylesheet" href="/assets/sap-workbench.css?v=20261019.3">
+  <link rel="stylesheet" href="./styles.css?v=20261019.3">
   <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
   <script src="/assets/site-config.js"></script>
   <script src="/assets/mqtt-connection.js"></script>
   <script src="/assets/mqtt.min.js"></script>
   <script src="./state.js"></script>
+  <script src="./motion.js"></script>
 </head>
 <body>
   <span class="connection-badge" id="conn-badge"><i></i><span id="conn-text">Connecting…</span></span>
@@ -32,7 +33,7 @@
     <section class="twin-workspace" aria-label="Brewery floor and equipment inspector">
       <div class="scene" id="scene">
         <div class="scene-heading"><span class="floor-icon" aria-hidden="true">⌘</span><div><h2>Brewery GE01</h2><p>Brewhouse & cellar <span>·</span> 8 connected assets</p></div></div>
-        <div class="scene-tools"><button id="view-reset" title="Reset camera" aria-label="Reset camera">⌂</button><button id="view-top" aria-pressed="false">Top view</button><button id="view-labels" aria-pressed="true">Labels</button></div>
+        <div class="scene-tools"><button id="view-reset" title="Reset camera" aria-label="Reset camera">⌂</button><button id="view-focus" aria-pressed="false" title="Focus on the selected equipment" aria-label="Focus selected equipment">◎</button><button id="view-top" aria-pressed="false">Top view</button><button id="view-labels" aria-pressed="true">Labels</button><button id="view-motion" aria-pressed="true">Motion on</button></div>
         <div id="canvas-host"></div><div id="asset-labels"></div>
         <div id="scene-loading" role="status">Preparing the brewhouse…</div>
         <div class="scene-data-badge" id="scene-data-badge"><i></i><span>Waiting for rig</span></div>
@@ -42,6 +43,7 @@
         <div class="inspector-eyebrow"><span>EQUIPMENT DETAILS</span><span id="selected-number">01 / 08</span></div>
         <div class="asset-head"><div><p id="asset-id">MASH-01</p><h2 id="asset-name">Mash Tun</h2></div><span class="state-pill waiting" id="asset-status">Waiting</span></div>
         <p class="asset-description" id="asset-description">Warm water meets malt. Temperature and agitation shape the mash.</p>
+        <div class="activity-panel" id="activity-panel" hidden></div>
         <div class="metric-list" id="metric-list"></div>
         <div class="pulse-row" id="pulse-row"><span>Production pulses</span><strong id="asset-pulses">—</strong></div>
         <div class="inspector-note"><span aria-hidden="true">ⓘ</span><p id="inspector-note">Select an asset to inspect its signals.</p></div>
@@ -55,7 +57,7 @@
     <footer><span><b>BREWERY GE01</b><span class="footer-divider">/</span>STANDARD BREWERY PROFILE</span><span>Schematic layout · Activity animation follows signals; pipe routes are illustrative.</span></footer>
   </main>
   <dialog id="connection-dialog" aria-labelledby="connection-title"><form id="connection-form"><div class="dialog-heading"><div><p class="eyebrow">LIVE TELEMETRY</p><h2 id="connection-title">Connect your rig</h2></div><button type="button" class="close-button" id="connection-close" aria-label="Close connection settings">×</button></div><p>Use the same MQTT WebSocket broker as the rig. The brewery profile must be active on the device.</p><label for="broker-url">Broker address</label><input type="url" id="broker-url" required placeholder="wss://mqtt.example.com" spellcheck="false"><p class="field-hint">Saved for all workbench pages on this browser.</p><p id="connection-error" role="alert"></p><div class="connection-detail"><span>Profile</span><strong>Brewery GE01</strong><span>Signals</span><code>factory/machines/…<br>factory/tanks/…</code></div><p>Subscribes to telemetry and requests a fresh snapshot. Machine controls stay on the rig.</p><div class="dialog-actions"><button type="button" class="button" id="snapshot-request">Refresh readings</button><button class="button primary" type="submit">Connect broker</button></div></form></dialog>
-  <script src="/assets/workbench.js?v=20261019.1"></script>
-  <script type="module" src="./app.js?v=20261019.1"></script>
+  <script src="/assets/workbench.js?v=20261019.3"></script>
+  <script type="module" src="./app.js?v=20261019.3"></script>
 </body>
 </html>

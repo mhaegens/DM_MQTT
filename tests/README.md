@@ -79,6 +79,11 @@ escaping, demo isolation and desktop/tablet/mobile layouts. Optional variables:
 `DM_QA_MODULES`, `DM_QA_OUTPUT`, `DM_QA_CHROME`. See the
 [twin instructions](../dashboard/html/twin/README.md).
 
+Motion checks verify proportional conveyor speed, continuous travel after rate
+changes, independent liquid flow, zero/stopped/offline states and pause/resume.
+The browser suite measures visible bottle travel at 60 and 300 bottles/min and
+checks the activity view, motion toggle and focus control.
+
 ## Full firmware build
 
 Use ESP-IDF 5.4.1 and the pinned component manifest/lockfile. Run `firmware/tools/build_check.sh` after activating ESP-IDF if the checkout path contains spaces. It copies the source into a temporary path, builds it there, and prints the build location. It does not flash the device.

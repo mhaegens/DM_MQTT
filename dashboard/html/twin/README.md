@@ -36,13 +36,25 @@ Operator timestamps show browser receipt time; firmware `ts` is uptime.
 | Equipment | MQTT ID | What changes |
 | --- | --- | --- |
 | Malt Silo | `tanks/malt` | Measured level and low-stock color |
-| Mash Tun | `machines/mash01` | Temperature label, stirrer rotation from RPM, gravity |
-| Wort Kettle | `machines/boil01` | Temperature, steam above 80°C while running, pressure, progress |
-| Fermenter | `machines/ferm01` | Temperature, CO₂ bubbles from rate, pressure |
+| Mash Tun | `machines/mash01` | Stirrer rotation and label from RPM, temperature, gravity |
+| Wort Kettle | `machines/boil01` | Progress ring and label, temperature, steam above 80°C while running, pressure |
+| Fermenter | `machines/ferm01` | CO₂ rate label and bubbles, temperature, pressure |
 | Bright Beer | `tanks/bright` | Measured level, temperature, pressure |
-| Bottle Filler | `machines/fill01` | Bottle motion from bottles/min while running, flow and foam loss |
-| CIP skid | `machines/clean01` | Running state, cleaner temperature and concentration |
+| Bottle Filler | `machines/fill01` | Bottle, belt and drive-wheel speed from bottles/min; filling streams from liquid flow; foam loss |
+| CIP skid | `machines/clean01` | Pump activity while running, cleaner temperature and concentration |
 | Spent Grain | `tanks/spent` | Measured level and high-fill color |
+
+Selecting a machine also shows an enlarged activity illustration in its
+inspector. The filler shows bottles/min directly beside the moving conveyor;
+liquid flow remains a separate reading and controls the filling streams.
+Click **Focus selected equipment** (◎) for a close 3D view; click again or reset
+the camera to return to the floor. Selecting another asset while focused keeps
+the view focused on the newly selected equipment.
+
+Motion integrates elapsed time at the current rate. Changes in rates do not
+teleport or reverse the equipment. Zero rates, stopped machines and unavailable
+signals halt the relevant movement. Bottle spacing and pipe paths are
+illustrative; the rig publishes bottles/min rather than measured belt velocity.
 
 All five machine status lamps follow `RUNNING`/`STOPPED`; unknown and stale
 states use grey. Activity stops when its required signals are unavailable.
@@ -66,9 +78,11 @@ state and requests fresh telemetry. Demo readings never publish to MQTT.
 
 Drag to orbit, scroll to zoom, right-drag to pan, or use **Top view** and the
 camera reset. Equipment buttons provide keyboard access to every asset. The
-inspector works even if WebGL is unavailable. Reduced-motion preferences stop
-process animations; readings still update. No external font or asset requests
-are needed.
+inspector and its activity illustration work even if WebGL is unavailable.
+**Motion on/off** pauses or resumes process animation while readings continue
+updating. The default respects reduced-motion preferences; the button can
+explicitly enable motion, and its choice is saved for this browser. No external
+font or asset requests are needed.
 
 ## Checks
 
@@ -104,7 +118,9 @@ node tests/brewery-browser-qa.cjs
 
 Alternatively point `DM_QA_MODULES` at an external `node_modules` directory.
 The browser suite starts its own disposable MQTT/HTTP server. It tests real
-WebGL, subscriptions and snapshot requests, all profile mappings, a 2,000-message
+WebGL, subscriptions and snapshot requests, all profile mappings, observed
+conveyor speed changes, a zero-speed stop, motion pause/resume, equipment focus,
+a 2,000-message
 burst, stable canvas/cards, threshold states, operator text escaping, offline
 readings, reconnect freshness, demo isolation, connection validation and
 responsive layouts. Screenshots default to `/tmp/dm-brewery-browser-qa`.
