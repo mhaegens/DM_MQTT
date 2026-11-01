@@ -1,0 +1,64 @@
+# DM Bridge Mapping Configuration
+# Copy this file to mapping.yaml and fill in your DM tenant values,
+# OR use the Bridge Mapping tab in the editor web app to configure and save it.
+#
+# This file is committed as a reference; mapping.yaml is gitignored.
+version: 1
+
+defaults:
+  plant: "1710"           # Your SAP DM plant ID
+  userId: "BRIDGE_SYS"   # User ID for timetracking calls (must exist in the DM tenant)
+
+machines:
+  # Key = machine id from sapdm_config.json
+  cnc01:
+    resource: "RES-CNC-01"             # DM resource name (must match master data)
+    workCenter: "WC-DEMO-01"           # DM work center
+    operation: "OP-30"                 # Operation activity ID
+    sfcSelection: latest-in-queue      # latest-in-queue | latest-active | explicit:<sfc>
+    yieldUnit: "EA"                    # UoM for pulse-based yield
+    downtimeStatus: UNSCHEDULED_DOWN   # OEE downtime status on STOPPED
+    downtimeReasonCode1: "MACHINE_FAILURE"
+    indicators:
+      # key = metric key from sapdm_config.json
+      rpm:
+        id: "IND-RPM-CNC01"            # DM indicator name (Line Monitor)
+        unit: "RPM"
+      temperature:
+        id: "IND-TEMP-CNC01"
+        unit: "CEL"
+      pressure:
+        id: "IND-PRESS-CNC01"
+        unit: "BAR"
+    datacollection:
+      # Only needed for metrics posted to the SFC report
+      temperature:
+        group: "DC-CNC01"              # DM DC group name
+        groupVersion: "A"
+        parameterId: "TEMP"            # DC parameter name
+      pressure:
+        group: "DC-CNC01"
+        groupVersion: "A"
+        parameterId: "PRESS"
+
+  fill01:
+    resource: "RES-FILL-01"
+    workCenter: "WC-DEMO-01"
+    operation: "OP-40"
+    sfcSelection: latest-in-queue
+    yieldUnit: "EA"
+    downtimeStatus: UNSCHEDULED_DOWN
+    downtimeReasonCode1: "MACHINE_FAILURE"
+    indicators:
+      oee:
+        id: "IND-OEE-FILL01"
+        unit: "PCT"
+
+tanks:
+  # Key = tank id from sapdm_config.json
+  raw:
+    workCenter: "WC-DEMO-01"
+    indicators:
+      level:
+        id: "IND-LEVEL-RAW"
+        unit: "PCT"

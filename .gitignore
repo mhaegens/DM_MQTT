@@ -27,28 +27,10 @@ scripts/split_pdfs.py
 # Git worktrees
 .worktrees/
 
-# Optional local browser test dependencies
-tests/node_modules/
-
-# Private deployment settings, measurements and device captures
-firmware/sdkconfig.local.defaults
-dashboard/html/assets/site-config.local.js
-docs/audit-evidence/
-docs/audit-preview/
-**/.env
-**/.env.*
-!**/.env.example
-*.key
-*.p12
-*.pfx
-id_rsa
-id_ed25519
-
-# Reproducible POD extension artifacts and private QA output
-pod-plugin/build/
-pod-plugin/.qa/
-__pycache__/
-*.py[cod]
-
 # dm-check CLI dependencies (source lives in DM_Demo_Assistant)
 tools/dm-check/node_modules/
+
+# Bridge service secrets and per-demo config
+bridge/.env
+bridge/config/mapping.yaml
+bridge/node_modules/
