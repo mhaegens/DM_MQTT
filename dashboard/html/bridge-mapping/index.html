@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%97%3C/text%3E%3C/svg%3E">
+<title>Bridge Mapping · SAP DM</title>
+<link rel="stylesheet" href="/assets/sap-workbench.css?v=20261015.2">
+<style>
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{ margin:0; font:13.5px/1.5 "Montserrat",-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--ink); display:flex; flex-direction:column; }
+button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; padding:0; }
+button:focus-visible, input:focus-visible, select:focus-visible,
+[tabindex]:focus-visible{ outline:2px solid var(--hi); outline-offset:1px; }
+input,select{ font:inherit; color:var(--ink); background:var(--field);
+  border:1px solid var(--line); border-radius:6px; padding:5px 8px; min-width:0; }
+
+/* ── toolbar ── */
+.bm-toolbar{ display:flex; align-items:center; gap:8px; padding:10px 24px;
+  background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.hbtn{ display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border-radius:7px;
+  border:1px solid var(--line); background:var(--panel2); font-size:12.5px; cursor:pointer; }
+.hbtn:hover{ border-color:var(--hi); }
+.hbtn.primary{ background:var(--hi-deep); border-color:var(--hi-deep); color:#fff; }
+.hbtn:disabled{ opacity:.45; cursor:default; }
+.sep{ width:1px; height:22px; background:var(--line); margin:0 4px; }
+.spacer{ flex:1; }
+.status-chip{ display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+  border-radius:99px; font-size:11.5px; border:1px solid var(--line); color:var(--ink2); }
+.status-chip.ok{ color:var(--ok); border-color:var(--ok); }
+.status-chip.err{ color:var(--err); border-color:var(--err); }
+.status-chip.loading{ color:var(--warn); border-color:var(--warn); }
+
+/* ── main scroll area ── */
+main{ flex:1; overflow-y:auto; padding:24px; max-width:900px; margin:0 auto; width:100%; }
+
+/* ── info banner ── */
+.info-banner{ background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  padding:12px 16px; margin-bottom:16px; font-size:12.5px; color:var(--ink2); line-height:1.6; }
+.info-banner code{ font-family:ui-monospace,Menlo,monospace; font-size:11.5px;
+  background:var(--field); padding:1px 5px; border-radius:4px; color:var(--hi); }
+
+/* ── sections ── */
+.sect{ background:var(--panel); border:1px solid var(--line); border-radius:10px;
+  margin-bottom:14px; overflow:hidden; }
+.shead{ display:flex; align-items:center; gap:8px; padding:10px 14px; width:100%; text-align:left;
+  font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; }
+.shead:hover{ background:var(--chip,#1B2538); }
+.shead .caret{ font-size:10px; color:var(--ink3); transition:transform .15s; }
+.sect.open > .shead .caret{ transform:rotate(90deg); }
+.sbody{ display:none; padding:12px 14px 16px; border-top:1px solid var(--line2); }
+.sect.open > .sbody{ display:block; }
+
+/* ── items ── */
+.item{ border:1px solid var(--line); border-radius:8px; margin:8px 0; background:var(--panel2); }
+.ihead{ display:flex; align-items:center; gap:8px; padding:8px 12px; width:100%; text-align:left;
+  font-size:13px; }
+.ihead:hover{ background:var(--chip,#1B2538); }
+.ihead .iname{ font-weight:600; }
+.ihead .isub{ font-size:11px; color:var(--ink3); font-family:ui-monospace,Menlo,monospace; }
+.ihead .caret{ font-size:10px; color:var(--ink3); transition:transform .15s; margin-left:auto; flex:none; }
+.ibody{ display:none; padding:12px; border-top:1px solid var(--line2); }
+.item.open > .ihead .caret{ transform:rotate(90deg); }
+.item.open > .ibody{ display:block; }
+
+/* ── form layout ── */
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.fld{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.fld > span{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink3); }
+.fld input,.fld select{ width:100%; }
+.subh{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink3);
+  margin:14px 0 6px; display:flex; align-items:center; gap:8px; }
+.subh::after{ content:''; flex:1; height:1px; background:var(--line2); }
+
+/* ── metric rows ── */
+.mrow{ border:1px solid var(--line2); border-radius:7px; margin:6px 0;
+  background:var(--panel); padding:8px 10px; }
+.mrow-key{ font-size:11.5px; font-weight:600; font-family:ui-monospace,Menlo,monospace;
+  color:var(--hi); margin-bottom:6px; }
+
+/* ── hint ── */
+.hint{ font-size:11px; color:var(--ink3); margin:6px 0 2px; }
+.hint b{ color:var(--ink2); font-weight:600; }
+
+/* ── toast ── */
+#toast{ position:fixed; left:50%; bottom:30px; transform:translateX(-50%);
+  background:var(--ink); color:var(--bg); padding:8px 18px; border-radius:8px;
+  font-size:12.5px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:70; }
+#toast.show{ opacity:1; }
+
+/* ── empty / error state ── */
+.empty-state{ text-align:center; padding:48px 20px; color:var(--ink3); font-size:13px; }
+.empty-state .big{ font-size:36px; margin-bottom:10px; }
+.empty-state a{ color:var(--hi); }
+</style>
+</head>
+<body>
+
+<div class="bm-toolbar">
+  <button class="hbtn" id="btn-reload">&#8635; Reload</button>
+  <div class="sep"></div>
+  <button class="hbtn" id="btn-upload">&#8682; Load Profile JSON</button>
+  <input type="file" id="file-in" accept=".json,application/json" hidden>
+  <button class="hbtn" id="btn-download">&#8681; Download Profile</button>
+  <div class="sep"></div>
+  <button class="hbtn primary" id="btn-save">&#8679; Save to Bridge</button>
+  <div class="spacer"></div>
+  <span class="status-chip loading" id="bridge-chip">&#9679; Checking&hellip;</span>
+</div>
+
+<main id="main">
+  <div class="empty-state"><div class="big">&#128279;</div>Loading&hellip;</div>
+</main>
+
+<div id="toast"></div>
+<script src="/assets/workbench.js?v=20261015.2"></script>
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════════
+   Bridge Mapping — visual editor for the bridge's mapping.yaml config.
+
+   Two data sources are merged:
+     - Rig config (sapdm_config.json from Config Studio localStorage)
+       provides the list of machine/tank IDs and their metric keys.
+     - Bridge mapping (GET /bridge/api/config, or a loaded Profile JSON)
+       provides the DM-side values: resource, indicators, DC params, etc.
+
+   Profile JSON (same schema as the bridge API) can be generated by an
+   agent and loaded via "Load Profile JSON", or downloaded for handoff.
+   ════════════════════════════════════════════════════════════════════ */
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const SFC_OPTS = ['latest-in-queue','latest-active'];
+const DOWNTIME_OPTS = ['UNSCHEDULED_DOWN','SCHEDULED_DOWN','ENGINEERING_DOWN','PLANNED_DOWN','NO_DEMAND_DOWN'];
+const EMPTY_CFG = { version:1, defaults:{plant:'',userId:''}, machines:{}, tanks:{} };
+
+/* ── state ── */
+let rigCfg = null;      // sapdm_config.json (machines + tanks IDs + metric keys)
+let bridgeCfg = null;   // current DM mapping
+
+/* ── rig config from Config Studio localStorage ── */
+function loadRigCfg(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('sapdm-config-studio') || 'null');
+    if (saved?.cfg?.machines) return saved.cfg;
+  } catch(e){}
+  return null;
+}
+
+/* ── bridge API ── */
+async function fetchBridgeCfg(){
+  const r = await fetch('/bridge/api/config');
+  if (r.status === 404) return { ...EMPTY_CFG };
+  if (!r.ok) throw new Error('Bridge API ' + r.status);
+  return r.json();
+}
+
+async function checkHealth(){
+  const chip = $('#bridge-chip');
+  try {
+    const r = await fetch('/bridge/healthz', { signal: AbortSignal.timeout(3000) });
+    const d = await r.json();
+    const ok = d.broker === 'connected';
+    chip.textContent = ok ? '● Bridge online' : '● Broker offline';
+    chip.className = 'status-chip ' + (ok ? 'ok' : 'err');
+  } catch(e){
+    chip.textContent = '● Bridge unreachable';
+    chip.className = 'status-chip err';
+  }
+}
+
+async function loadAll(){
+  rigCfg = loadRigCfg();
+  try { bridgeCfg = await fetchBridgeCfg(); }
+  catch(e){
+    bridgeCfg = { ...EMPTY_CFG };
+    toast('Bridge API unreachable — editing locally');
+  }
+  checkHealth();
+  render();
+}
+
+/* ── form helpers ── */
+const fld = (label, inner) => `<label class="fld"><span>${label}</span>${inner}</label>`;
+const txt = (id, val, ph) => `<input type="text" id="${esc(id)}" value="${esc(val)}"${ph?` placeholder="${esc(ph)}"`:''}>`;
+const selEl = (id, val, opts) => `<select id="${esc(id)}">${opts.map(o=>`<option value="${o}"${o===val?' selected':''}>${o}</option>`).join('')}</select>`;
+
+/* ── metric rows (shared for machines + tanks) ── */
+function renderMetricRows(entityId, entityType, metrics, bmEntity){
+  if (!metrics?.length) return '<div class="hint">No metrics — configure them in Config Studio first.</div>';
+  return metrics.map(m => {
+    const pfx = `bm-${entityType}-${entityId}`;
+    const bm = bmEntity?.indicators?.[m.key] || {};
+    const dc = entityType === 'machine' ? (bmEntity?.datacollection?.[m.key] || {}) : null;
+    let html = `<div class="mrow">
+      <div class="mrow-key">${esc(m.key)}
+        <span style="color:var(--ink3);font-weight:400"> &mdash; ${esc(m.label)} (${esc(m.unit)})</span>
+      </div>
+      <div class="grid3">
+        ${fld('Indicator ID', txt(`${pfx}-ind-${m.key}`, bm.id || '', `IND-${entityId.toUpperCase()}-${m.key.toUpperCase()}`))}
+        ${fld('Unit', txt(`${pfx}-unit-${m.key}`, bm.unit || m.unit || ''))}
+      </div>`;
+    if (dc !== null){
+      html += `<div class="subh" style="margin-top:10px">Data Collection <span style="text-transform:none;letter-spacing:0">(optional)</span></div>
+      <div class="grid3">
+        ${fld('DC Group', txt(`${pfx}-dcgrp-${m.key}`, dc.group || '', `DC-${entityId.toUpperCase()}`))}
+        ${fld('Version', txt(`${pfx}-dcver-${m.key}`, dc.groupVersion || '', 'A'))}
+        ${fld('Parameter ID', txt(`${pfx}-dcpar-${m.key}`, dc.parameterId || '', m.key.toUpperCase()))}
+      </div>`;
+    }
+    return html + '</div>';
+  }).join('');
+}
+
+function renderMachineCard(mc, bmMachines){
+  const bm = bmMachines?.[mc.id] || {};
+  const sfcVal = bm.sfcSelection || 'latest-in-queue';
+  const sfcOpts = SFC_OPTS.includes(sfcVal) ? SFC_OPTS : [...SFC_OPTS, sfcVal];
+  const pfx = `bm-machine-${mc.id}`;
+  return `<div class="item" id="item-m-${esc(mc.id)}">
+    <button class="ihead" onclick="toggleItem('item-m-${esc(mc.id)}')">
+      <span class="iname">${esc(mc.name)}</span>
+      <span class="isub">&nbsp;${esc(mc.id)}</span>
+      <span class="caret">&#9654;</span>
+    </button>
+    <div class="ibody">
+      <div class="grid3">
+        ${fld('Resource', txt(`${pfx}-resource`, bm.resource || '', `RES-${mc.id.toUpperCase()}`))}
+        ${fld('Work Center', txt(`${pfx}-wc`, bm.workCenter || '', 'WC-DEMO-01'))}
+        ${fld('Operation', txt(`${pfx}-op`, bm.operation || '', 'OP-10'))}
+      </div>
+      <div class="grid3" style="margin-top:8px">
+        ${fld('SFC Selection', selEl(`${pfx}-sfcSel`, sfcVal, sfcOpts))}
+        ${fld('Yield Unit', txt(`${pfx}-yieldUnit`, bm.yieldUnit || 'EA'))}
+        ${fld('Downtime Reason 1', txt(`${pfx}-dtReason`, bm.downtimeReasonCode1 || '', 'MACHINE_FAILURE'))}
+      </div>
+      <div class="grid2" style="margin-top:8px">
+        ${fld('Downtime Status', selEl(`${pfx}-dtStatus`, bm.downtimeStatus || 'UNSCHEDULED_DOWN', DOWNTIME_OPTS))}
+      </div>
+      <div class="subh">Indicators &amp; Data Collection per Metric</div>
+      ${renderMetricRows(mc.id, 'machine', mc.metrics, bm)}
+    </div>
+  </div>`;
+}
+
+function renderTankCard(tk, bmTanks){
+  const bm = bmTanks?.[tk.id] || {};
+  const pfx = `bm-tank-${tk.id}`;
+  return `<div class="item" id="item-t-${esc(tk.id)}">
+    <button class="ihead" onclick="toggleItem('item-t-${esc(tk.id)}')">
+      <span class="iname">${esc(tk.name)}</span>
+      <span class="isub">&nbsp;${esc(tk.id)}</span>
+      <span class="caret">&#9654;</span>
+    </button>
+    <div class="ibody">
+      <div class="grid2">
+        ${fld('Work Center', txt(`${pfx}-wc`, bm.workCenter || '', 'WC-DEMO-01'))}
+      </div>
+      <div class="subh">Indicators per Metric</div>
+      ${renderMetricRows(tk.id, 'tank', tk.metrics, bm)}
+    </div>
+  </div>`;
+}
+
+function render(){
+  if (!rigCfg){
+    $('#main').innerHTML = `<div class="empty-state">
+      <div class="big">&#128736;</div>
+      <p>No rig config found in this browser.<br>
+      Open <a href="/config-editor/">Config Studio</a>, load a config, then come back.<br>
+      Or upload a Profile JSON directly — it contains the mapping without needing a rig config.</p>
+    </div>`;
+    return;
+  }
+
+  const bm = bridgeCfg || EMPTY_CFG;
+  const defaults = bm.defaults || {};
+
+  let h = `<div class="info-banner">
+    <b>Profile JSON</b> — Use <b>Download Profile</b> to export the current mapping as
+    <code>bridge-mapping.json</code>. An agent can generate or customise this file and hand it back.
+    Use <b>Load Profile JSON</b> to apply it. <b>Save to Bridge</b> pushes to the live bridge
+    container (requires the bridge service to be running).
+  </div>`;
+
+  h += `<div class="sect open" id="sec-defaults">
+    <button class="shead" onclick="toggleSect('sec-defaults')">
+      <span class="caret">&#9654;</span> Global Defaults
+    </button>
+    <div class="sbody">
+      <div class="hint">Applied to every DM API call. The Bridge User ID must exist in the DM tenant for timetracking calls.</div>
+      <div class="grid2" style="margin-top:10px">
+        ${fld('Plant', txt('bm-plant', defaults.plant || '', '1710'))}
+        ${fld('Bridge User ID', txt('bm-userId', defaults.userId || '', 'BRIDGE_SYS'))}
+      </div>
+    </div>
+  </div>`;
+
+  h += `<div class="sect open" id="sec-machines">
+    <button class="shead" onclick="toggleSect('sec-machines')">
+      <span class="caret">&#9654;</span> Machines
+      <span style="font-size:11px;color:var(--ink3);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px">${rigCfg.machines.length} from rig config</span>
+    </button>
+    <div class="sbody">
+      <div class="hint">Each machine maps to a DM resource. Indicator IDs must match the Line Monitor asset definition. DC fields are optional.</div>
+      ${rigCfg.machines.map(mc => renderMachineCard(mc, bm.machines)).join('')}
+    </div>
+  </div>`;
+
+  if (rigCfg.tanks?.length){
+    h += `<div class="sect open" id="sec-tanks">
+      <button class="shead" onclick="toggleSect('sec-tanks')">
+        <span class="caret">&#9654;</span> Tanks
+        <span style="font-size:11px;color:var(--ink3);font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px">${rigCfg.tanks.length} from rig config</span>
+      </button>
+      <div class="sbody">
+        <div class="hint">Tank metrics post as <code>lastindicator</code> values. No SFC execution for tanks.</div>
+        ${rigCfg.tanks.map(tk => renderTankCard(tk, bm.tanks)).join('')}
+      </div>
+    </div>`;
+  }
+
+  $('#main').innerHTML = h;
+}
+
+/* ── collect form → JSON ── */
+function v(id){ const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function collectConfig(){
+  const out = { version:1, defaults:{ plant: v('bm-plant'), userId: v('bm-userId') }, machines:{}, tanks:{} };
+  for (const mc of (rigCfg?.machines || [])){
+    const pfx = `bm-machine-${mc.id}`;
+    const entry = {
+      resource: v(`${pfx}-resource`), workCenter: v(`${pfx}-wc`), operation: v(`${pfx}-op`),
+      sfcSelection: v(`${pfx}-sfcSel`), yieldUnit: v(`${pfx}-yieldUnit`) || 'EA',
+      downtimeStatus: v(`${pfx}-dtStatus`), downtimeReasonCode1: v(`${pfx}-dtReason`),
+      indicators:{}, datacollection:{}
+    };
+    for (const m of (mc.metrics || [])){
+      const indId = v(`${pfx}-ind-${m.key}`), unit = v(`${pfx}-unit-${m.key}`);
+      if (indId) entry.indicators[m.key] = { id:indId, unit };
+      const grp = v(`${pfx}-dcgrp-${m.key}`);
+      if (grp) entry.datacollection[m.key] = { group:grp, groupVersion: v(`${pfx}-dcver-${m.key}`) || 'A', parameterId: v(`${pfx}-dcpar-${m.key}`) || m.key };
+    }
+    out.machines[mc.id] = entry;
+  }
+  for (const tk of (rigCfg?.tanks || [])){
+    const pfx = `bm-tank-${tk.id}`;
+    const entry = { workCenter: v(`${pfx}-wc`), indicators:{} };
+    for (const m of (tk.metrics || [])){
+      const indId = v(`${pfx}-ind-${m.key}`), unit = v(`${pfx}-unit-${m.key}`);
+      if (indId) entry.indicators[m.key] = { id:indId, unit };
+    }
+    out.tanks[tk.id] = entry;
+  }
+  return out;
+}
+
+/* ── apply a profile JSON to the form (handles both full and partial profiles) ── */
+function applyProfile(profile){
+  bridgeCfg = { ...EMPTY_CFG, ...profile,
+    defaults: { ...EMPTY_CFG.defaults, ...(profile.defaults||{}) },
+    machines: { ...(profile.machines||{}) },
+    tanks:    { ...(profile.tanks||{}) }
+  };
+  render();
+}
+
+/* ── save to bridge ── */
+async function saveBridgeCfg(){
+  const btn = $('#btn-save');
+  btn.disabled = true;
+  try {
+    const body = collectConfig();
+    const r = await fetch('/bridge/api/config', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    });
+    if (!r.ok){ const t = await r.text(); throw new Error(r.status+': '+t.slice(0,200)); }
+    bridgeCfg = body;
+    toast('Saved to bridge');
+    checkHealth();
+  } catch(e){ toast('Save failed: '+e.message); }
+  finally { btn.disabled = false; }
+}
+
+/* ── download profile ── */
+function downloadProfile(){
+  const body = collectConfig();
+  const blob = new Blob([JSON.stringify(body, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bridge-mapping.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ── upload profile ── */
+function uploadProfile(file){
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const profile = JSON.parse(rd.result);
+      if (typeof profile !== 'object' || !profile) throw new Error('not an object');
+      applyProfile(profile);
+      toast('Profile loaded — review and save to bridge');
+    } catch(e){ toast('Load failed: '+e.message); }
+  };
+  rd.readAsText(file);
+}
+
+/* ── collapse helpers ── */
+function toggleSect(id){ document.getElementById(id)?.classList.toggle('open'); }
+function toggleItem(id){ document.getElementById(id)?.classList.toggle('open'); }
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg;
+  t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+/* ── wire events ── */
+$('#btn-reload').addEventListener('click', loadAll);
+$('#btn-save').addEventListener('click', saveBridgeCfg);
+$('#btn-download').addEventListener('click', downloadProfile);
+$('#btn-upload').addEventListener('click', ()=>$('#file-in').click());
+$('#file-in').addEventListener('change', e=>{ uploadProfile(e.target.files[0]); e.target.value=''; });
+
+/* ── boot ── */
+loadAll();
+</script>
+</body>
+</html>

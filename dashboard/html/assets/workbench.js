@@ -4,7 +4,8 @@
     '/dashboard/': ['monitor', 'MQTT Monitor'],
     '/shopfloor/': ['shopfloor', 'Asset Cards'],
     '/digital-twins/': ['twins', 'Digital Twins'],
-    '/config-editor/': ['studio', 'Config Studio']
+    '/config-editor/': ['studio', 'Config Studio'],
+    '/bridge-mapping/': ['bridge', 'Bridge Mapping']
   };
   const path = location.pathname.replace(/\/index\.html$/, '/').replace(/\/?$/, '/');
   const currentPage = path === '/twin/' ? '/digital-twins/' : path;
